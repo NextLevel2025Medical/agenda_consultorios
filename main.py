@@ -254,45 +254,66 @@ def seed_if_empty(session: Session):
         session.add_all(default_rooms)
         session.commit()
 
-def validate_mapa_rules(session: Session, day: date, surgeon_id: int, procedure_type: str) -> str | None:
+def validate_mapa_rules(
+    session: Session,
+    day: date,
+    surgeon_id: int,
+    procedure_type: str,
+    exclude_entry_id: int | None = None,  # usado na edição pra não contar o próprio registro
+) -> str | None:
     """
-    Retorna uma mensagem de erro (str) se violar regra. Retorna None se estiver OK.
-    Regras só valem para procedure_type == "Cirurgia".
+    Regras do Mapa Cirúrgico
+
+    1) Dr. Gustavo Aquino: máximo 2 agendamentos no mesmo dia (independente de tipo).
+    2) Não pode existir CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia.
     """
-    if procedure_type != "Cirurgia":
-        return None
 
-    # IDs por username (você já usa esses usernames no seed)
-    gustavo = session.exec(select(User).where(User.username == "drgustavo")).first()
-    alice   = session.exec(select(User).where(User.username == "draalice")).first()
-    ricardo = session.exec(select(User).where(User.username == "drricardo")).first()
+    gustavo = session.exec(select(User).where(User.full_name == "Dr. Gustavo Aquino")).first()
+    alice = session.exec(select(User).where(User.full_name == "Dra. Alice Zinato")).first()
+    ricardo = session.exec(select(User).where(User.full_name == "Dr. Ricardo Vilela")).first()
 
-    # 1) Gustavo: não pode ter 3 cirurgias no mesmo dia (máximo 2)
+    # Helper: aplica "excluir este registro" quando estamos editando
+    def _apply_exclude(q):
+        if exclude_entry_id is not None:
+            return q.where(SurgicalMapEntry.id != exclude_entry_id)
+        return q
+
+    # (1) Gustavo: conta TODOS os agendamentos no dia (cirurgia/refino/simples, pré-reserva etc.)
     if gustavo and surgeon_id == gustavo.id:
-        existing = session.exec(
-            select(SurgicalMapEntry.id).where(
-                SurgicalMapEntry.day == day,
-                SurgicalMapEntry.procedure_type == "Cirurgia",
-                SurgicalMapEntry.surgeon_id == gustavo.id,
+        q = select(SurgicalMapEntry.id).where(
+            SurgicalMapEntry.day == day,
+            SurgicalMapEntry.surgeon_id == gustavo.id,
+        )
+        q = _apply_exclude(q)
+        already = session.exec(q).all()
+
+        if len(already) >= 2:
+            return (
+                "Regra: Dr. Gustavo Aquino não pode ter mais de 2 agendamentos no mesmo dia "
+                "(independente se é cirurgia, refinamento ou procedimento simples)."
             )
-        ).all()
-        if len(existing) >= 2:
-            return "Regra: o Dr. Gustavo Aquino já tem 2 cirurgias nesse dia. (Não é permitido agendar a 3ª)."
 
-    # 2) Alice x Ricardo: não pode ter cirurgia dos dois no mesmo dia
-    if alice and ricardo and surgeon_id in (alice.id, ricardo.id):
-        other_id = ricardo.id if surgeon_id == alice.id else alice.id
-
-        other_exists = session.exec(
-            select(SurgicalMapEntry.id).where(
+    # (2) Alice x Ricardo: a restrição é somente para CIRURGIA
+    if procedure_type == "Cirurgia" and alice and ricardo:
+        if surgeon_id == alice.id:
+            q = select(SurgicalMapEntry.id).where(
                 SurgicalMapEntry.day == day,
+                SurgicalMapEntry.surgeon_id == ricardo.id,
                 SurgicalMapEntry.procedure_type == "Cirurgia",
-                SurgicalMapEntry.surgeon_id == other_id,
             )
-        ).first()
+            q = _apply_exclude(q)
+            if session.exec(q).first():
+                return "Regra: Não pode haver CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia."
 
-        if other_exists:
-            return "Regra: não pode existir Cirurgia para Dra. Alice e Dr. Ricardo Vilela no mesmo dia (um auxilia o outro)."
+        if surgeon_id == ricardo.id:
+            q = select(SurgicalMapEntry.id).where(
+                SurgicalMapEntry.day == day,
+                SurgicalMapEntry.surgeon_id == alice.id,
+                SurgicalMapEntry.procedure_type == "Cirurgia",
+            )
+            q = _apply_exclude(q)
+            if session.exec(q).first():
+                return "Regra: Não pode haver CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia."
 
     return None
 
@@ -909,6 +930,87 @@ def mapa_create(
     month = day.strftime("%Y-%m")
     return redirect(f"/mapa?month={month}")
 
+@app.post("/mapa/update/{entry_id}")
+def mapa_update(
+    request: Request,
+    entry_id: int,
+    day_iso: str = Form(...),
+    mode: str = Form("book"),
+    time_hhmm: str = Form(...),
+    patient_name: str = Form(...),
+    surgeon_id: int = Form(...),
+    procedure_type: str = Form(...),
+    location: str = Form(...),
+    uses_hsr: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    row = session.get(SurgicalMapEntry, entry_id)
+    if not row:
+        return redirect("/mapa")
+
+    day = date.fromisoformat(day_iso)
+    is_pre = (mode == "reserve")
+
+    # valida regras EXCLUINDO o próprio item (pra não bloquear edição à toa)
+    err = validate_mapa_rules(session, day, surgeon_id, procedure_type, exclude_entry_id=entry_id)
+    if err:
+        month = day.strftime("%Y-%m")
+        from urllib.parse import quote
+        return redirect(f"/mapa?month={month}&err={quote(err)}")
+
+    # snapshot (opcional) pra auditoria
+    before = {
+        "day": row.day.isoformat(),
+        "time_hhmm": row.time_hhmm,
+        "patient_name": row.patient_name,
+        "surgeon_id": row.surgeon_id,
+        "procedure_type": row.procedure_type,
+        "location": row.location,
+        "uses_hsr": row.uses_hsr,
+        "is_pre_reservation": row.is_pre_reservation,
+    }
+
+    # aplica alterações
+    row.day = day
+    row.time_hhmm = time_hhmm
+    row.patient_name = patient_name.strip()
+    row.surgeon_id = surgeon_id
+    row.procedure_type = procedure_type
+    row.location = location
+    row.uses_hsr = bool(uses_hsr)
+    row.is_pre_reservation = is_pre
+
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "surgical_map_updated",
+        target_type="surgical_map",
+        target_id=row.id,
+        extra={
+            "before": before,
+            "after": {
+                "day": row.day.isoformat(),
+                "time_hhmm": row.time_hhmm,
+                "patient_name": row.patient_name,
+                "surgeon_id": row.surgeon_id,
+                "procedure_type": row.procedure_type,
+                "location": row.location,
+                "uses_hsr": row.uses_hsr,
+                "is_pre_reservation": row.is_pre_reservation,
+            },
+        },
+    )
+
+    month = day.strftime("%Y-%m")
+    return redirect(f"/mapa?month={month}")
 
 @app.post("/mapa/delete/{entry_id}")
 def mapa_delete(
