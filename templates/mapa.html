@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set parts = selected_month.split('-') %}
+{% set sel_year = parts[0] %}
+{% set sel_month = parts[1] %}
+
+<style>
+  /* Controles de mês/ano */
+  .month-controls { display: flex; gap: 10px; align-items: center; }
+  .month-controls .input { min-width: 160px; }
+
+  /* Cabeçalho do dia + botão Agendar */
+  .day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .btn-small { padding: 10px 14px; font-size: 14px; border-radius: 12px; }
+
+  /* Visual dos itens (Paciente/Cirurgião/...) em linhas */
+  .kv { display: grid; gap: 8px; }
+  .kv-row { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: baseline; }
+  .kv-k { color: var(--muted); font-weight: 600; }
+  .kv-v { color: var(--text); font-weight: 600; }
+
+  /* Modal */
+  #mapaModalBackdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 16px;
+    z-index: 9999;
+  }
+  #mapaModal {
+    width: min(720px, 96vw);
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap: 12px; margin-bottom: 10px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
+
+  /* ====== Mapa: cards por agendamento ====== */
+  .day-meta {
+    display:flex; align-items:center; gap:10px;
+  }
+
+  .badge-count{
+    display:inline-flex;
+    align-items:center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(226,184,87,.12);
+    border: 1px solid rgba(226,184,87,.22);
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .2px;
+  }
+
+  /* container de cards */
+  .entries-grid{
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 980px){
+    .entries-grid{ grid-template-columns: 1fr; }
+  }
+
+  /* card */
+  .entry-card{
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+  .entry-sub{
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  }
+  .sub-pill{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    color: rgba(255,255,255,.82);
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+
+  .entry-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .patient-name{
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .chips{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+  }
+
+  .chip-spot{
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    background: var(--muted);
+    opacity: .9;
+  }
+
+  /* cores rápidas por tipo */
+  .chip.type-cirurgia .chip-spot{ background: var(--ok); }
+  .chip.type-refinamento .chip-spot{ background: var(--warn); }
+  .chip.type-simples .chip-spot{ background: #60A5FA; }
+  
+  /* slot HSR destaque */
+  .chip.hsr-yes{
+    border-color: rgba(226,184,87,.30);
+    background: rgba(226,184,87,.10);
+  }
+  .entry-actions{
+    display:flex; justify-content:flex-end; margin-top: 10px;
+  }
+  .entry-actions .btn-secondary{
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+
+  .alert{
+    margin: 0 0 14px 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(239,68,68,.10);
+    border: 1px solid rgba(239,68,68,.25);
+    color: rgba(255,255,255,.92);
+    font-weight: 700;
+  }
+
+  .entry-card.pre{
+    background: rgba(226,184,87,.10);
+    border-color: rgba(226,184,87,.28);
+}
+
+</style>
+
+<div class="page">
+  <div class="page-head">
+    <div>
+      <div class="kicker">Gestão Cirúrgica</div>
+      <h1 class="h1">Mapa Cirúrgico</h1>
+    </div>
+
+    <div class="controls">
+      <label class="lbl">Mês/Ano</label>
+
+      <!-- (1) troca do input type="month" por selects (mais confiável) -->
+      <div class="month-controls">
+        <select id="monthSelect" class="input">
+          <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
+          <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
+          <option value="03" {% if sel_month == "03" %}selected{% endif %}>Março</option>
+          <option value="04" {% if sel_month == "04" %}selected{% endif %}>Abril</option>
+          <option value="05" {% if sel_month == "05" %}selected{% endif %}>Maio</option>
+          <option value="06" {% if sel_month == "06" %}selected{% endif %}>Junho</option>
+          <option value="07" {% if sel_month == "07" %}selected{% endif %}>Julho</option>
+          <option value="08" {% if sel_month == "08" %}selected{% endif %}>Agosto</option>
+          <option value="09" {% if sel_month == "09" %}selected{% endif %}>Setembro</option>
+          <option value="10" {% if sel_month == "10" %}selected{% endif %}>Outubro</option>
+          <option value="11" {% if sel_month == "11" %}selected{% endif %}>Novembro</option>
+          <option value="12" {% if sel_month == "12" %}selected{% endif %}>Dezembro</option>
+        </select>
+
+        {% set y = sel_year|int %}
+        <select id="yearSelect" class="input">
+          {% for yy in range(y - 1, y + 3) %}
+            <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    {% if err %}
+        <div class="alert">{{ err }}</div>
+    {% endif %}
+    {% for day in days %}
+      {% set key = day.isoformat() %}
+      {% set items = entries_by_day.get(key, []) %}
+
+      <div class="day-block">
+        <!-- (3) Cabeçalho do dia + botão que abre modal -->
+        <div class="day-head">
+            <div class="day-title day-meta">
+            <div>
+                <strong>{{ day.strftime("%d/%m/%Y") }}</strong>
+                <span class="muted">· {{ weekday_map[day.weekday()] }}</span>
+            </div>
+
+            {% if items and items|length > 0 %}
+                <span class="badge-count">{{ items|length }} agendamento{{ "s" if items|length > 1 else "" }}</span>
+            {% endif %}
+            </div>
+
+
+          <button
+            type="button"
+            class="btn-cta btn-small"
+            data-open-mapa-modal="1"
+            data-day="{{ key }}"
+            data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+          >
+            Agendar
+          </button>
+        </div>
+
+        {% if items %}
+        <div class="entries-grid">
+            {% for e in items %}
+            {% set surgeon =
+                (surgeons | selectattr("id", "equalto", e.surgeon_id) | first)
+                if (surgeons | selectattr("id", "equalto", e.surgeon_id) | list) else None
+            %}
+
+            {% set type_class =
+                "type-cirurgia" if e.procedure_type == "Cirurgia"
+                else ("type-refinamento" if e.procedure_type == "Refinamento" else "type-simples")
+            %}
+
+            <div class="entry-card {% if e.is_pre_reservation %}pre{% endif %}">
+                <div class="entry-top">
+                <div>
+                    <div class="patient-name">{{ e.patient_name }}</div>
+                    <div class="muted" style="margin-top:4px; font-weight:600;">
+                    {{ day.strftime("%d/%m/%Y") }}
+                    </div>
+                </div>
+                </div>
+
+                {% set creator = users_by_id.get(e.created_by_id) %}
+                <div class="entry-sub">
+                    <span class="sub-pill">🕒 {{ e.time_hhmm or "—" }}</span>
+                    <span class="sub-pill">👤 {{ creator.full_name if creator else "—" }}</span>
+                    <span class="sub-pill">📌 Agendado em {{ fmt_brasilia(e.created_at) }}</span>
+                    {% if e.is_pre_reservation %}
+                        <span class="sub-pill" style="border-color: rgba(226,184,87,.35); background: rgba(226,184,87,.10);">
+                            🟡 Pré-reserva
+                        </span>
+                    {% endif %}
+                </div>
+
+                <div class="chips">
+                <span class="chip">
+                    <span class="chip-spot"></span>
+                    {{ surgeon.full_name if surgeon else "Cirurgião: —" }}
+                </span>
+
+                <span class="chip {{ type_class }}">
+                    <span class="chip-spot"></span>
+                    {{ e.procedure_type }}
+                </span>
+
+                <span class="chip">
+                    <span class="chip-spot"></span>
+                    {{ e.location }}
+                </span>
+
+                <span class="chip {% if e.uses_hsr %}hsr-yes{% endif %}">
+                    <span class="chip-spot" style="{% if e.uses_hsr %}background: var(--accent);{% endif %}"></span>
+                    Slot: {{ "HSR" if e.uses_hsr else "Não" }}
+                </span>
+                </div>
+
+                <div class="entry-actions">
+                <form method="post" action="/mapa/delete/{{ e.id }}">
+                    <button class="btn-secondary" type="submit">Excluir</button>
+                </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+      </div>
+
+      <hr class="sep" />
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Modal único reutilizável -->
+<div id="mapaModalBackdrop" aria-hidden="true">
+  <div id="mapaModal" role="dialog" aria-modal="true" aria-labelledby="mapaModalTitle">
+    <div class="modal-head">
+      <div>
+        <div class="kicker">Novo agendamento</div>
+        <div class="h2" id="mapaModalTitle">—</div>
+      </div>
+      <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
+    </div>
+
+    <form id="mapaModalForm" class="day-form" method="post" action="/mapa/create">
+      <input type="hidden" name="day_iso" id="mapaModalDayIso" />
+      <input class="input" type="time" name="time_hhmm" required step="900" />
+      <input class="input" name="patient_name" placeholder="Nome do paciente" required />
+
+      <select class="input" name="surgeon_id" required>
+        <option value="">Selecione o cirurgião</option>
+        {% for s in surgeons %}
+          <option value="{{ s.id }}">{{ s.full_name }}</option>
+        {% endfor %}
+      </select>
+
+      <select class="input" name="procedure_type" required>
+        <option>Cirurgia</option>
+        <option>Refinamento</option>
+        <option>Procedimento Simples</option>
+      </select>
+
+      <select class="input" name="location" required>
+        <option>Hospital São Rafael</option>
+        <option>Materdei</option>
+        <option>HCP</option>
+        <option>Concept Clinic</option>
+      </select>
+
+      <label class="chk">
+        <input type="checkbox" name="uses_hsr" />
+        Usa slot HSR?
+      </label>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="mapaModalCancelBtn">Cancelar</button>
+        <button class="btn-secondary" type="submit" name="mode" value="reserve">Reservar</button>
+        <button class="btn-cta" type="submit" name="mode" value="book">Agendar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  // ==== Mês/Ano (resolve seu item 1) ====
+  const monthSelect = document.getElementById("monthSelect");
+  const yearSelect  = document.getElementById("yearSelect");
+
+  function goToMonth() {
+    const mm = monthSelect.value; // "01".."12"
+    const yy = yearSelect.value;
+    window.location.href = "/mapa?month=" + yy + "-" + mm;
+  }
+  monthSelect.addEventListener("change", goToMonth);
+  yearSelect.addEventListener("change", goToMonth);
+
+  // ==== Modal de agendamento (resolve seu item 3) ====
+  const backdrop = document.getElementById("mapaModalBackdrop");
+  const closeBtn = document.getElementById("mapaModalCloseBtn");
+  const cancelBtn = document.getElementById("mapaModalCancelBtn");
+  const titleEl = document.getElementById("mapaModalTitle");
+  const dayIsoEl = document.getElementById("mapaModalDayIso");
+  const formEl = document.getElementById("mapaModalForm");
+
+  function openModal(dayIso, dayHuman) {
+    formEl.reset();
+    dayIsoEl.value = dayIso;
+    titleEl.textContent = dayHuman;
+    backdrop.style.display = "flex";
+
+    // foco no primeiro input
+    const first = formEl.querySelector('input[name="patient_name"]');
+    if (first) first.focus();
+  }
+
+  function closeModal() {
+    backdrop.style.display = "none";
+  }
+
+  document.querySelectorAll("[data-open-mapa-modal]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openModal(btn.getAttribute("data-day"), btn.getAttribute("data-human"));
+    });
+  });
+
+  closeBtn.addEventListener("click", closeModal);
+  cancelBtn.addEventListener("click", closeModal);
+
+  // clicar no fundo escuro fecha
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeModal();
+  });
+
+  // ESC fecha
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
+</script>
+
+{% endblock %}

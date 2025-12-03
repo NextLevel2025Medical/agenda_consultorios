@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-lg mx-auto">
+  <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+    <h2 class="text-xl font-semibold">Entrar</h2>
+    <p class="text-slate-400 mt-2 text-sm">
+      Acesso separado por perfil: <b>Secretaria/Admin</b> ou <b>Médico</b>.
+    </p>
+
+    {% if error %}
+      <div class="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <form class="mt-6 space-y-4" method="post" action="/login">
+      <div>
+        <label class="text-sm text-slate-300">Usuário</label>
+        <input name="username" required class="mt-2 w-full rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 outline-none focus:border-white/30" />
+      </div>
+      <div>
+        <label class="text-sm text-slate-300">Senha</label>
+        <input type="password" name="password" required class="mt-2 w-full rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 outline-none focus:border-white/30" />
+      </div>
+      <button class="w-full rounded-xl bg-emerald-500/90 px-4 py-3 font-medium text-slate-950 hover:bg-emerald-500 transition">
+        Entrar
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

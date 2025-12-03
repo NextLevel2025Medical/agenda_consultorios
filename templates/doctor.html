@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="rounded-2xl bg-white/5 border border-white/10 p-6">
+  <div class="flex flex-col md:flex-row md:items-end gap-4 justify-between">
+    <div>
+      <div class="text-sm text-slate-400">Modo Médico</div>
+      <div class="text-lg font-semibold">Disponibilidade & Solicitações</div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <label class="text-sm text-slate-300">Data</label>
+      <input
+        class="rounded-xl bg-slate-900/60 border border-white/10 px-4 py-2 outline-none focus:border-white/30"
+        type="date"
+        name="date"
+        value="{{ selected_date }}"
+        hx-get="/doctor/availability"
+        hx-target="#availability"
+        hx-trigger="change, load"
+        hx-include="[name='date']"
+      />
+    </div>
+  </div>
+
+  <div id="availability" class="mt-6">
+      {% include "partials/availability.html" %}
+  </div>
+</div>
+{% endblock %}

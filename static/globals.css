@@ -1,0 +1,1137 @@
+/* ===== Mobile base ===== */
+img, svg { max-width: 100%; height: auto; }
+
+/* Evita zoom no foco do iOS (inputs <16px provocam zoom) */
+input, select, textarea { font-size: 16px; }
+
+/* Ajustes de logos no header */
+.brand-logo { width: clamp(140px, 40vw, 220px); height: auto; }
+.logout-ico { width: clamp(20px, 12vw, 36px); height: auto; }
+
+/* Login: cartão centralizado e fluido no celular */
+.auth-wrap { min-height: 100svh; display: grid; place-items: center; padding: 16px; }
+.auth-card { width: min(92vw, 440px); margin: 0 auto; }
+
+/* Evita rolagem horizontal em qualquer página */
+html, body { overflow-x: hidden; }
+
+:root{
+  --bg:#0f1115;
+  --panel:#151923;
+  --panel-2:#1a2030;
+  --text:#e8ecf1;
+  --muted:#a8b0bf;
+  --accent:#e2b857;  /* dourado Concept vibes */
+  --ok:#1fbf75;
+  --warn:#f5a524;
+  --danger:#ef4444;
+  --border:#2a3142;
+  --info: #60A5FA; /* Azul para o KPI "Total" */
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin: 8px 0 20px;
+}
+.header .link{
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+.header .link:hover{ filter: brightness(1.1); }
+
+.brand{display:flex; gap:10px; align-items:center;}
+.logo{
+  width:36px; height:36px; border-radius:50%;
+  background: radial-gradient(circle at 30% 30%, #fff2, transparent 60%), var(--panel-2);
+  border:1px solid var(--border);
+}
+.brand h1{font-size:18px; margin:0; letter-spacing:.5px}
+.card-grid{
+  display:grid; gap:16px; grid-template-columns: repeat(3, minmax(0,1fr));
+}
+.card{
+  background:linear-gradient(180deg, var(--panel), var(--panel-2));
+  border:1px solid var(--border); border-radius:16px; padding:16px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+.card h3{margin:0 0 8px 0; font-weight:600; color:var(--muted); font-size:13px}
+.kpi{font-size:24px; font-weight:700}
+
+.section{margin-top:28px}
+.section h2{font-size:16px; margin:0 0 12px 0; font-weight:700}
+
+.table{
+  width:100%; border-collapse:collapse; border:1px solid var(--border);
+  background: var(--panel);
+  border-radius:12px; overflow:hidden;
+}
+.table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
+.table th{background:var(--panel-2); text-align:left; color:var(--muted); font-weight:600; font-size:13px}
+.table tr:last-child td{border-bottom:0}
+
+.badge{display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border)}
+.badge.ok{background:#1fbf7511; color:var(--ok)}
+.badge.warn{background:#f5a52411; color:var(--warn)}
+.badge.todo{background:#3b82f611; color:#60a5fa}
+
+.list{list-style:none; padding:0; margin:0}
+.list li{padding:10px 12px; background:var(--panel); border:1px solid var(--border); border-radius:12px; margin-bottom:8px}
+.mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color:var(--muted)}
+.link{color:var(--accent); text-decoration:none}
+.input, .btn{
+  width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+  background:var(--panel); color:var(--text);
+}
+.form{max-width:400px; margin:80px auto}
+.btn{background:linear-gradient(180deg,#2a3142,#202735); cursor:pointer; font-weight:600}
+.btn:hover{filter:brightness(1.05)}
+.row{display:flex; gap:12px}
+
+/* ===== layout 2 colunas ===== */
+.grid-2{
+  display:grid; gap:18px;
+  grid-template-columns: 1.1fr 1fr;   /* esquerda maior que direita */
+  align-items: stretch;
+}
+@media (max-width: 980px){
+  .grid-2{ grid-template-columns: 1fr; }
+}
+
+/* painéis */
+.panel{
+  background:linear-gradient(180deg, var(--panel), var(--panel-2));
+  border:1px solid var(--border);
+  border-radius:16px; padding:16px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+.panel h3{ margin:0 0 12px 0; font-size:16px; }
+.sub{ color:var(--muted); font-size:13px }
+
+/* tabela “excel-like” */
+.table.compact td,.table.compact th{ padding:8px 10px; }
+
+/* coloração para oportunidades */
+.col-red{ background:#ef444411; }
+.col-green{ background:#22c55e11; }
+.table .col-red, .table .col-green{ border-left:1px solid var(--border); }
+
+/* blocos com título estilo seção */
+.block-title{
+  margin: 26px 0 10px; font-weight:700; font-size:16px;
+}
+
+/* badges de status já existem, só reforço cores */
+.badge.agendado{ background:#f5a52411; color:var(--warn) }
+.badge.realizado{ background:#1fbf7511; color:var(--ok) }
+.badge.pendente{ background:#3b82f611; color:#60a5fa }
+
+.fab-whatsapp{
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 56px; height: 56px;
+  border-radius: 999px;
+  background: #25D366; /* verde WhatsApp */
+  color: white;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 10px 25px rgba(0,0,0,.35);
+  text-decoration:none;
+  z-index: 1000;
+  transition: transform .15s ease, filter .15s ease;
+}
+.fab-whatsapp:hover{ filter: brightness(1.05); transform: translateY(-2px); }
+.fab-whatsapp svg{ width: 28px; height: 28px; }
+
+/* Cor dos títulos = cor da logo/botão (usa --accent) */
+h1, h2, h3, h4, h5, h6 { color: var(--accent); }
+
+/* Títulos de seção (Procedimentos, Agendamentos, etc.) */
+.block-title { 
+  margin: 26px 0 10px; 
+  font-weight: 700; 
+  font-size: 16px; 
+  color: var(--accent);
+}
+
+.welcome {
+  color: var(--accent) !important;
+}
+/* Ajuste lista de procedimentos */
+.panel .list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.panel .list li {
+  padding: 4px 8px;          /* Menor altura */
+  margin: 0;
+  white-space: nowrap;       /* Impede quebra de linha */
+  overflow: hidden;          /* Oculta excesso */
+  text-overflow: ellipsis;   /* Adiciona reticências */
+  line-height: 1.4;          /* Compacta verticalmente */
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  margin-bottom: 4px;        /* Pequeno espaçamento entre itens */
+}
+
+.panel .list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Força cor de fundo + texto nos valores da tabela de oportunidades */
+.table td.col-red{
+  background: rgba(239, 68, 68, .14) !important; /* vermelho suave */
+  color: #ef4444 !important;
+}
+.table td.col-green{
+  background: rgba(34, 197, 94, .14) !important; /* verde suave */
+  color: #22c55e !important;
+}
+/* opcional: uma borda interna para destacar as colunas */
+.table td.col-red, .table td.col-green{
+  border-left: 1px solid var(--border);
+}
+
+/* nome com tooltip */
+.svc-name { cursor: help; }
+
+/* preço verde + botão lado a lado */
+.table td.col-green .cell-cta{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;          /* quebra no mobile se faltar espaço */
+}
+
+/* botão CTA pequeno */
+.btn-cta{
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--accent);
+  color: #111;              /* contraste no dourado */
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  transition: transform .12s ease, filter .12s ease;
+}
+.btn-cta:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+.btn-cta:active{ transform: translateY(0); }
+
+/* mantém o verde de fundo e não “puxa” o botão para verde */
+.table td.col-green { position: relative; }
+
+/* botão abaixo da tabela */
+.pay-actions{
+  margin-top:12px;
+  display:flex;
+  justify-content:flex-end;
+}
+
+/* ===== Modal ===== */
+.modal-backdrop{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  display:flex; align-items:center; justify-content:center;
+  z-index: 1000;
+}
+.modal{
+  width: min(640px, 94vw);
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border:1px solid var(--border);
+  border-radius:16px; padding:18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.45);
+}
+.modal-options{
+  display:grid; grid-template-columns: repeat(3, minmax(0,1fr));
+  gap:10px; margin: 12px 0 6px;
+}
+.btn-choice{
+  padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+  background: var(--panel); color: var(--text); cursor:pointer; font-weight:600;
+}
+.btn-choice:hover{ filter: brightness(1.05); }
+
+.modal-actions{
+  display:flex; justify-content:flex-end; margin-top:12px; gap:8px;
+}
+.btn-ghost{
+  padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.btn-ghost:hover{ filter: brightness(1.1); }
+
+/* Pix box */
+.pix-box{
+  margin-top:12px; padding:12px;
+  border:1px solid var(--border); border-radius:12px;
+  background: rgba(255,255,255,.03);
+}
+.pix-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+}
+.pix-key{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(0,0,0,.25); padding:6px 10px; border-radius:8px;
+}
+.pix-img{ width:100%; height:auto; margin-top:10px; border-radius:12px; border:1px solid var(--border); }
+
+/* CTA padrão já usado no projeto */
+.btn-cta{
+  padding:8px 12px;
+  border-radius:10px;
+  border:0;
+  background: var(--accent);
+  color:#111;
+  font-weight:700;
+  font-size:13px;
+  cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);
+  transition: transform .12s ease, filter .12s ease;
+}
+.btn-cta:hover{ filter:brightness(1.05); transform: translateY(-1px); }
+
+@media (max-width: 640px){
+  .modal-options{ grid-template-columns: 1fr; }
+}
+
+html, body { overflow-x: hidden; }
+
+/* Tooltip com o visual da UI */
+.tooltip{
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+.tooltip-panel{
+  position: absolute;
+  top: 100%;
+  left: 0;
+  transform: translateY(8px) scale(.98);
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-width: 260px;
+  max-width: 360px;
+  color: var(--text);
+  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+  z-index: 20;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease, visibility .12s;
+}
+
+/* abre no hover e no focus (mobile/toque) */
+.tooltip:hover .tooltip-panel,
+.tooltip:focus-within .tooltip-panel{
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(6px) scale(1);
+}
+
+/* triangulinho */
+.tooltip-panel::before{
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 16px;
+  border: 8px solid transparent;
+  border-bottom-color: var(--panel-2);
+  filter: drop-shadow(0 -1px 0 var(--border));
+}
+
+/* tipografia interna */
+.tip-title{
+  display: block;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.tip-text{
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+  white-space: normal;
+}
+/* a .table padrão continua com overflow:hidden (para os cantos) */
+/* mas a tabela com allow-overflow pode deixar o tooltip escapar */
+.table.allow-overflow{ overflow: visible; }
+
+/* por via das dúvidas, garanta que o painel também não corta */
+.panel{ overflow: visible; }
+
+/* suba o tooltip acima de linhas/cabeçalhos */
+.tooltip-panel{ z-index: 1000; }
+/* ===== Agendamentos melhorados ===== */
+.list .appt-item{
+  position: relative;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  /* faixa colorida à esquerda */
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+
+/* título */
+.appt-title{
+  font-weight: 700;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+/* linha data + chip */
+.appt-row{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-top: 6px;
+  gap: 10px;
+  font-size: .95em;
+  opacity: .95;
+}
+
+/* status textual (original), discreto */
+.appt-status{
+  margin-top: 4px;
+  font-size: .9em;
+  color: var(--muted);
+}
+
+/* chips de status */
+.chip{
+  display:inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.03);
+}
+.chip.done{      color: var(--ok);    background: #1fbf7511; }
+.chip.upcoming{  color: #60a5fa;      background: #3b82f611; }
+.chip.pending{   color: var(--warn);  background: #f5a52411; }
+.chip.cancelled{ color: var(--danger);background: #ef444411; }
+.chip.missed{    color: #ff7a7a;      background: #ef444408; }
+
+/* faixas à esquerda por classe */
+.appt-item.done{      border-left-color: var(--ok); }
+.appt-item.upcoming{  border-left-color: #60a5fa; }
+.appt-item.pending{   border-left-color: var(--warn); }
+.appt-item.cancelled{ border-left-color: var(--danger); }
+.appt-item.missed{    border-left-color: #ff7a7a; }
+
+/* suaviza itens passados (exceto cancelado, que já é vermelho) */
+.appt-item.done .appt-title,
+.appt-item.missed .appt-title{
+  opacity: .95;
+}
+.appt-item.done{ filter: saturate(.95); }
+.appt-item.missed{ filter: grayscale(.1) saturate(.9); }
+.appt-prof{
+  margin-top: 4px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: .9;
+}
+/* link SAIR com ícone */
+.logout{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);        /* dourado do tema */
+  font-weight: 700;
+  cursor: pointer;
+}
+.logout:hover{ filter: brightness(1.05); }
+
+.logout-ico{
+  width: 36px; 
+  height: 36px;
+  display: block;
+}
+/* ===== Login premium ===== */
+.auth-wrap{
+  min-height: 100vh;
+  padding: clamp(24px, 4vw, 48px);
+  display:flex; align-items:center; justify-content:center;
+  position: relative; overflow: hidden;
+  background: radial-gradient(1200px 600px at 10% -10%, #e2b85722, transparent 50%),
+              radial-gradient(900px 480px at 110% 110%, #1fbf7518, transparent 50%),
+              var(--bg);
+}
+
+.auth-card{
+  width: 100%;
+  max-width: 520px;
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.35);
+  padding: clamp(20px, 4vw, 28px);
+  position: relative; z-index: 1;
+}
+
+.brand-line{
+  text-align: center; margin-bottom: 18px;
+}
+.brand-logo{
+  height: 150px; width: auto; margin-bottom: 8px; object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.3));
+}
+.brand-line h1{
+  margin: 0; font-size: 22px; font-weight: 800; color: var(--accent); letter-spacing: .5px;
+}
+.brand-sub{
+  margin: 4px 0 0; color: var(--muted); font-size: 13px;
+}
+
+.auth-form{ margin-top: 18px; }
+
+.lbl{
+  display:block; margin: 14px 0 6px; font-weight: 600; color: var(--muted);
+}
+
+.input-wrap{
+  position: relative;
+}
+.input-wrap .input{
+  width:100%;
+  padding: 14px 44px 14px 14px;
+  border-radius: 12px;
+  border:1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  outline:none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.input-wrap .input:focus{
+  border-color: #e2b85766;
+  box-shadow: 0 0 0 3px #e2b85722;
+}
+.input-icon{
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items:center; justify-content:center;
+  width: 28px; height: 28px; color: var(--muted);
+}
+.btn-eye{
+  background: transparent; border: 0; cursor: pointer;
+  border-radius: 8px;
+}
+.btn-eye:hover{ color: var(--accent); }
+
+.auth-error{
+  margin-top: 12px;
+  background: #ef444411; color: #fca5a5;
+  border: 1px solid #ef444466;
+  padding: 10px 12px; border-radius: 10px; font-size: 14px;
+}
+
+.btn-primary{
+  width:100%; margin-top: 16px;
+  padding: 12px 14px; border-radius: 12px; border:1px solid var(--border);
+  background: linear-gradient(180deg, #332b16, #2b2413);
+  color: #fff; font-weight: 700; cursor: pointer;
+  box-shadow: 0 10px 25px rgba(0,0,0,.35);
+  transition: transform .12s ease, filter .12s ease;
+}
+.btn-primary:hover{ filter: brightness(1.05); transform: translateY(-1px); }
+.btn-primary:disabled{ opacity:.7; cursor:not-allowed; }
+
+.form-foot{
+  margin-top: 12px; display:flex; justify-content: center;
+}
+
+.auth-glow{
+  position:absolute; inset: -30%;
+  background:
+    radial-gradient(600px 600px at 20% 0%, #e2b85720, transparent 60%),
+    radial-gradient(600px 600px at 120% 120%, #1fbf7518, transparent 60%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* reaproveita o link dourado do tema */
+.link{ color: var(--accent); text-decoration:none }
+.link:hover{ text-decoration: underline; }
+
+/* Viewer 3D */
+.viewer-panel { padding: 0; }
+.viewer-box   { width: 100%; height: 620px; }
+@media (max-width: 980px){
+  .viewer-box { height: 420px; }
+}
+/* faz as duas colunas esticarem igualmente na vertical */
+.grid-1{ 
+  display:grid;
+  gap: 18px; 
+  grid-template-columns: 1.1fr 1fr }
+  @media (max-width: 980px){
+}
+
+/* coluna da direita: viewer ocupa todo o espaço livre */
+.right-col{
+  display: grid;
+  grid-template-rows: 1fr auto; /* 3D cresce | agendamentos ficam abaixo */
+  gap: 18px;
+}
+
+/* Deixe APENAS ISSO para o viewer */
+.viewer-box{
+  padding: 0;
+  overflow: hidden;
+  height: 100%;          /* 👈 faz o painel ocupar toda a altura da linha do grid */
+}
+
+/* Conteúdo interno do viewer */
+.viewer-box > div, .viewer-fill{
+  width: 100%;
+  height: 100%;          /* 👈 preenche o painel inteiro */
+  min-height: 560px;     /* opcional: altura mínima */
+  display: grid;
+  place-items: center;
+}
+/* garante que o canvas ocupe 100% */
+.viewer-box canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+/* painel do viewer preenche a linha inteira */
+.viewer-panel{
+  padding:0;
+  display:flex;
+  height:100%;                     /* <— ocupa toda a altura da linha (igual à da coluna esquerda) */
+}
+/* wrapper do Canvas ocupa tudo */
+.viewer-inner{
+  flex:1;
+  width:100%;
+  height:100%;
+  display:grid;
+}
+
+/* container “empilhado” da esquerda */
+.stack-panel{
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+.stack-panel .section-title{
+  font-weight: 700;
+  color: var(--accent);
+  margin: 6px 0 4px;
+}
+.chip.small{
+  font-size: 11px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  opacity: .95;
+}
+.pay-actions.left {
+  justify-content: flex-start;
+}
+
+/* Checkbox premium */
+.checkbox-premium {
+  appearance: none; /* remove estilo padrão */
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3c94b;
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.checkbox-premium:hover {
+  box-shadow: 0 0 6px rgba(243, 201, 75, 0.6);
+  transform: scale(1.05);
+}
+
+.checkbox-premium:checked {
+  background-color: #f3c94b;
+  border-color: #f3c94b;
+}
+
+.checkbox-premium:checked::after {
+  content: '✔';
+  color: #1a1f2b; /* contraste com dourado */
+  position: absolute;
+  top: -1px;
+  left: 3px;
+  font-size: 14px;
+  font-weight: bold;
+}
+/* ===== Possibilidades Adicionais — ajustes finos ===== */
+
+/* 1) Tag (chip) embaixo do nome, colada à esquerda */
+.stack-panel .table .svc-name { display: block; }
+.stack-panel .table .svc-name > div { display: block; line-height: 1.25; }
+.stack-panel .table .svc-name .chip {
+  display: inline-block;
+  margin: 6px 0 0 0 !important;   /* sem recuo; vai grudar no início */
+}
+
+/* 2) Largura das colunas (mantendo seus nomes) */
+.stack-panel .table th.col-service, .stack-panel .table td.col-service { width: 45%; }
+.stack-panel .table th.col-red,     .stack-panel .table td.col-red     { width: 20%; }
+.stack-panel .table th.col-green,   .stack-panel .table td.col-green   { width: 20%; }
+.stack-panel .table th.col-action,  .stack-panel .table td.col-action  { width: 15%; }
+
+/* 3) Coluna “Selecionar” bem justa e centralizada */
+.stack-panel .table th.col-action,
+.stack-panel .table td.col-action {
+  text-align: center;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* Força o cabeçalho a ter a mesma largura interna que o corpo */
+.allow-overflow {
+  border-spacing: 0;
+  padding-left: 0;   /* remove recuo extra à esquerda */
+  padding-right: 0;  /* remove recuo extra à direita */
+}
+
+/* ====================== MOBILE OVERRIDES (até 980px) ====================== */
+
+/* 1) Grids: empilhar no celular, manter desktop como está */
+@media (max-width: 980px){
+  .grid-1 { grid-template-columns: 1fr; }  /* estava sem regra no seu @media */ 
+  .grid-2 { grid-template-columns: 1fr; }  /* você já tem algo parecido no local do Dashboard */
+}
+
+/* 2) Evitar que o conteúdo “empurre” a coluna (sem trocar 1.1fr 1fr do desktop) */
+.grid-1 > *, .grid-2 > * { min-width: 0; }
+
+/* 3) Texto e mídias não estouram */
+.grid-1 *, .grid-2 * { overflow-wrap: anywhere; }
+.grid-1 img, .grid-1 svg, .grid-1 canvas,
+.grid-2 img, .grid-2 svg, .grid-2 canvas { max-width: 100%; height: auto; }
+
+/* 4) Espaçamentos e alturas mais amigáveis no celular (opcional, ajusta sem afetar desktop) */
+@media (max-width: 980px){
+  .viewer-box { height: 380px; min-height: 320px; }  /* ajuste de altura do 3D no mobile */
+  h1, .patient-name { font-size: clamp(18px, 5vw, 28px); line-height: 1.2; }
+}
+
+/* ====================== FIX MOBILE & OVERFLOW ====================== */
+
+/* 1) Empilha as colunas só no celular */
+@media (max-width: 980px){
+  .grid-1 { grid-template-columns: 1fr; }     /* Procedimentos + Viewer */
+  .card-grid { grid-template-columns: 1fr; }  /* KPIs em uma coluna */
+}
+
+/* 2) Permite que os filhos do grid encolham (sem alterar 1.1fr 1fr do desktop) */
+.grid-1 > *, .grid-2 > *, .left-col, .viewer-panel, .panel { min-width: 0; }
+
+/* 3) Tabelas/listas da área “Procedimentos” e “Adicionais” não estouram */
+.table { table-layout: fixed; width: 100%; }
+.table td, .table th { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-name div { white-space: normal; overflow-wrap: anywhere; } /* nome do serviço pode quebrar linha */
+
+/* 4) Header: evita que o botão SAIR saia da tela */
+@media (max-width: 980px){
+  .header { flex-wrap: wrap; gap: 12px; }
+  .brand { flex: 1 1 auto; }             /* logo ocupa a linha */
+  .header .logout { order: 2; }           /* “SAIR” vai para a linha de baixo, à direita se couber */
+}
+/* deixa o ícone menor no celular */
+.logout-ico { width: clamp(20px, 8vw, 28px); height: auto; }
+
+/* 5) Imagens e canvas nunca estouram a coluna */
+.grid-1 img, .grid-1 svg, .grid-1 canvas,
+.grid-2 img, .grid-2 svg, .grid-2 canvas { max-width: 100%; height: auto; }
+
+/* 6) Ajuste suave no 3D no celular (opcional) */
+@media (max-width: 980px){
+  .viewer-inner, .viewer-box { height: 380px; min-height: 320px; }
+}
+/* ====================== TYPOGRAFIA – AJUSTES MOBILE ====================== */
+
+/* Valores grandes (R$ …) */
+.kpi{ font-weight: 700; line-height: 1.1; }
+/* KPIs do topo (cards) – grandes no desktop, reduzem no mobile */
+.card .kpi{ font-size: clamp(20px, 6.2vw, 32px); white-space: nowrap; }
+/* Valores dentro dos painéis (Propostas, etc.) */
+.panel .kpi{ font-size: clamp(18px, 5.5vw, 24px); white-space: nowrap; }
+
+/* Títulos de seção / subtítulos */
+.section-title, .block-title{ font-size: clamp(14px, 3.6vw, 16px); }  /* antes 16px fixo */
+.panel h3{ font-size: clamp(14px, 3.6vw, 16px); }                    /* antes 16px fixo */
+
+/* Nome do paciente (h2.welcome) */
+.welcome{ font-size: clamp(18px, 4.6vw, 26px); line-height: 1.2; }
+
+/* Tabelas (Possibilidades, Pagamentos) */
+.table th{ font-size: clamp(11px, 3.2vw, 13px); }   /* antes 13px fixo */
+.table td{ font-size: clamp(12px, 3.6vw, 14px); }
+.svc-name > div{ font-size: clamp(12px, 3.6vw, 15px); line-height: 1.25; overflow-wrap: anywhere; }
+
+/* Lista de procedimentos contratados – nomes compactos no celular */
+@media (max-width: 980px){
+  .panel .list li b { font-size: clamp(13px, 3.8vw, 15px); }
+  .panel .list .mono { font-size: clamp(12px, 3.4vw, 13px); }
+}
+
+/* Botões longos (ex.: “Contratar selecionados” / “Realizar novo pagamento”) */
+.btn-cta, .btn-primary{ font-size: clamp(14px, 3.8vw, 16px); white-space: normal; }
+
+/* ===================== AJUSTES FINOS – MOBILE ===================== */
+
+/* 2) POSSIBILIDADES ADICIONAIS
+   (a sua lista usa duas <table>: cabeçalho e corpo dentro de um <div> rolável) */
+@media (max-width: 980px){
+  /* larguras mais folgadas para os números */
+  .stack-panel .table th.col-service, .stack-panel .table td.col-service { width: 44%; }
+  .stack-panel .table th.col-red,     .stack-panel .table td.col-red     { width: 22%; }
+  .stack-panel .table th.col-green,   .stack-panel .table td.col-green   { width: 22%; }
+  .stack-panel .table th.col-action,  .stack-panel .table td.col-action  { width: 12%; min-width: 44px; text-align:center; }
+
+  /* números: não cortar + tamanho menor */
+  .stack-panel .table td.col-red,
+  .stack-panel .table td.col-green{
+    white-space: nowrap;
+    font-size: clamp(11px, 3.2vw, 12.5px);
+    padding-right: 4px;
+    letter-spacing: -0.1px; /* só para ganhar alguns px sem perder legibilidade */
+  }
+
+  /* cabeçalho pode quebrar linha; encurtar “Selecionar” visualmente */
+  .stack-panel .table thead th{ white-space: normal; }
+  .stack-panel .table thead th.col-action{
+    font-size: 0; min-width: 44px; position: relative;
+  }
+  .stack-panel .table thead th.col-action::after{
+    content: "Sel."; font-size: 12px;
+    position: relative; top: 0;
+  }
+
+  /* itens muito longos do nome do serviço: no máximo 2 linhas */
+  .stack-panel .table .svc-name > div{
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.2;
+  }
+}
+
+/* 3) Segurança contra “vazamento” de largura */
+.grid-1 > *, .grid-2 > *, .panel, .panel * { min-width: 0; }
+
+/* ===================== QUEBRA DE TEXTO – MOBILE ===================== */
+@media (max-width: 980px){
+
+  /* botão da área de pagamentos nunca estoura a largura */
+  .pay-actions .btn-cta{
+    white-space: normal;
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  /* 2) POSSIBILIDADES ADICIONAIS */
+  /* header + corpo possuem duas <table>. Alvo pelas classes de coluna existentes */
+  .stack-panel .table th.col-service,
+  .stack-panel .table td.col-service,
+  .stack-panel .table th.col-red,
+  .stack-panel .table td.col-red,
+  .stack-panel .table th.col-green,
+  .stack-panel .table td.col-green,
+  .stack-panel .table th.col-action,
+  .stack-panel .table td.col-action{
+    white-space: normal;        /* antes estava nowrap em alguns pontos */
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-overflow: clip;
+    line-height: 1.25;
+  }
+
+  /* se o nome do serviço puder ocupar todas as linhas (sem clamp) */
+  .stack-panel .table .svc-name > div{
+    display: block;             /* remove o line-clamp opcional */
+    -webkit-line-clamp: initial;
+    -webkit-box-orient: initial;
+    overflow: visible;
+  }
+}
+/* === 1) Propostas – valor da direita nunca vaza do card === */
+.stack-panel .panel .sub + .kpi{
+  font-size: clamp(18px, 4.8vw, 26px); /* encolhe no celular */
+  white-space: nowrap;
+  text-align: right;
+  line-height: 1.1;
+}
+
+/* === 2) Possibilidades Adicionais — tipografia e alinhamento no mobile === */
+@media (max-width: 480px){
+  /* cabeçalho: títulos menores e com quebra */
+  .stack-panel .table th{
+    font-size: 12px;
+    line-height: 1.15;
+    white-space: normal;
+  }
+  /* valores mais compactos para caber em 1 linha */
+  .stack-panel .table td.col-red,
+  .stack-panel .table td.col-green{
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  /* nome do serviço ainda confortável */
+  .stack-panel .table td:first-child{
+    font-size: 14px;
+  }
+}
+
+/* === 3) Evolução dos Pagamentos — cabe com folga no celular === */
+@media (max-width: 480px){
+  /* “Forma” um pouco maior, “Valor a Pagar” menor e sem quebra */
+  .grid-2 .panel .table thead th:nth-child(3){ font-size: 13px; }     /* Forma */
+  .grid-2 .panel .table thead th:nth-child(5){ font-size: 12px; }     /* Valor a Pagar */
+  .grid-2 .panel .table td:nth-child(5){ font-size: 12.5px; white-space: nowrap; }
+
+  /* data curta já vem do fmtData; evita quebra da data e do valor */
+  .grid-2 .panel .table td:nth-child(1),
+  .grid-2 .panel .table td:nth-child(2){ white-space: nowrap; }
+}
+
+/* segurança: itens de grid não estouram */
+.grid-2 > * { min-width: 0; }
+/* ===== Possibilidades Adicionais: alinhamento de colunas ===== */
+:root{
+  --addons-w-service: 30%;
+  --addons-w-red: 30%;
+  --addons-w-green: 30%;
+  --addons-w-action: 10%;
+}
+@media (max-width: 480px){
+  :root{
+    --addons-w-service: 30%;
+    --addons-w-red: 30%;
+    --addons-w-green: 30%;
+    --addons-w-action: 10%;
+  }
+}
+
+/* Mesma largura nas duas tabelas */
+.addons-head, .addons-body{ table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; }
+.addons-head col.col-service, .addons-body col.col-service{ width: var(--addons-w-service); }
+.addons-head col.col-red,     .addons-body col.col-red    { width: var(--addons-w-red); }
+.addons-head col.col-green,   .addons-body col.col-green  { width: var(--addons-w-green); }
+.addons-head col.col-action,  .addons-body col.col-action { width: var(--addons-w-action); }
+
+/* Padding/box-sizing idênticos para não “sambar” 1px */
+.addons-head th, .addons-body td{ padding: 10px 12px; box-sizing: border-box; }
+
+/* Números em 1 linha; títulos podem quebrar */
+.addons-body td.col-red, .addons-body td.col-green{ white-space: nowrap; }
+.addons-head th{ white-space: normal; line-height: 1.2; }
+
+/* Mobile: fontes mais compactas e header legível */
+@media (max-width: 480px){
+  .addons-head th{ font-size: 12px; }
+  .addons-body td.col-red, .addons-body td.col-green{ font-size: 12px; }
+  .addons-body td:first-child{ font-size: 14px; } /* nome do serviço */
+}
+
+/* Segurança: remova qualquer largura custom do hack anterior */
+.allow-overflow{ width: 100% !important; }
+
+/* ===== Correção de box-model + largura do container ===== */
+*, *::before, *::after { box-sizing: border-box; }   /* evita width+padding > viewport */
+
+/* container global não pode usar 100vw com padding (estoura). Use width:100% */
+.container { width: 100%; max-width: 1500px; margin: 0 auto; padding-inline: 10px; }
+@media (max-width: 480px){
+  .container { padding-inline: 8px; }               /* ganha uns px no iPhone */
+}
+
+/* segurança: nada passa da largura do container */
+.wrap, .panel, .panel > * { max-width: 100%; }
+html, body, .container, .wrap { overflow-x: clip; }  /* clipa qualquer sobra de 1-2px do iOS */
+/* ===== largura segura de container e wrap ===== */
+*,*::before,*::after{ box-sizing: border-box; }
+
+.container{
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding-inline: 10px;
+}
+
+.wrap{
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding-inline: 10px;
+}
+
+/* no mobile não use vw; só diminua o padding */
+@media (max-width: 980px){
+  .container, .wrap { padding-inline: 8px; }
+}
+
+/* nada ultrapassa o container, mesmo que um filho gere 1–2px extras */
+.wrap, .panel, .panel > *, .table { max-width: 100%; }
+html, body, .container, .wrap { overflow-x: clip; }
+@media (max-width: 480px){
+  .addons-scroll{ overflow-y: auto; }
+  .addons-head, .addons-body{ table-layout: fixed; width: 100%; }
+}
+.container { width:100% !important; max-width:1500px !important; padding-inline:10px !important; }
+
+/* ===== EVOLUÇÃO DOS PAGAMENTOS — colunas fixas e sem vazamento ===== */
+.table-wrap.pay { overflow-x: auto; max-width: 100%; }
+.pay-table { table-layout: fixed !important; width: 100%; border-collapse: collapse; }
+
+/* Larguras – ajuste fino p/ mobile */
+.pay-table col.col-data  { width: 18%; }
+.pay-table col.col-valor { width: 22%; }
+.pay-table col.col-forma { width: 18%; }
+.pay-table col.col-acum  { width: 21%; }
+.pay-table col.col-saldo { width: 21%; }
+
+/* Cabeçalho pode quebrar; números não quebram para não “picotar” moeda */
+.pay-table thead th { white-space: normal !important; line-height: 1.2; }
+.pay-table tbody td,
+.pay-table tfoot td { white-space: nowrap !important; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tipografia um pouco mais compacta no mobile */
+@media (max-width: 480px){
+  .pay-table thead th { font-size: 12px; }
+  .pay-table tbody td, .pay-table tfoot td { font-size: 12.5px; }
+  /* leve ajuste nas larguras no bem estreito */
+  .pay-table col.col-data  { width: 20%; }
+  .pay-table col.col-valor { width: 22%; }
+  .pay-table col.col-forma { width: 18%; }
+  .pay-table col.col-acum  { width: 20%; }
+  .pay-table col.col-saldo { width: 20%; }
+}
+/* ===== EVOLUÇÃO DOS PAGAMENTOS — modo mobile: só 3 colunas ===== */
+@media (max-width: 640px){
+  /* Deixa as colunas restantes ocuparem o espaço total */
+  .pay-table{ table-layout: auto !important; }
+
+  /* Some com Forma (3ª) e Acumulado (4ª) no header e no corpo */
+  .pay-table thead th:nth-child(3),
+  .pay-table thead th:nth-child(4),
+  .pay-table tbody td:nth-child(3),
+  .pay-table tbody td:nth-child(4){ display:none; }
+
+  /* Zera as larguras do colgroup dessas colunas para não “reservar” espaço */
+  .pay-table col.col-forma,
+  .pay-table col.col-acum{ width:0 !important; }
+
+  /* Tfoot: esconde a versão desktop e mostra a versão mobile (3 colunas) */
+  .pay-table tfoot tr.sum-desktop{ display:none; }
+  .pay-table tfoot tr.sum-mobile{ display:table-row; }
+}
+
+/* Desktop: mantém 5 colunas e esconde a linha mobile */
+@media (min-width: 641px){
+  .pay-table tfoot tr.sum-mobile{ display:none; }
+}
+/* Mobile: arrastar para BAIXO rola a página (não gira o 3D) */
+@media (max-width: 980px){
+  .viewer-inner canvas{ touch-action: pan-y !important; }
+}
+/* ===== Possibilidades: mostrar "R$" em cima e o valor embaixo (só no mobile) ===== */
+.price-stack { display: inline; } /* desktop continua em linha */
+
+@media (max-width: 480px){
+  /* permitir quebra dentro das células de preço no mobile */
+  .addons-body td.col-red,
+  .addons-body td.col-green{ white-space: normal; }
+
+  .price-stack{
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.05;
+  }
+  .price-stack .curr{
+    font-size: 11px;
+    opacity: .9;
+    margin-bottom: 2px;
+  }
+  .price-stack .amt{
+    font-weight: 600;
+    white-space: nowrap; /* o número não “picota” */
+  }
+}
+/* ===== SAIR no rodapé (mobile) ===== */
+.logout-footer{
+  display: none;                   /* desktop: oculto */
+  justify-content: center;
+  align-items: center;
+  margin: 24px auto 40px;          /* espaço antes de acabar a página */
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.06);
+  background: var(--panel);
+  width: fit-content;
+}
+
+@media (max-width: 700px){
+  .header .logout{ display: none !important; }   /* some do topo no mobile */
+  .logout-footer{ display: inline-flex; }        /* aparece no final */
+}
+/* Desktop: afasta o SAIR 5px da borda direita */
+@media (min-width: 981px){
+  .header .logout{ margin-right: 5px; }
+}
+
+.addons-body .consult{
+  font-weight: 600;
+  letter-spacing: .2px;
+  opacity: .95;
+}
+/* Corpo rola; header reserva a mesma largura da barra */
+.addons-scroll{
+  overflow-y: auto;
+  scrollbar-gutter: stable;   /* onde suportado mantém a largura “reservada” */
+}
+
+.addons-head{
+  padding-right: 16px;        /* compensa a barra (Windows ~16 px) */
+}
+:root{
+  --addons-w-service: 38%;
+  --addons-w-red:     24%;
+  --addons-w-green:   24%;
+  --addons-w-action:  14%;
+}
+
+/* aplica nas duas tabelas (thead e tbody) */
+.addons-head, .addons-body{ table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; }
+.addons-head col.col-service, .addons-body col.col-service{ width: var(--addons-w-service); }
+.addons-head col.col-red,     .addons-body col.col-red    { width: var(--addons-w-red); }
+.addons-head col.col-green,   .addons-body col.col-green  { width: var(--addons-w-green); }
+.addons-head col.col-action,  .addons-body col.col-action { width: var(--addons-w-action); }
+
+/* o corpo rola */
+.addons-scroll{ overflow-y: auto; }
+
+/* o header usa a mesma largura útil do body */
+.addons-head{ width: calc(100% - var(--sbw, 0px)); }
