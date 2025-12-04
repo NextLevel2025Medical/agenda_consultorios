@@ -169,7 +169,14 @@
   .entry-card.pre{
     background: rgba(226,184,87,.10);
     border-color: rgba(226,184,87,.28);
-}
+  }
+
+  .entry-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    margin-top: 10px;
+  }
 
 </style>
 
@@ -178,6 +185,20 @@
     <div>
       <div class="kicker">Gestão Cirúrgica</div>
       <h1 class="h1">Mapa Cirúrgico</h1>
+    </div>
+
+    <div class="priority-card">
+      <div class="priority-title">Datas Prioritárias — Dr. Gustavo Aquino (próximos 90 dias)</div>
+
+      {% if priority_items and priority_items|length > 0 %}
+        <div class="priority-list">
+          {% for item in priority_items %}
+            <div class="priority-item">{{ item }}</div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="priority-empty">Nenhuma data encontrada no período.</div>
+      {% endif %}
     </div>
 
     <div class="controls">
@@ -302,10 +323,29 @@
                 </div>
 
                 <div class="entry-actions">
+                <button
+                    type="button"
+                    class="btn-secondary"
+                    data-edit-mapa="1"
+                    data-entry-id="{{ e.id }}"
+                    data-day="{{ e.day.isoformat() }}"
+                    data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+                    data-time="{{ e.time_hhmm or '' }}"
+                    data-patient="{{ e.patient_name }}"
+                    data-surgeon="{{ e.surgeon_id }}"
+                    data-procedure="{{ e.procedure_type }}"
+                    data-location="{{ e.location }}"
+                    data-hsr="{{ 1 if e.uses_hsr else 0 }}"
+                    data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
+                >
+                    Editar
+                </button>
+
                 <form method="post" action="/mapa/delete/{{ e.id }}">
                     <button class="btn-secondary" type="submit">Excluir</button>
                 </form>
                 </div>
+
             </div>
             {% endfor %}
         </div>
@@ -369,19 +409,6 @@
 </div>
 
 <script>
-  // ==== Mês/Ano (resolve seu item 1) ====
-  const monthSelect = document.getElementById("monthSelect");
-  const yearSelect  = document.getElementById("yearSelect");
-
-  function goToMonth() {
-    const mm = monthSelect.value; // "01".."12"
-    const yy = yearSelect.value;
-    window.location.href = "/mapa?month=" + yy + "-" + mm;
-  }
-  monthSelect.addEventListener("change", goToMonth);
-  yearSelect.addEventListener("change", goToMonth);
-
-  // ==== Modal de agendamento (resolve seu item 3) ====
   const backdrop = document.getElementById("mapaModalBackdrop");
   const closeBtn = document.getElementById("mapaModalCloseBtn");
   const cancelBtn = document.getElementById("mapaModalCancelBtn");
@@ -389,39 +416,73 @@
   const dayIsoEl = document.getElementById("mapaModalDayIso");
   const formEl = document.getElementById("mapaModalForm");
 
-  function openModal(dayIso, dayHuman) {
+  function openModalBase(dayIso, dayHuman) {
     formEl.reset();
     dayIsoEl.value = dayIso;
     titleEl.textContent = dayHuman;
     backdrop.style.display = "flex";
 
-    // foco no primeiro input
-    const first = formEl.querySelector('input[name="patient_name"]');
+    // foca no time
+    const first = formEl.querySelector('input[name="time_hhmm"]');
     if (first) first.focus();
+  }
+
+  // NOVO
+  function openCreateModal(dayIso, dayHuman) {
+    formEl.action = "/mapa/create";
+    openModalBase(dayIso, dayHuman);
+  }
+
+  // EDITAR
+  function openEditModalFromBtn(btn) {
+    const d = btn.dataset;
+
+    formEl.action = "/mapa/update/" + d.entryId;
+
+    openModalBase(d.day, d.human);
+
+    formEl.querySelector('input[name="time_hhmm"]').value = d.time || "";
+    formEl.querySelector('input[name="patient_name"]').value = d.patient || "";
+
+    formEl.querySelector('select[name="surgeon_id"]').value = d.surgeon || "";
+    formEl.querySelector('select[name="procedure_type"]').value = d.procedure || "Cirurgia";
+    formEl.querySelector('select[name="location"]').value = d.location || "Hospital São Rafael";
+
+    // checkbox HSR
+    const hsr = formEl.querySelector('input[name="uses_hsr"]');
+    if (hsr) hsr.checked = (d.hsr === "1");
+
+    // (opcional) você pode deixar o estado pré-reserva/agenda pro clique do botão (Reservar/Agendar)
+    // pois quem define é o botão submit (mode=reserve ou mode=book).
   }
 
   function closeModal() {
     backdrop.style.display = "none";
   }
 
+  // botões "Agendar" do dia
   document.querySelectorAll("[data-open-mapa-modal]").forEach(btn => {
     btn.addEventListener("click", () => {
-      openModal(btn.getAttribute("data-day"), btn.getAttribute("data-human"));
+      openCreateModal(btn.getAttribute("data-day"), btn.getAttribute("data-human"));
     });
+  });
+
+  // botões "Editar"
+  document.querySelectorAll("[data-edit-mapa]").forEach(btn => {
+    btn.addEventListener("click", () => openEditModalFromBtn(btn));
   });
 
   closeBtn.addEventListener("click", closeModal);
   cancelBtn.addEventListener("click", closeModal);
 
-  // clicar no fundo escuro fecha
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) closeModal();
   });
 
-  // ESC fecha
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeModal();
   });
 </script>
+
 
 {% endblock %}
