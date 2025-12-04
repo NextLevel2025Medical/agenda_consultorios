@@ -1135,3 +1135,14 @@ html, body, .container, .wrap { overflow-x: clip; }
 
 /* o header usa a mesma largura útil do body */
 .addons-head{ width: calc(100% - var(--sbw, 0px)); }
+
+.priority-card{
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #111827;
+  color: #fff;
+  margin-bottom: 16px;
+}
+.priority-title{ font-weight: 700; margin-bottom: 8px; }
+.priority-item{ line-height: 1.6; }
+.priority-empty{ opacity: .8; }
