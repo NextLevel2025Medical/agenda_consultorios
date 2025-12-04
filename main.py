@@ -9,9 +9,10 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import Session, select
+from sqlalchemy import or_
 
 from db import create_db_and_tables, get_session, engine
-from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry
+from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock
 from auth import hash_password, verify_password, require
 
 import calendar
@@ -269,7 +270,7 @@ def validate_mapa_rules(
     """
 
     gustavo = session.exec(select(User).where(User.full_name == "Dr. Gustavo Aquino")).first()
-    alice = session.exec(select(User).where(User.full_name == "Dra. Alice Zinato")).first()
+    alice = session.exec(select(User).where(User.full_name == "Dra. Alice Osório")).first()
     ricardo = session.exec(select(User).where(User.full_name == "Dr. Ricardo Vilela")).first()
 
     # Helper: aplica "excluir este registro" quando estamos editando
@@ -316,6 +317,74 @@ def validate_mapa_rules(
                 return "Regra: Não pode haver CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia."
 
     return None
+
+def _weekday_pt(idx: int) -> str:
+    names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+    return names[idx]
+
+def validate_mapa_block_rules(session: Session, day: date, surgeon_id: int) -> str | None:
+    block = session.exec(
+        select(AgendaBlock).where(
+            AgendaBlock.day == day,
+            or_(AgendaBlock.applies_to_all == True, AgendaBlock.surgeon_id == surgeon_id),
+        )
+    ).first()
+
+    if not block:
+        return None
+
+    if block.applies_to_all:
+        who = "Todos"
+    else:
+        u = session.get(User, block.surgeon_id) if block.surgeon_id else None
+        who = u.full_name if u else "Profissional"
+
+    return f"Agenda bloqueada: {day.strftime('%d/%m/%Y')} - {block.reason} - {who}"
+
+def compute_priority_card(session: Session) -> dict:
+    today = datetime.now(TZ).date()
+    end = today + timedelta(days=90)  # janela “hoje até +90”
+
+    gustavo = session.exec(select(User).where(User.full_name == "Dr. Gustavo Aquino")).first()
+    if not gustavo:
+        return {"mode": "red", "items": []}
+
+    blocked_days = set(
+        session.exec(
+            select(AgendaBlock.day).where(
+                AgendaBlock.day >= today,
+                AgendaBlock.day <= end,
+                or_(AgendaBlock.applies_to_all == True, AgendaBlock.surgeon_id == gustavo.id),
+            )
+        ).all()
+    )
+
+    days = []
+    for i in range(0, 91):  # inclui a data final (ex.: 04/12 a 04/03)
+        d = today + timedelta(days=i)
+        if d.weekday() not in (0, 2):  # só segunda (0) e quarta (2)
+            continue
+        if d in blocked_days:
+            continue
+        days.append(d)
+
+    counts: dict[date, int] = {}
+    for d in session.exec(
+        select(SurgicalMapEntry.day).where(
+            SurgicalMapEntry.day >= today,
+            SurgicalMapEntry.day <= end,
+            SurgicalMapEntry.surgeon_id == gustavo.id,
+        )
+    ).all():
+        counts[d] = counts.get(d, 0) + 1
+
+    zeros = [d for d in days if counts.get(d, 0) == 0]
+    if zeros:
+        return {"mode": "red", "items": [f"🔴 {d.strftime('%d/%m/%Y')}" for d in zeros]}
+
+    ones = [d for d in days if counts.get(d, 0) == 1]
+    return {"mode": "yellow", "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones]}
+
 
 @app.on_event("startup")
 def on_startup():
@@ -830,6 +899,26 @@ def mapa_page(
     for e in entries:
         entries_by_day.setdefault(e.day.isoformat(), []).append(e)
 
+    blocks = session.exec(
+        select(AgendaBlock)
+        .where(AgendaBlock.day >= first_day, AgendaBlock.day < next_first)
+        .order_by(AgendaBlock.day, AgendaBlock.created_at)
+    ).all()
+
+    blocks_by_day: dict[str, list[AgendaBlock]] = {}
+    blocked_all_days: set[str] = set()
+    blocked_surgeons_by_day: dict[str, list[int]] = {}
+
+    for b in blocks:
+        k = b.day.isoformat()
+        blocks_by_day.setdefault(k, []).append(b)
+        if b.applies_to_all:
+            blocked_all_days.add(k)
+        elif b.surgeon_id is not None:
+            blocked_surgeons_by_day.setdefault(k, []).append(b.surgeon_id)
+
+    priority = compute_priority_card(session)
+
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
 
     return templates.TemplateResponse(
@@ -846,6 +935,13 @@ def mapa_page(
             "surgeons": surgeons,
             "weekday_map": weekday_map,
             "users_by_id": users_by_id,
+            "blocks": blocks,
+            "blocks_by_day": blocks_by_day,
+            "blocked_all_days": blocked_all_days,
+            "blocked_surgeons_by_day": blocked_surgeons_by_day,
+            "priority_mode": priority["mode"],
+            "priority_items": priority["items"],
+
         },
     )
 
@@ -871,6 +967,13 @@ def mapa_create(
     day = date.fromisoformat(day_iso)
     
     is_pre = (mode == "reserve")
+
+    block_err = validate_mapa_block_rules(session, day, surgeon_id)
+    if block_err:
+        month = day.strftime("%Y-%m")
+        from urllib.parse import quote
+        audit_event(request, user, "surgical_map_blocked_by_agenda_block", success=False, message=block_err)
+        return redirect(f"/mapa?month={month}&err={quote(block_err)}")
 
     err = validate_mapa_rules(session, day, surgeon_id, procedure_type)
     if err:
@@ -1059,4 +1162,74 @@ def mapa_delete(
     )
     return redirect("/mapa")
 
+@app.post("/mapa/block/create")
+def mapa_block_create(
+    request: Request,
+    month: str = Form(...),              # YYYY-MM pra voltar pro mês certo
+    day_iso: str = Form(...),            # 2025-12-25
+    reason: str = Form(...),
+    scope: str = Form("all"),            # "all" | "surgeon"
+    surgeon_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    day = date.fromisoformat(day_iso)
+    applies_all = (scope == "all")
+    sid = None if applies_all else surgeon_id
+
+    if not applies_all and not sid:
+        from urllib.parse import quote
+        return redirect(f"/mapa?month={month}&err={quote('Selecione o profissional do bloqueio.')}")
+
+    # evita duplicidade exata (mesma data + mesmo escopo)
+    exists = session.exec(
+        select(AgendaBlock).where(
+            AgendaBlock.day == day,
+            AgendaBlock.applies_to_all == applies_all,
+            AgendaBlock.surgeon_id == sid,
+        )
+    ).first()
+    if exists:
+        from urllib.parse import quote
+        return redirect(f"/mapa?month={month}&err={quote('Já existe um bloqueio igual para essa data.')}")
+
+    row = AgendaBlock(
+        day=day,
+        reason=reason.strip(),
+        applies_to_all=applies_all,
+        surgeon_id=sid,
+        created_by_id=user.id,
+    )
+    session.add(row)
+    session.commit()
+
+    audit_event(request, user, "agenda_block_created", target_type="agenda_block", target_id=row.id,
+                extra={"day": day_iso, "reason": reason, "scope": scope, "surgeon_id": sid})
+
+    return redirect(f"/mapa?month={month}")
+
+@app.post("/mapa/block/delete/{block_id}")
+def mapa_block_delete(
+    request: Request,
+    block_id: int,
+    month: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    row = session.get(AgendaBlock, block_id)
+    if row:
+        session.delete(row)
+        session.commit()
+        audit_event(request, user, "agenda_block_deleted", target_type="agenda_block", target_id=block_id,
+                    extra={"day": row.day.isoformat(), "reason": row.reason, "applies_to_all": row.applies_to_all, "surgeon_id": row.surgeon_id})
+
+    return redirect(f"/mapa?month={month}")
 
