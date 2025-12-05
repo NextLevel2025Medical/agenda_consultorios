@@ -178,6 +178,15 @@
     margin-top: 10px;
   }
 
+  .card {
+    margin-bottom: 25px;
+    transition: transform 0.2s;
+  }
+  .card:hover {
+    transform: scale(1.02);
+  }
+
+
 </style>
 
 <div class="page">
@@ -187,19 +196,29 @@
       <h1 class="h1">Mapa Cirúrgico</h1>
     </div>
 
-    <div class="priority-card">
-      <div class="priority-title">Datas Prioritárias — Dr. Gustavo Aquino (próximos 90 dias)</div>
-
-      {% if priority_items and priority_items|length > 0 %}
-        <div class="priority-list">
-          {% for item in priority_items %}
-            <div class="priority-item">{{ item }}</div>
+    <div style="display: flex; justify-content: center; margin: 20px 0;">
+      <div style="
+          background: linear-gradient(135deg, #004aad, #007bff);
+          color: white;
+          padding: 20px 40px;
+          border-radius: 16px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          text-align: center;
+          font-family: 'Arial';
+          font-size: 18px;
+          width: 60%;
+      ">
+        <h3 style="margin-bottom: 10px;">📅 Datas Prioritárias (Próximos 90 dias)</h3>
+        {% if datas_prioritarias %}
+          {% for data in datas_prioritarias %}
+            <div style="margin: 4px 0;">{{ data }}</div>
           {% endfor %}
-        </div>
-      {% else %}
-        <div class="priority-empty">Nenhuma data encontrada no período.</div>
-      {% endif %}
+        {% else %}
+          <div>✅ Todas as segundas e quartas possuem agendamentos!</div>
+        {% endif %}
+      </div>
     </div>
+
 
     <div class="controls">
       <label class="lbl">Mês/Ano</label>
@@ -282,7 +301,7 @@
                 <div class="entry-top">
                 <div>
                     <div class="patient-name">{{ e.patient_name }}</div>
-                    <div class="muted" style="margin-top:4px; font-weight:600;">
+                    <div class="muted" style="margin-top:4px; font-weight:600;margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 10px;">
                     {{ day.strftime("%d/%m/%Y") }}
                     </div>
                 </div>
