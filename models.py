@@ -22,8 +22,6 @@ class SurgicalMapEntry(SQLModel, table=True):
 
     day: date = Field(index=True)  # 2025-12-01
 
-    time_hhmm: Optional[str] = Field(default=None)  # "07:00"
-
     # ✅ NOVO: horário (HH:MM) - string é o mais simples e ordena bem
     time_hhmm: Optional[str] = Field(default=None, index=True)
 
@@ -38,6 +36,18 @@ class SurgicalMapEntry(SQLModel, table=True):
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
+class AgendaBlock(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    day: date = Field(index=True)  # 2025-12-25
+    reason: str
+
+    applies_to_all: bool = Field(default=False, index=True)
+    surgeon_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
 
 class Room(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("name"),)
