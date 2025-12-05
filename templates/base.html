@@ -21,6 +21,7 @@
 
       {% if current_user %}
       <form method="post" action="/logout">
+        <button class="btn btn-secondary" type="button" onclick="openBlocks()">Bloqueios de Agenda</button>
         <button class="rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition">
           Sair ({{ current_user.full_name }})
         </button>
