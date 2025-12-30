@@ -383,8 +383,14 @@ def compute_priority_card(session: Session) -> dict:
         return {"mode": "red", "items": [f"🔴 {d.strftime('%d/%m/%Y')}" for d in zeros]}
 
     ones = [d for d in days if counts.get(d, 0) == 1]
-    return {"mode": "yellow", "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones]}
+    if ones:
+        return {
+            "mode": "yellow",
+            "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones],
+        }
 
+    # se não tem zeros nem ones, então está tudo com 2+
+    return {"mode": "green", "items": []}
 
 @app.on_event("startup")
 def on_startup():
