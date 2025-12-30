@@ -383,8 +383,14 @@ def compute_priority_card(session: Session) -> dict:
         return {"mode": "red", "items": [f"🔴 {d.strftime('%d/%m/%Y')}" for d in zeros]}
 
     ones = [d for d in days if counts.get(d, 0) == 1]
-    return {"mode": "yellow", "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones]}
+    if ones:
+        return {
+            "mode": "yellow",
+            "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones],
+        }
 
+    # se não tem zeros nem ones, então está tudo com 2+
+    return {"mode": "green", "items": []}
 
 @app.on_event("startup")
 def on_startup():
@@ -519,6 +525,27 @@ def availability_context(session: Session, day: date, role: str):
         "date_human": date_human,
     }
 
+@app.post("/bloqueios")
+async def registrar_bloqueio(request: Request):
+    form = await request.form()
+    data = form.get("data")
+    motivo = form.get("motivo")
+    profissional = form.get("profissional")
+
+    bloqueio = {"data": data, "motivo": motivo, "profissional": profissional}
+
+    # grava o bloqueio no JSON
+    bloqueios_path = Path("bloqueios_agenda.json")
+    if bloqueios_path.exists():
+        bloqueios = json.load(open(bloqueios_path, "r", encoding="utf-8"))
+    else:
+        bloqueios = []
+
+    bloqueios.append(bloqueio)
+    json.dump(bloqueios, open(bloqueios_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+    print(f"🔴 Bloqueio cadastrado: {bloqueio}")
+    return RedirectResponse(url="/mapa", status_code=303)
 
 @app.get("/doctor", response_class=HTMLResponse)
 def doctor_page(
