@@ -15,6 +15,8 @@ from db import create_db_and_tables, get_session, engine
 from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock
 from auth import hash_password, verify_password, require
 
+from pathlib import Path
+
 import calendar
 import os
 import json
