@@ -561,26 +561,40 @@ def bloqueios_page(
     )
 
 @app.post("/bloqueios")
-async def registrar_bloqueio(request: Request):
-    form = await request.form()
-    data = form.get("data")
-    motivo = form.get("motivo")
-    profissional = form.get("profissional")
+@app.post("/bloqueios")
+def registrar_bloqueio(
+    request: Request,
+    data: str = Form(...),
+    motivo: str = Form(...),
+    profissional: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
 
-    bloqueio = {"data": data, "motivo": motivo, "profissional": profissional}
+    # converte "YYYY-MM-DD" para date
+    day = date.fromisoformat(data)
 
-    # grava o bloqueio no JSON
-    bloqueios_path = Path("bloqueios_agenda.json")
-    if bloqueios_path.exists():
-        bloqueios = json.load(open(bloqueios_path, "r", encoding="utf-8"))
-    else:
-        bloqueios = []
+    applies_to_all = (profissional == "todos")
+    surgeon_id = None if applies_to_all else int(profissional)
 
-    bloqueios.append(bloqueio)
-    json.dump(bloqueios, open(bloqueios_path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    block = AgendaBlock(
+        day=day,
+        reason=motivo.strip(),
+        applies_to_all=applies_to_all,
+        surgeon_id=surgeon_id,
+        created_by_id=user.id,
+    )
 
-    print(f"🔴 Bloqueio cadastrado: {bloqueio}")
-    return RedirectResponse(url="/mapa", status_code=303)
+    session.add(block)
+    session.commit()
+
+    print(f"🔴 Bloqueio cadastrado (DB): {data} | {motivo} | {profissional}")
+
+    # volta pra página de bloqueios (UX correta)
+    return RedirectResponse(url="/bloqueios", status_code=303)
 
 @app.get("/doctor", response_class=HTMLResponse)
 def doctor_page(
