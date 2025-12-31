@@ -2,7 +2,6 @@
 {% block content %}
 
 <div class="card max-w-3xl">
-  <!-- Título -->
   <h2 class="text-2xl font-semibold text-slate-100 mb-1">
     Bloqueios de Agenda
   </h2>
@@ -10,10 +9,8 @@
     Cadastre bloqueios para impedir agendamentos em dias específicos.
   </p>
 
-  <!-- Formulário -->
   <form method="post" action="/bloqueios" class="grid gap-4">
 
-    <!-- Data -->
     <div>
       <label class="block text-sm text-slate-300 mb-1">Data</label>
       <input
@@ -24,7 +21,6 @@
       >
     </div>
 
-    <!-- Motivo -->
     <div>
       <label class="block text-sm text-slate-300 mb-1">Motivo</label>
       <input
@@ -36,7 +32,6 @@
       >
     </div>
 
-    <!-- Profissional -->
     <div>
       <label class="block text-sm text-slate-300 mb-1">Profissional</label>
       <select name="profissional" class="input w-full" required>
@@ -47,19 +42,13 @@
       </select>
     </div>
 
-    <!-- Botão -->
     <div class="pt-2">
-      <button
-        type="submit"
-        class="btn-primary w-56"
-      >
+      <button type="submit" class="btn-primary w-56">
         Salvar bloqueio
       </button>
     </div>
-
   </form>
 
-  <!-- Lista de bloqueios -->
   <div class="mt-10">
     <h3 class="text-lg font-semibold text-slate-100 mb-3">
       Bloqueios cadastrados
@@ -74,20 +63,24 @@
                 <div class="text-slate-100 font-semibold">
                   {{ b.day.strftime("%d/%m/%Y") }}
                 </div>
+
                 <div class="text-slate-300 text-sm">
-                  {{ b.reason }}
-                  —
+                  {{ b.reason }} —
                   {% if b.applies_to_all %}
                     Todos os profissionais
                   {% else %}
+                    {% set found = false %}
                     {% for s in surgeons %}
                       {% if s.id == b.surgeon_id %}
                         {{ s.full_name }}
+                        {% set found = true %}
                       {% endif %}
                     {% endfor %}
+                    {% if not found %}Profissional{% endif %}
                   {% endif %}
                 </div>
               </div>
+
               <span class="text-red-400 text-xl">🔒</span>
             </div>
           </div>
