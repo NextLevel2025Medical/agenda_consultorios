@@ -29,18 +29,14 @@
       </div>
 
       {% if current_user %}
-      <div class="top-actions flex flex-col gap-3 items-stretch">
-        <a class="btn-secondary w-72 text-center" href="/bloqueios">Bloqueios de Agenda</a>
+      <div class="top-actions">
+        <a class="btn-secondary top-action-btn" href="/bloqueios">Bloqueios de Agenda</a>
 
-        <div class="flex flex-col items-end gap-2">
-          <a class="btn-secondary w-64 text-center" href="/bloqueios">Bloqueios de Agenda</a>
-
-          <form method="post" action="/logout" class="w-64">
-            <button type="submit" class="btn-secondary w-full">Sair</button>
-          </form>
-        </div>
-
+        <form method="post" action="/logout" style="display:inline;">
+          <button class="btn-secondary top-action-btn" type="submit">Sair</button>
+        </form>
       </div>
+
       {% endif %}
     </div>
 
