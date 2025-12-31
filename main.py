@@ -540,7 +540,11 @@ def bloqueios_page(
 
     # Melhor: renderizar um template (bloqueios.html)
     blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.desc())).all()
-    surgeons = session.exec(select(User).where(User.role == "surgeon").order_by(User.name)).all()
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
 
     return templates.TemplateResponse(
         "bloqueios.html",
