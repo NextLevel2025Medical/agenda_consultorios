@@ -525,6 +525,35 @@ def availability_context(session: Session, day: date, role: str):
         "date_human": date_human,
     }
 
+@app.get("/bloqueios", response_class=HTMLResponse)
+def bloqueios_page(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    # Se você ainda não tem template, pode começar simples:
+    # return HTMLResponse("<h1>Bloqueios</h1>")
+
+    # Melhor: renderizar um template (bloqueios.html)
+    blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.desc())).all()
+    surgeons = session.exec(select(User).where(User.role == "surgeon").order_by(User.name)).all()
+
+    return templates.TemplateResponse(
+        "bloqueios.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Bloqueios de Agenda",
+            "blocks": blocks,
+            "surgeons": surgeons,
+            "selected_month": date.today().strftime("%Y-%m"),
+        },
+    )
+
 @app.post("/bloqueios")
 async def registrar_bloqueio(request: Request):
     form = await request.form()
