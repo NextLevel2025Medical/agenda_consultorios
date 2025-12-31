@@ -622,6 +622,80 @@ def doctor_page(
         },
     )
 
+@app.get("/bloqueios", response_class=HTMLResponse)
+def bloqueios_page(
+    request: Request,
+    edit: Optional[int] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    surgeons = session.exec(select(User).where(User.role == "surgery")).all()
+    blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.asc())).all()
+
+    edit_block = None
+    if edit:
+        edit_block = session.get(AgendaBlock, edit)
+
+    return templates.TemplateResponse(
+        "bloqueios.html",
+        {
+            "request": request,
+            "current_user": user,
+            "surgeons": surgeons,
+            "blocks": blocks,
+            "edit_block": edit_block,
+        },
+    )
+
+@app.post("/bloqueios/{block_id}/update")
+def atualizar_bloqueio(
+    request: Request,
+    block_id: int,
+    data: str = Form(...),
+    motivo: str = Form(...),
+    profissional: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    block = session.get(AgendaBlock, block_id)
+    if not block:
+        return RedirectResponse("/bloqueios", status_code=303)
+
+    block.day = date.fromisoformat(data)
+    block.reason = motivo.strip()
+    block.applies_to_all = (profissional == "todos")
+    block.surgeon_id = None if block.applies_to_all else int(profissional)
+
+    session.add(block)
+    session.commit()
+
+    return RedirectResponse("/bloqueios", status_code=303)
+
+@app.post("/bloqueios/{block_id}/delete")
+def excluir_bloqueio(
+    request: Request,
+    block_id: int,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    block = session.get(AgendaBlock, block_id)
+    if block:
+        session.delete(block)
+        session.commit()
+
+    return RedirectResponse("/bloqueios", status_code=303)
 
 @app.get("/doctor/availability", response_class=HTMLResponse)
 def doctor_availability(
