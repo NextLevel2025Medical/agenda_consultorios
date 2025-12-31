@@ -205,14 +205,15 @@
   .priority-head{
     display:flex;
     align-items:center;
-    justify-content:space-between;
-    gap: 12px;
+    justify-content:center;
     margin-bottom: 10px;
   }
 
   .priority-title{
     font-size: 16px;
     font-weight: 900;
+    text-align: center;
+    width: 100%;
     color: rgba(255,255,255,.92);
     letter-spacing: .2px;
   }
@@ -267,25 +268,11 @@
 
 <div class="page">
   <div class="page-head">
-    <div>
-      <div class="kicker">Gestão Cirúrgica</div>
-      <h1 class="h1">Mapa Cirúrgico</h1>
-    </div>
-
     <div class="priority-wrap">
       <div class="priority-card {{ priority_mode }}">
         <div class="priority-head">
           <div>
             <div class="priority-title">📅 Datas Prioritárias (Próximos 90 dias)</div>
-            <div class="priority-sub">
-              {% if priority_mode == "red" %}
-                Sem agendamentos (seg/qua)
-              {% elif priority_mode == "yellow" %}
-                Apenas 1 agendamento (seg/qua)
-              {% else %}
-                Tudo preenchido (2+ agendamentos)
-              {% endif %}
-            </div>
           </div>
         </div>
 

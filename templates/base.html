@@ -13,19 +13,19 @@
   <div class="mx-auto max-w-7xl px-6 py-8">
     <div class="flex items-center justify-between gap-4">
       <div>
-        <div class="text-sm text-slate-400">Gestão de Agenda</div>
-        <h1 class="text-2xl font-semibold tracking-tight">
-          {{ title or "Agenda de Consultórios" }}
+        <h1 class="text-3xl font-extrabold tracking-tight text-amber-400">
+          MAPA CIRÚRGICO
         </h1>
       </div>
 
       {% if current_user %}
-      <form method="post" action="/logout">
-        <button class="btn btn-secondary" type="button" onclick="openBlocks()">Bloqueios de Agenda</button>
-        <button class="rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/15 transition">
-          Sair ({{ current_user.full_name }})
-        </button>
-      </form>
+      <div class="top-actions flex flex-col gap-3 items-stretch">
+        <a class="btn-secondary w-72 text-center" href="/bloqueios">Bloqueios de Agenda</a>
+
+        <form method="post" action="/logout">
+          <button class="btn-secondary w-72 text-center" type="submit">Sair</button>
+        </form>
+      </div>
       {% endif %}
     </div>
 
