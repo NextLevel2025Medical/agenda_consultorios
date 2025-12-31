@@ -264,6 +264,24 @@
     color: rgba(255,255,255,.88);
   }
 
+  .filters-panel{
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.04);
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  }
+
+  .day-block{
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.03);
+    box-shadow: 0 16px 40px rgba(0,0,0,.30);
+  }
+
 </style>
 
 <div class="page">
@@ -288,11 +306,10 @@
       </div>
     </div>
 
-    <div class="controls">
-      <label class="lbl">Mês/Ano</label>
-
-      <!-- (1) troca do input type="month" por selects (mais confiável) -->
-      <div class="month-controls">
+    <div class="filters-panel">
+      <div class="controls">
+        <label class="lbl">Mês/Ano</label>
+        <div class="month-controls">
         <select id="monthSelect" class="input">
           <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
           <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
@@ -314,6 +331,7 @@
             <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
           {% endfor %}
         </select>
+        </div>
       </div>
     </div>
   </div>
@@ -440,7 +458,6 @@
 
       </div>
 
-      <hr class="sep" />
     {% endfor %}
   </div>
 </div>
@@ -571,5 +588,21 @@
   });
 </script>
 
+<script>
+  (function(){
+    const monthSel = document.getElementById("monthSelect");
+    const yearSel  = document.getElementById("yearSelect");
+    if(!monthSel || !yearSel) return;
+
+    function go(){
+      const m = monthSel.value; // "01", "02", ...
+      const y = yearSel.value;  // "2026"
+      window.location.href = `/mapa?month=${y}-${m}`;
+    }
+
+    monthSel.addEventListener("change", go);
+    yearSel.addEventListener("change", go);
+  })();
+</script>
 
 {% endblock %}
