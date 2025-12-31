@@ -530,6 +530,7 @@ def availability_context(session: Session, day: date, role: str):
 @app.get("/bloqueios", response_class=HTMLResponse)
 def bloqueios_page(
     request: Request,
+    edit: Optional[int] = None,
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -537,30 +538,24 @@ def bloqueios_page(
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
 
-    # Se você ainda não tem template, pode começar simples:
-    # return HTMLResponse("<h1>Bloqueios</h1>")
-
-    # Melhor: renderizar um template (bloqueios.html)
     blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.desc())).all()
-    surgeons = session.exec(
-        select(User)
-        .where(User.role == "doctor", User.is_active == True)
-        .order_by(User.full_name)
-    ).all()
+    surgeons = session.exec(select(User).where(User.role == "surgery")).all()
+
+    edit_block = None
+    if edit:
+        edit_block = session.get(AgendaBlock, edit)
 
     return templates.TemplateResponse(
         "bloqueios.html",
         {
             "request": request,
             "current_user": user,
-            "title": "Bloqueios de Agenda",
             "blocks": blocks,
             "surgeons": surgeons,
-            "selected_month": date.today().strftime("%Y-%m"),
+            "edit_block": edit_block,  # <<< ESSENCIAL
         },
     )
 
-@app.post("/bloqueios")
 @app.post("/bloqueios")
 def registrar_bloqueio(
     request: Request,
@@ -670,7 +665,7 @@ def atualizar_bloqueio(
         return RedirectResponse("/bloqueios", status_code=303)
 
     block.day = date.fromisoformat(data)
-    block.reason = motivo.strip()
+    block.reason = (motivo or "").strip()
     block.applies_to_all = (profissional == "todos")
     block.surgeon_id = None if block.applies_to_all else int(profissional)
 
@@ -1381,5 +1376,5 @@ def mapa_block_delete(
         audit_event(request, user, "agenda_block_deleted", target_type="agenda_block", target_id=block_id,
                     extra={"day": row.day.isoformat(), "reason": row.reason, "applies_to_all": row.applies_to_all, "surgeon_id": row.surgeon_id})
 
-    return redirect(f"/mapa?month={month}")
+    return RedirectResponse("/bloqueios", status_code=303)
 
