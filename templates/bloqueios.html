@@ -1,15 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card max-w-3xl">
-  <h2 class="text-2xl font-semibold text-slate-100 mb-1">
-    Bloqueios de Agenda
-  </h2>
-  <p class="text-slate-400 mb-6">
-    Cadastre bloqueios para impedir agendamentos em dias específicos.
-  </p>
+<div class="card max-w-4xl">
 
-  <form method="post" action="/bloqueios" class="grid gap-4">
+  <!-- Top actions -->
+  <div class="flex items-center justify-between gap-4 mb-6">
+    <div>
+      <h2 class="text-2xl font-semibold text-slate-100 mb-1">
+        Bloqueios de Agenda
+      </h2>
+      <p class="text-slate-400">
+        Cadastre bloqueios para impedir agendamentos em dias específicos.
+      </p>
+    </div>
+
+    <a
+      href="/mapa"
+      class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition"
+    >
+      ← Voltar para o mapa
+    </a>
+  </div>
+
+  <!-- Form -->
+  {% if edit_block %}
+    <form method="post" action="/bloqueios/{{ edit_block.id }}/update" class="grid gap-4">
+  {% else %}
+    <form method="post" action="/bloqueios" class="grid gap-4">
+  {% endif %}
 
     <div>
       <label class="block text-sm text-slate-300 mb-1">Data</label>
@@ -17,6 +35,7 @@
         type="date"
         name="data"
         class="input w-full"
+        value="{% if edit_block %}{{ edit_block.day.isoformat() }}{% endif %}"
         required
       >
     </div>
@@ -28,6 +47,7 @@
         name="motivo"
         class="input w-full"
         placeholder="Ex: Feriado, Viagem, Congresso"
+        value="{% if edit_block %}{{ edit_block.reason }}{% endif %}"
         required
       >
     </div>
@@ -35,20 +55,39 @@
     <div>
       <label class="block text-sm text-slate-300 mb-1">Profissional</label>
       <select name="profissional" class="input w-full" required>
-        <option value="todos">Todos</option>
+        <option value="todos" {% if edit_block and edit_block.applies_to_all %}selected{% endif %}>Todos</option>
         {% for s in surgeons %}
-          <option value="{{ s.id }}">{{ s.full_name }}</option>
+          <option value="{{ s.id }}"
+            {% if edit_block and (not edit_block.applies_to_all) and (s.id == edit_block.surgeon_id) %}selected{% endif %}
+          >
+            {{ s.full_name }}
+          </option>
         {% endfor %}
       </select>
     </div>
 
-    <div class="pt-2">
-      <button type="submit" class="btn-primary w-56">
-        Salvar bloqueio
+    <div class="pt-2 flex items-center gap-3">
+      <!-- Botão mais bonito (amber premium) -->
+      <button
+        type="submit"
+        class="w-56 rounded-xl bg-amber-500 px-4 py-3 font-semibold text-slate-950 hover:bg-amber-400 transition shadow-sm"
+      >
+        {% if edit_block %}Salvar alterações{% else %}Salvar bloqueio{% endif %}
       </button>
+
+      {% if edit_block %}
+        <a
+          href="/bloqueios"
+          class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-100 hover:bg-white/10 transition"
+        >
+          Cancelar
+        </a>
+      {% endif %}
     </div>
+
   </form>
 
+  <!-- Lista -->
   <div class="mt-10">
     <h3 class="text-lg font-semibold text-slate-100 mb-3">
       Bloqueios cadastrados
@@ -58,7 +97,7 @@
       <div class="grid gap-3">
         {% for b in blocks %}
           <div class="rounded-xl border border-slate-700 bg-slate-900/40 px-4 py-3">
-            <div class="flex justify-between items-center">
+            <div class="flex items-center justify-between gap-4">
               <div>
                 <div class="text-slate-100 font-semibold">
                   {{ b.day.strftime("%d/%m/%Y") }}
@@ -81,7 +120,25 @@
                 </div>
               </div>
 
-              <span class="text-red-400 text-xl">🔒</span>
+              <div class="flex items-center gap-2">
+                <!-- Editar -->
+                <a
+                  href="/bloqueios?edit={{ b.id }}"
+                  class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition"
+                >
+                  Editar
+                </a>
+
+                <!-- Excluir -->
+                <form method="post" action="/bloqueios/{{ b.id }}/delete" onsubmit="return confirm('Deseja excluir este bloqueio?');">
+                  <button
+                    type="submit"
+                    class="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/20 transition"
+                  >
+                    Excluir
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         {% endfor %}
@@ -92,6 +149,7 @@
       </p>
     {% endif %}
   </div>
+
 </div>
 
 {% endblock %}
