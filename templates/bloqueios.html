@@ -1,53 +1,102 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
-  <h2 class="text-xl font-semibold text-slate-100 mb-2">Bloqueios de Agenda</h2>
-  <p class="text-slate-300 mb-6">
+<div class="card max-w-3xl">
+  <!-- Título -->
+  <h2 class="text-2xl font-semibold text-slate-100 mb-1">
+    Bloqueios de Agenda
+  </h2>
+  <p class="text-slate-400 mb-6">
     Cadastre bloqueios para impedir agendamentos em dias específicos.
   </p>
 
-  <form method="post" action="/bloqueios" class="grid gap-3 max-w-xl">
-    <label class="text-slate-200 text-sm">Data</label>
-    <input name="data" type="date" class="input" required>
+  <!-- Formulário -->
+  <form method="post" action="/bloqueios" class="grid gap-4">
 
-    <label class="text-slate-200 text-sm">Motivo</label>
-    <input name="motivo" type="text" class="input" placeholder="Ex: Feriado / Viagem / Cong. Médico" required>
+    <!-- Data -->
+    <div>
+      <label class="block text-sm text-slate-300 mb-1">Data</label>
+      <input
+        type="date"
+        name="data"
+        class="input w-full"
+        required
+      >
+    </div>
 
-    <label class="text-slate-200 text-sm">Profissional</label>
-    <select name="profissional" class="input" required>
-      <option value="todos">Todos</option>
-      {% for s in surgeons %}
-        <option value="{{ s.id }}">{{ s.full_name }}</option>
-      {% endfor %}
-    </select>
+    <!-- Motivo -->
+    <div>
+      <label class="block text-sm text-slate-300 mb-1">Motivo</label>
+      <input
+        type="text"
+        name="motivo"
+        class="input w-full"
+        placeholder="Ex: Feriado, Viagem, Congresso"
+        required
+      >
+    </div>
 
-    <button type="submit" class="btn-primary mt-2 w-52">Salvar bloqueio</button>
+    <!-- Profissional -->
+    <div>
+      <label class="block text-sm text-slate-300 mb-1">Profissional</label>
+      <select name="profissional" class="input w-full" required>
+        <option value="todos">Todos</option>
+        {% for s in surgeons %}
+          <option value="{{ s.id }}">{{ s.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Botão -->
+    <div class="pt-2">
+      <button
+        type="submit"
+        class="btn-primary w-56"
+      >
+        Salvar bloqueio
+      </button>
+    </div>
+
   </form>
 
-  <div class="mt-8">
-    <h3 class="text-lg font-semibold text-slate-100 mb-3">Bloqueios cadastrados</h3>
+  <!-- Lista de bloqueios -->
+  <div class="mt-10">
+    <h3 class="text-lg font-semibold text-slate-100 mb-3">
+      Bloqueios cadastrados
+    </h3>
 
     {% if blocks and blocks|length > 0 %}
-      <div class="grid gap-2">
+      <div class="grid gap-3">
         {% for b in blocks %}
           <div class="rounded-xl border border-slate-700 bg-slate-900/40 px-4 py-3">
-            <div class="text-slate-100 font-semibold">
-              {{ b.day.strftime("%d/%m/%Y") }}
-            </div>
-            <div class="text-slate-300 text-sm">
-              {{ b.reason }} —
-              {% if b.applies_to_all %}Todos{% else %}
-                {% set u = None %}
-                {% for s in surgeons %}{% if s.id == b.surgeon_id %}{% set u = s %}{% endif %}{% endfor %}
-                {{ u.full_name if u else "Profissional" }}
-              {% endif %}
+            <div class="flex justify-between items-center">
+              <div>
+                <div class="text-slate-100 font-semibold">
+                  {{ b.day.strftime("%d/%m/%Y") }}
+                </div>
+                <div class="text-slate-300 text-sm">
+                  {{ b.reason }}
+                  —
+                  {% if b.applies_to_all %}
+                    Todos os profissionais
+                  {% else %}
+                    {% for s in surgeons %}
+                      {% if s.id == b.surgeon_id %}
+                        {{ s.full_name }}
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                </div>
+              </div>
+              <span class="text-red-400 text-xl">🔒</span>
             </div>
           </div>
         {% endfor %}
       </div>
     {% else %}
-      <p class="text-slate-400">Nenhum bloqueio cadastrado ainda.</p>
+      <p class="text-slate-400">
+        Nenhum bloqueio cadastrado ainda.
+      </p>
     {% endif %}
   </div>
 </div>
