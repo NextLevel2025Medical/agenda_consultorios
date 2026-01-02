@@ -1326,7 +1326,20 @@ def mapa_create(
         month = day.strftime("%Y-%m")
         from urllib.parse import quote
         audit_event(request, user, "surgical_map_blocked_by_agenda_block", success=False, message=block_err)
-        return redirect(f"/mapa?month={month}&err={quote(block_err)}")
+
+        return redirect(
+            f"/mapa?month={month}&open=1"
+            f"&err={quote(block_err)}"
+            f"&day_iso={quote(day_iso)}"
+            f"&mode={quote(mode)}"
+            f"&time_hhmm={quote(time_hhmm)}"
+            f"&patient_name={quote(patient_name)}"
+            f"&surgeon_id={surgeon_id}"
+            f"&procedure_type={quote(procedure_type)}"
+            f"&location={quote(location)}"
+            f"&uses_hsr={1 if uses_hsr else 0}"
+            f"&seller_id={seller_id_final}"
+        )
 
     err = validate_mapa_rules(session, day, surgeon_id, procedure_type)
     if err:
@@ -1334,10 +1347,9 @@ def mapa_create(
         audit_event(
             request,
             user,
-            "surgical_map_blocked",
+            "surgical_map_create_validation_error",
             success=False,
             message=err,
-            target_type="surgical_map",
             extra={
                 "day": day_iso,
                 "time_hhmm": time_hhmm,
@@ -1350,12 +1362,24 @@ def mapa_create(
             },
         )
         from urllib.parse import quote
-        return redirect(f"/mapa?month={month}&err={quote(err)}")
+        return redirect(
+            f"/mapa?month={month}&open=1"
+            f"&err={quote(err)}"
+            f"&day_iso={quote(day_iso)}"
+            f"&mode={quote(mode)}"
+            f"&time_hhmm={quote(time_hhmm)}"
+            f"&patient_name={quote(patient_name)}"
+            f"&surgeon_id={surgeon_id}"
+            f"&procedure_type={quote(procedure_type)}"
+            f"&location={quote(location)}"
+            f"&uses_hsr={1 if uses_hsr else 0}"
+            f"&seller_id={seller_id_final}"
+        )
     
     row = SurgicalMapEntry(
         day=day,
         time_hhmm=time_hhmm,
-        patient_name=patient_name.strip(),
+        patient_name=patient_name.strip().upper(),
         surgeon_id=surgeon_id,
         procedure_type=procedure_type,
         location=location,
@@ -1417,7 +1441,18 @@ def mapa_update(
     if err:
         month = day.strftime("%Y-%m")
         from urllib.parse import quote
-        return redirect(f"/mapa?month={month}&err={quote(err)}")
+        return redirect(
+            f"/mapa?month={month}&open=1&edit_id={entry_id}"
+            f"&err={quote(err)}"
+            f"&day_iso={quote(day_iso)}"
+            f"&mode={quote(mode)}"
+            f"&time_hhmm={quote(time_hhmm)}"
+            f"&patient_name={quote(patient_name)}"
+            f"&surgeon_id={surgeon_id}"
+            f"&procedure_type={quote(procedure_type)}"
+            f"&location={quote(location)}"
+            f"&uses_hsr={1 if uses_hsr else 0}"
+        )
 
     # snapshot (opcional) pra auditoria
     before = {
@@ -1434,7 +1469,7 @@ def mapa_update(
     # aplica alterações
     row.day = day
     row.time_hhmm = time_hhmm
-    row.patient_name = patient_name.strip()
+    row.patient_name = patient_name.strip().upper()
     row.surgeon_id = surgeon_id
     row.procedure_type = procedure_type
     row.location = location
