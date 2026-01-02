@@ -30,14 +30,20 @@
   {% endif %}
 
     <div>
-      <label class="block text-sm text-slate-300 mb-1">Data</label>
-      <input
-        type="date"
-        name="data"
-        class="input w-full"
-        value="{% if edit_block %}{{ edit_block.day.isoformat() }}{% endif %}"
-        required
-      >
+        <label class="block text-sm text-slate-300 mb-1">Data (início)</label>
+        <input
+            type="date"
+            name="data_inicio"
+            value="{{ (edit_block.start_date if edit_block else '') }}"
+            class="input w-full"
+        />
+        <label class="block text-sm text-slate-300 mb-1 mt-4">Data (fim)</label>
+        <input
+            type="date"
+            name="data_fim"
+            value="{{ (edit_block.end_date if edit_block else '') }}"
+            class="input w-full"
+        />
     </div>
 
     <div>
@@ -53,24 +59,21 @@
     </div>
 
     <div>
-      <label class="block text-sm text-slate-300 mb-1">Profissional</label>
-      <select name="profissional" class="input w-full" required>
-        <option value="todos"
-          {% if edit_block and edit_block.applies_to_all %}selected{% endif %}
-        >
-          Todos
-        </option>
+        <label class="block text-sm text-slate-300 mb-1 mt-4">Profissionais</label>
 
+        <select name="surgeons" multiple class="input w-full h-40">
         {% for s in surgeons %}
-          <option value="{{ s.id }}"
-            {% if edit_block and not edit_block.applies_to_all and s.id == edit_block.surgeon_id %}
-              selected
-            {% endif %}
-          >
+            <option value="{{ s.id }}"
+            {% if selected_surgeons and s.id in selected_surgeons %}selected{% endif %}
+            >
             {{ s.full_name }}
-          </option>
+            </option>
         {% endfor %}
-      </select>
+        </select>
+
+        <p class="text-xs text-slate-400 mt-2">
+        Se nenhum profissional for selecionado, o bloqueio será aplicado para <b>todos</b>.
+        </p>
     </div>
 
     <div class="pt-2 flex items-center gap-3">
@@ -111,7 +114,11 @@
 
               <div>
                 <div class="text-slate-100 font-semibold">
-                  {{ b.day.strftime("%d/%m/%Y") }}
+                    {% if b.start_date == b.end_date %}
+                    {{ b.start_date.strftime("%d/%m/%Y") }}
+                    {% else %}
+                    {{ b.start_date.strftime("%d/%m/%Y") }} até {{ b.end_date.strftime("%d/%m/%Y") }}
+                    {% endif %}  
                 </div>
 
                 <div class="text-slate-300 text-sm">

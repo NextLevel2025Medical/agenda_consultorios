@@ -473,6 +473,19 @@
       <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
     </div>
 
+    <label class="block text-sm text-slate-300 mb-1 mt-3">Vendedor</label>
+
+    {% if current_user and current_user.username == "johnny.ge" %}
+      <select name="seller_id" class="input w-full">
+        {% for s in sellers %}
+          <option value="{{ s.id }}">{{ s.full_name }}</option>
+        {% endfor %}
+      </select>
+    {% else %}
+      <input type="hidden" name="seller_id" value="{{ current_user.id }}">
+      <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
+    {% endif %}
+
     <form id="mapaModalForm" class="day-form" method="post" action="/mapa/create">
       <input type="hidden" name="day_iso" id="mapaModalDayIso" />
       <input class="input" type="time" name="time_hhmm" required step="900" />
