@@ -748,6 +748,7 @@ def registrar_bloqueio(
     applies_all = (len(surgeons) == 0)
 
     row = AgendaBlock(
+        day=start_date,
         start_date=start_date,
         end_date=end_date,
         reason=motivo.strip(),
@@ -783,6 +784,7 @@ def bloqueio_update(
         return redirect("/bloqueios")
 
     b.start_date = date.fromisoformat(data_inicio)
+    b.day = b.start_date
     b.end_date = date.fromisoformat(data_fim)
     if b.end_date < b.start_date:
         return redirect("/bloqueios")

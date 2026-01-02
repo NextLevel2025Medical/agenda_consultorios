@@ -39,17 +39,16 @@ class SurgicalMapEntry(SQLModel, table=True):
 class AgendaBlock(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
+    # compatibilidade com DB antigo (coluna NOT NULL no SQLite atual)
+    day: date = Field(index=True)
+
     start_date: date = Field(index=True)
     end_date: date = Field(index=True)
 
     reason: str
-
     applies_to_all: bool = Field(default=False, index=True)
-
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-
-    # regra: start_date <= end_date (validar no backend)
 
 class AgendaBlockSurgeon(SQLModel, table=True):
     block_id: int = Field(foreign_key="agendablock.id", primary_key=True)
