@@ -377,10 +377,7 @@
 
           {% set iso = day.isoformat() %}
 
-          {% set is_blocked_all = iso in blocked_all_days %}
-          {% set is_blocked_for_any = iso in blocked_surgeons_by_day %}
-
-          {% if is_blocked_all %}
+          {% if iso in blocked_all_days %}
             <button
               class="w-full mt-2 px-3 py-2 rounded bg-slate-700 text-slate-400 cursor-not-allowed"
               disabled
@@ -398,8 +395,6 @@
             >
               Agendar
             </button>
-          {% endif %}
-
           {% endif %}
 
         </div>
