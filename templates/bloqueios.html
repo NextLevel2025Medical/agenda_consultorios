@@ -105,15 +105,15 @@
               <div>
                 <div class="text-slate-100 font-semibold">
                     {% if b.start_date == b.end_date %}
-                    {{ b.start_date.strftime("%d/%m/%Y") }}
+                    {{ b.start_date.strftime("%d/%m/%Y") if b.start_date else "-" }}
                     {% else %}
-                    {{ b.start_date.strftime("%d/%m/%Y") }} até {{ b.end_date.strftime("%d/%m/%Y") }}
+                    {{ b.end_date.strftime("%d/%m/%Y") if b.end_date else "-" }}
                     {% endif %}  
                 </div>
 
                 <div class="text-slate-300 text-sm">
                 {{ b.reason }} —
-                {% if b.applies_to_all %}
+                {% if b.applies_to_all %}   
                     Todos os profissionais
                 {% else %}
                     {{ block_surgeons_map[b.id]|join(", ") }}

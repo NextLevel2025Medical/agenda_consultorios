@@ -282,6 +282,22 @@
     box-shadow: 0 16px 40px rgba(0,0,0,.30);
   }
 
+    /* Força o botão "Agendar" do cabeçalho do dia a não virar barra */
+  .day-head .day-agendar-btn{
+    width: auto !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Se o globals.css estiver setando .btn-cta como 100% */
+  .day-head .btn-cta{
+    width: auto !important;
+    display: inline-flex !important;
+  }
+
 </style>
 
 <div class="page">
@@ -375,8 +391,11 @@
 
           {% else %}
             <button
-              onclick="openDayModal('{{ iso }}')"
-              class="btn-primary w-full mt-2"
+              type="button"
+              class="btn-cta btn-small day-agendar-btn"
+              data-open-mapa-modal="1"
+              data-day="{{ d.iso }}"
+              data-human="{{ d.human }}"
             >
               Agendar
             </button>
@@ -628,6 +647,52 @@
 
     monthSel.addEventListener("change", go);
     yearSel.addEventListener("change", go);
+  })();
+</script>
+
+<script>
+  (function () {
+    const modal = document.getElementById("mapaModal");
+    const modalBackdrop = document.getElementById("mapaModalBackdrop");
+    const modalClose = document.getElementById("mapaModalClose");
+    const modalCancel = document.getElementById("mapaModalCancel");
+
+    const modalTitleDay = document.getElementById("mapaModalDayTitle");
+    const inputDay = document.getElementById("mapaModalDayInput");
+
+    function openModal(dayIso, dayHuman) {
+      if (!modal) return;
+
+      if (modalTitleDay) modalTitleDay.textContent = dayHuman || dayIso;
+      if (inputDay) inputDay.value = dayIso || "";
+
+      modal.classList.remove("hidden");
+      if (modalBackdrop) modalBackdrop.classList.remove("hidden");
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      modal.classList.add("hidden");
+      if (modalBackdrop) modalBackdrop.classList.add("hidden");
+    }
+
+    // bind botões "Agendar" do calendário
+    document.querySelectorAll('[data-open-mapa-modal="1"]').forEach(btn => {
+      btn.addEventListener("click", () => {
+        const dayIso = btn.getAttribute("data-day");
+        const dayHuman = btn.getAttribute("data-human");
+        openModal(dayIso, dayHuman);
+      });
+    });
+
+    // fechar modal
+    if (modalClose) modalClose.addEventListener("click", closeModal);
+    if (modalCancel) modalCancel.addEventListener("click", closeModal);
+    if (modalBackdrop) modalBackdrop.addEventListener("click", closeModal);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
   })();
 </script>
 
