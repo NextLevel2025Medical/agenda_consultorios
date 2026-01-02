@@ -502,8 +502,9 @@
       <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
     </div>
 
-    <form id="mapaModalForm" class="day-form" method="post" action="/mapa/create">
-      <label class="block text-sm text-slate-300 mb-1 mt-3">Vendedor</label>
+    <form id="mapaModalForm" class="day-form space-y-4" method="post" action="/mapa/create">
+      <div id="mapaModalErr" class="alert" style="display:none;"></div>
+      <label class="block text-sm text-slate-300 mb-1">Vendedor</label>
 
       {% if current_user and current_user.username == "johnny.ge" %}
         <select name="seller_id" class="input w-full">
@@ -516,7 +517,6 @@
         <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
       {% endif %}
       <input type="hidden" name="day_iso" id="mapaModalDayIso" />
-      <input class="input" type="time" name="time_hhmm" required step="900" />
       <input class="input" name="patient_name" placeholder="Nome do paciente" required />
 
       <select class="input" name="surgeon_id" required>
@@ -560,15 +560,28 @@
   const titleEl = document.getElementById("mapaModalTitle");
   const dayIsoEl = document.getElementById("mapaModalDayIso");
   const formEl = document.getElementById("mapaModalForm");
+  const modalErrEl = document.getElementById("mapaModalErr");
+
+  function setModalError(msg){
+    if(!modalErrEl) return;
+    if(msg){
+      modalErrEl.textContent = msg;
+      modalErrEl.style.display = "block";
+    } else {
+      modalErrEl.textContent = "";
+      modalErrEl.style.display = "none";
+    }
+  }
 
   function openModalBase(dayIso, dayHuman) {
     formEl.reset();
     dayIsoEl.value = dayIso;
     titleEl.textContent = dayHuman;
+    setModalError("");
     backdrop.style.display = "flex";
 
     // foca no time
-    const first = formEl.querySelector('input[name="time_hhmm"]');
+    const first = formEl.querySelector('input[name="patient_name"]');
     if (first) first.focus();
   }
 
@@ -586,7 +599,6 @@
 
     openModalBase(d.day, d.human);
 
-    formEl.querySelector('input[name="time_hhmm"]').value = d.time || "";
     formEl.querySelector('input[name="patient_name"]').value = d.patient || "";
 
     formEl.querySelector('select[name="surgeon_id"]').value = d.surgeon || "";
