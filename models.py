@@ -13,7 +13,7 @@ class User(SQLModel, table=True):
     username: str
     full_name: str
     password_hash: str
-    role: str  # "admin" | "doctor"
+    role: str  # "admin" | "doctor" | "surgery"
     is_active: bool = True
     
     
@@ -48,6 +48,8 @@ class AgendaBlock(SQLModel, table=True):
 
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    # regra: start_date <= end_date (validar no backend)
 
 class AgendaBlockSurgeon(SQLModel, table=True):
     block_id: int = Field(foreign_key="agendablock.id", primary_key=True)

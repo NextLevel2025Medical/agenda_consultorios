@@ -8,11 +8,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
-from sqlmodel import Session, select
+from sqlmodel import Session, select, delete
 from sqlalchemy import or_
 
 from db import create_db_and_tables, get_session, engine
-from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock
+from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon
 from auth import hash_password, verify_password, require
 
 from pathlib import Path
@@ -366,15 +366,47 @@ def compute_priority_card(session: Session) -> dict:
     if not gustavo:
         return {"mode": "red", "items": []}
 
-    blocked_days = set(
-        session.exec(
-            select(AgendaBlock.day).where(
-                AgendaBlock.day >= today,
-                AgendaBlock.day <= end,
-                or_(AgendaBlock.applies_to_all == True, AgendaBlock.surgeon_id == gustavo.id),
-            )
+    # 1) pega bloqueios que intersectam a janela
+    blocks = session.exec(
+        select(AgendaBlock).where(
+            AgendaBlock.start_date <= end,
+            AgendaBlock.end_date >= today,
+        )
+    ).all()
+
+    block_ids = [b.id for b in blocks if b.id is not None]
+
+    rels = []
+    if block_ids:
+        rels = session.exec(
+            select(AgendaBlockSurgeon).where(AgendaBlockSurgeon.block_id.in_(block_ids))
         ).all()
-    )
+
+    surgeons_by_block: dict[int, list[int]] = {}
+    for r in rels:
+        surgeons_by_block.setdefault(r.block_id, []).append(r.surgeon_id)
+
+    blocked_days: set[date] = set()
+
+    for b in blocks:
+        # bloqueio geral
+        if b.applies_to_all:
+            start = max(b.start_date, today)
+            finish = min(b.end_date, end)
+            d = start
+            while d <= finish:
+                blocked_days.add(d)
+                d += timedelta(days=1)
+            continue
+
+        # bloqueio por grupo: só conta se o Gustavo estiver no grupo
+        if gustavo and gustavo.id in surgeons_by_block.get(b.id or -1, []):
+            start = max(b.start_date, today)
+            finish = min(b.end_date, end)
+            d = start
+            while d <= finish:
+                blocked_days.add(d)
+                d += timedelta(days=1)
 
     days = []
     for i in range(0, 91):  # inclui a data final (ex.: 04/12 a 04/03)
@@ -560,6 +592,29 @@ def bloqueios_page(
     blocks = session.exec(
         select(AgendaBlock).order_by(AgendaBlock.start_date.asc())
     ).all()
+    
+        # ===== MAPA DE CIRURGIÕES POR BLOQUEIO =====
+    block_ids = [b.id for b in blocks if b.id is not None]
+
+    rels = []
+    if block_ids:
+        rels = session.exec(
+            select(AgendaBlockSurgeon).where(
+                AgendaBlockSurgeon.block_id.in_(block_ids)
+            )
+        ).all()
+
+    # block_id -> lista de nomes dos cirurgiões
+    block_surgeons_map: dict[int, list[str]] = {}
+
+    if rels:
+        surgeons_by_id = {s.id: s.full_name for s in surgeons}
+
+        for r in rels:
+            name = surgeons_by_id.get(r.surgeon_id)
+            if name:
+                block_surgeons_map.setdefault(r.block_id, []).append(name)
+
 
     # ===== SUPORTE A EDIÇÃO DE BLOQUEIO =====
     edit_block = None
@@ -586,8 +641,10 @@ def bloqueios_page(
             "blocks": blocks,
             "edit_block": edit_block,
             "selected_surgeons": selected_surgeons,
+            "block_surgeons_map": block_surgeons_map,
         },
     )
+    
 
 @app.post("/bloqueios")
 def registrar_bloqueio(
@@ -606,6 +663,9 @@ def registrar_bloqueio(
     # converte "YYYY-MM-DD" para date
     start_date = date.fromisoformat(data_inicio)
     end_date = date.fromisoformat(data_fim)
+    
+    if end_date < start_date:
+        return redirect("/bloqueios")
     
     applies_all = (len(surgeons) == 0)
 
@@ -646,6 +706,8 @@ def bloqueio_update(
 
     b.start_date = date.fromisoformat(data_inicio)
     b.end_date = date.fromisoformat(data_fim)
+    if b.end_date < b.start_date:
+        return redirect("/bloqueios")
     b.reason = motivo.strip()
     b.applies_to_all = (len(surgeons) == 0)
 
@@ -715,67 +777,6 @@ def doctor_page(
             **ctx,
         },
     )
-
-@app.post("/bloqueios/{block_id}/update")
-def atualizar_bloqueio(
-    request: Request,
-    block_id: int,
-    data: str = Form(...),
-    motivo: str = Form(...),
-    profissional: str = Form(...),
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-    require(user.role in ("admin", "surgery"))
-
-    block = session.get(AgendaBlock, block_id)
-    if not block:
-        return RedirectResponse("/bloqueios", status_code=303)
-
-    block.day = date.fromisoformat(data)
-    block.reason = (motivo or "").strip()
-    block.applies_to_all = (profissional == "todos")
-    block.surgeon_id = None if block.applies_to_all else int(profissional)
-    if block.surgeon_id is not None:
-        doc = session.get(User, block.surgeon_id)
-        if not doc or doc.role != "doctor":
-            return RedirectResponse("/bloqueios", status_code=303)
-
-    exists = session.exec(
-        select(AgendaBlock).where(
-            AgendaBlock.id != block.id,
-            AgendaBlock.day == block.day,
-            AgendaBlock.applies_to_all == block.applies_to_all,
-            AgendaBlock.surgeon_id == block.surgeon_id,
-        )
-    ).first()
-    if exists:
-        return RedirectResponse(url="/bloqueios", status_code=303)
-
-    session.add(block)
-    session.commit()
-
-    return RedirectResponse("/bloqueios", status_code=303)
-
-@app.post("/bloqueios/{block_id}/delete")
-def excluir_bloqueio(
-    request: Request,
-    block_id: int,
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-    require(user.role in ("admin", "surgery"))
-
-    block = session.get(AgendaBlock, block_id)
-    if block:
-        session.delete(block)
-        session.commit()
-
-    return RedirectResponse("/bloqueios", status_code=303)
 
 @app.get("/doctor/availability", response_class=HTMLResponse)
 def doctor_availability(
@@ -1205,6 +1206,8 @@ def mapa_page(
             "priority_mode": priority["mode"],
             "priority_items": priority["items"],
             "sellers": sellers,
+            "blocked_all_days": blocked_all_days,  # set[str] -> "2026-01-15"
+            "blocked_surgeons_by_day": blocked_surgeons_by_day,  # dict[str, list[int]]
         },
     )
 
@@ -1220,18 +1223,19 @@ def mapa_create(
     procedure_type: str = Form(...),
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
-    session: Session = Depends(get_session),
     seller_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
 ):
-    if user.username != "johnny.ge":
-        seller_id_final = user.id
-    else:
-        seller_id_final = int(seller_id) if seller_id else user.id
-    
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
+
+    # ✅ regra do vendedor (depois do user existir!)
+    if user.username != "johnny.ge":
+        seller_id_final = user.id
+    else:
+        seller_id_final = int(seller_id) if seller_id else user.id
 
     day = date.fromisoformat(day_iso)
     
@@ -1430,75 +1434,3 @@ def mapa_delete(
         target_id=entry_id,
     )
     return redirect("/mapa")
-
-@app.post("/mapa/block/create")
-def mapa_block_create(
-    request: Request,
-    month: str = Form(...),              # YYYY-MM pra voltar pro mês certo
-    day_iso: str = Form(...),            # 2025-12-25
-    reason: str = Form(...),
-    scope: str = Form("all"),            # "all" | "surgeon"
-    surgeon_id: Optional[int] = Form(None),
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-    require(user.role in ("admin", "surgery"))
-
-    day = date.fromisoformat(day_iso)
-    applies_all = (scope == "all")
-    sid = None if applies_all else surgeon_id
-
-    if not applies_all and not sid:
-        from urllib.parse import quote
-        return redirect(f"/mapa?month={month}&err={quote('Selecione o profissional do bloqueio.')}")
-
-    # evita duplicidade exata (mesma data + mesmo escopo)
-    exists = session.exec(
-        select(AgendaBlock).where(
-            AgendaBlock.day == day,
-            AgendaBlock.applies_to_all == applies_all,
-            AgendaBlock.surgeon_id == sid,
-        )
-    ).first()
-    if exists:
-        from urllib.parse import quote
-        return redirect(f"/mapa?month={month}&err={quote('Já existe um bloqueio igual para essa data.')}")
-
-    row = AgendaBlock(
-        day=day,
-        reason=reason.strip(),
-        applies_to_all=applies_all,
-        surgeon_id=sid,
-        created_by_id=user.id,
-    )
-    session.add(row)
-    session.commit()
-
-    audit_event(request, user, "agenda_block_created", target_type="agenda_block", target_id=row.id,
-                extra={"day": day_iso, "reason": reason, "scope": scope, "surgeon_id": sid})
-
-    return redirect(f"/mapa?month={month}")
-
-@app.post("/mapa/block/delete/{block_id}")
-def mapa_block_delete(
-    request: Request,
-    block_id: int,
-    month: str = Form(...),
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-    require(user.role in ("admin", "surgery"))
-
-    row = session.get(AgendaBlock, block_id)
-    if row:
-        session.delete(row)
-        session.commit()
-        audit_event(request, user, "agenda_block_deleted", target_type="agenda_block", target_id=block_id,
-                    extra={"day": row.day.isoformat(), "reason": row.reason, "applies_to_all": row.applies_to_all, "surgeon_id": row.surgeon_id})
-
-    return RedirectResponse("/bloqueios", status_code=303)
-
