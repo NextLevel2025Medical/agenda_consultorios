@@ -39,15 +39,19 @@ class SurgicalMapEntry(SQLModel, table=True):
 class AgendaBlock(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    day: date = Field(index=True)  # 2025-12-25
+    start_date: date = Field(index=True)
+    end_date: date = Field(index=True)
+
     reason: str
 
     applies_to_all: bool = Field(default=False, index=True)
-    surgeon_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
 
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
+class AgendaBlockSurgeon(SQLModel, table=True):
+    block_id: int = Field(foreign_key="agendablock.id", primary_key=True)
+    surgeon_id: int = Field(foreign_key="user.id", primary_key=True)
 
 class Room(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("name"),)
