@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import Session, select, delete
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 from db import create_db_and_tables, get_session, engine
 from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon
@@ -441,9 +441,87 @@ def compute_priority_card(session: Session) -> dict:
     # se não tem zeros nem ones, então está tudo com 2+
     return {"mode": "green", "items": []}
 
+def migrate_sqlite_schema(engine):
+    """
+    Migração idempotente do SQLite.
+    Ajusta a tabela agendablock (antiga) para o novo modelo:
+      - start_date / end_date
+      - reason
+      - applies_to_all
+    E cria a tabela de relação AgendaBlockSurgeon se não existir.
+    """
+
+    def _has_column(conn, table: str, col: str) -> bool:
+        rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+        return any(r[1] == col for r in rows)  # r[1] = nome da coluna
+
+    def _add_column_if_missing(conn, table: str, col: str, col_type: str):
+        if not _has_column(conn, table, col):
+            conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+
+    with engine.begin() as conn:
+        # Se a tabela ainda não existir, create_db_and_tables() vai criar.
+        # Aqui só migramos se ela existir.
+        tables = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='agendablock';"
+        ).fetchall()
+        if not tables:
+            return
+
+        # --- Novas colunas do modelo atual ---
+        _add_column_if_missing(conn, "agendablock", "start_date", "DATE")
+        _add_column_if_missing(conn, "agendablock", "end_date", "DATE")
+        _add_column_if_missing(conn, "agendablock", "reason", "TEXT")
+        _add_column_if_missing(conn, "agendablock", "applies_to_all", "INTEGER DEFAULT 0")
+
+        # --- Backfill a partir do schema antigo, se existir ---
+        # Antigo: data, motivo, profissional
+        has_old_date = _has_column(conn, "agendablock", "data")
+        has_old_reason = _has_column(conn, "agendablock", "motivo")
+        has_old_prof = _has_column(conn, "agendablock", "profissional")
+
+        if has_old_date:
+            conn.exec_driver_sql("""
+                UPDATE agendablock
+                   SET start_date = COALESCE(start_date, data),
+                       end_date   = COALESCE(end_date, data)
+                 WHERE data IS NOT NULL;
+            """)
+
+        if has_old_reason:
+            conn.exec_driver_sql("""
+                UPDATE agendablock
+                   SET reason = COALESCE(reason, motivo)
+                 WHERE motivo IS NOT NULL;
+            """)
+
+        if has_old_prof:
+            # Se profissional='todos' no schema antigo, vira applies_to_all=1
+            conn.exec_driver_sql("""
+                UPDATE agendablock
+                   SET applies_to_all = CASE
+                        WHEN applies_to_all IS NULL THEN
+                            CASE WHEN lower(profissional)='todos' THEN 1 ELSE 0 END
+                        ELSE applies_to_all
+                       END;
+            """)
+
+        # --- Criar tabela de relacionamento (multi-cirurgião) ---
+        conn.exec_driver_sql("""
+            CREATE TABLE IF NOT EXISTS agendablocksurgeon (
+                block_id INTEGER NOT NULL,
+                surgeon_id INTEGER NOT NULL,
+                PRIMARY KEY (block_id, surgeon_id)
+            );
+        """)
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+
+    # ✅ MIGRAÇÃO DO BANCO ANTIGO -> NOVO
+    migrate_sqlite_schema(engine)
+
     with Session(engine) as session:
         seed_if_empty(session)
 
