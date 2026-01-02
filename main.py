@@ -1297,7 +1297,7 @@ def mapa_create(
     request: Request,
     day_iso: str = Form(...),
     mode: str = Form("book"),
-    time_hhmm: str = Form(...),
+    time_hhmm: Optional[str] = Form(None),
     patient_name: str = Form(...),
     surgeon_id: int = Form(...),
     procedure_type: str = Form(...),
@@ -1376,9 +1376,11 @@ def mapa_create(
             f"&seller_id={seller_id_final}"
         )
     
+    time_hhmm = (time_hhmm or "").strip()  # normaliza
+    
     row = SurgicalMapEntry(
         day=day,
-        time_hhmm=time_hhmm,
+        time_hhmm=(time_hhmm or None),
         patient_name=patient_name.strip().upper(),
         surgeon_id=surgeon_id,
         procedure_type=procedure_type,
@@ -1416,7 +1418,7 @@ def mapa_update(
     entry_id: int,
     day_iso: str = Form(...),
     mode: str = Form("book"),
-    time_hhmm: str = Form(...),
+    time_hhmm: Optional[str] = Form(None),
     patient_name: str = Form(...),
     surgeon_id: int = Form(...),
     procedure_type: str = Form(...),
@@ -1466,9 +1468,11 @@ def mapa_update(
         "is_pre_reservation": row.is_pre_reservation,
     }
 
+    time_hhmm = (time_hhmm or "").strip()  # normaliza
+
     # aplica alterações
     row.day = day
-    row.time_hhmm = time_hhmm
+    row.time_hhmm = (time_hhmm or None)
     row.patient_name = patient_name.strip().upper()
     row.surgeon_id = surgeon_id
     row.procedure_type = procedure_type
