@@ -49,21 +49,27 @@
     </div>
 
     <div>
+
         <label class="block text-sm text-slate-300 mb-1 mt-4">Profissionais</label>
 
-        <select name="surgeons" multiple class="input w-full h-40">
+        <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
         {% for s in surgeons %}
-            <option value="{{ s.id }}"
-            {% if selected_surgeons and s.id in selected_surgeons %}selected{% endif %}
-            >
-            {{ s.full_name }}
-            </option>
+            <label class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <input
+                type="checkbox"
+                name="surgeons"
+                value="{{ s.id }}"
+                {% if selected_surgeons and s.id in selected_surgeons %}checked{% endif %}
+            />
+            <span class="text-slate-100 text-sm">{{ s.full_name }}</span>
+            </label>
         {% endfor %}
-        </select>
+        </div>
 
         <p class="text-xs text-slate-400 mt-2">
         Se nenhum profissional for selecionado, o bloqueio será aplicado para <b>todos</b>.
         </p>
+
     </div>
 
     <div class="pt-2 flex items-center gap-3">
