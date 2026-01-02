@@ -31,19 +31,9 @@
 
     <div>
         <label class="block text-sm text-slate-300 mb-1">Data (início)</label>
-        <input
-            type="date"
-            name="data_inicio"
-            value="{{ (edit_block.start_date if edit_block else '') }}"
-            class="input w-full"
-        />
+        <input type="date" name="data_inicio" value="{{ (edit_block.start_date if edit_block else '') }}" class="input w-full" required />
         <label class="block text-sm text-slate-300 mb-1 mt-4">Data (fim)</label>
-        <input
-            type="date"
-            name="data_fim"
-            value="{{ (edit_block.end_date if edit_block else '') }}"
-            class="input w-full"
-        />
+        <input type="date" name="data_fim" value="{{ (edit_block.end_date if edit_block else '') }}" class="input w-full" required />
     </div>
 
     <div>
@@ -122,20 +112,14 @@
                 </div>
 
                 <div class="text-slate-300 text-sm">
-                  {{ b.reason }} —
-                  {% if b.applies_to_all %}
+                {{ b.reason }} —
+                {% if b.applies_to_all %}
                     Todos os profissionais
-                  {% else %}
-                    {% set found = false %}
-                    {% for s in surgeons %}
-                      {% if s.id == b.surgeon_id %}
-                        {{ s.full_name }}
-                        {% set found = true %}
-                      {% endif %}
-                    {% endfor %}
-                    {% if not found %}Profissional{% endif %}
-                  {% endif %}
+                {% else %}
+                    {{ block_surgeons_map[b.id]|join(", ") }}
+                {% endif %}
                 </div>
+
               </div>
 
               <div class="flex items-center gap-2">
@@ -172,5 +156,15 @@
   </div>
 
 </div>
+
+<script>
+  const di = document.querySelector('input[name="data_inicio"]');
+  const df = document.querySelector('input[name="data_fim"]');
+  if (di && df) {
+    di.addEventListener("change", () => {
+      if (!df.value) df.value = di.value;
+    });
+  }
+</script>
 
 {% endblock %}

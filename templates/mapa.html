@@ -359,15 +359,29 @@
             </div>
 
 
-          <button
-            type="button"
-            class="btn-cta btn-small"
-            data-open-mapa-modal="1"
-            data-day="{{ key }}"
-            data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
-          >
-            Agendar
-          </button>
+          {% set iso = day.iso %}
+
+          {% set is_blocked_all = iso in blocked_all_days %}
+          {% set is_blocked_for_any = iso in blocked_surgeons_by_day %}
+
+          {% if is_blocked_all %}
+            <button
+              class="w-full mt-2 px-3 py-2 rounded bg-slate-700 text-slate-400 cursor-not-allowed"
+              disabled
+              title="Dia bloqueado para todos os profissionais"
+            >
+              Bloqueado
+            </button>
+
+          {% else %}
+            <button
+              onclick="openDayModal('{{ iso }}')"
+              class="btn-primary w-full mt-2"
+            >
+              Agendar
+            </button>
+          {% endif %}
+
         </div>
 
         {% if items %}
@@ -473,20 +487,19 @@
       <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
     </div>
 
-    <label class="block text-sm text-slate-300 mb-1 mt-3">Vendedor</label>
-
-    {% if current_user and current_user.username == "johnny.ge" %}
-      <select name="seller_id" class="input w-full">
-        {% for s in sellers %}
-          <option value="{{ s.id }}">{{ s.full_name }}</option>
-        {% endfor %}
-      </select>
-    {% else %}
-      <input type="hidden" name="seller_id" value="{{ current_user.id }}">
-      <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
-    {% endif %}
-
     <form id="mapaModalForm" class="day-form" method="post" action="/mapa/create">
+      <label class="block text-sm text-slate-300 mb-1 mt-3">Vendedor</label>
+
+      {% if current_user and current_user.username == "johnny.ge" %}
+        <select name="seller_id" class="input w-full">
+          {% for s in sellers %}
+            <option value="{{ s.id }}">{{ s.full_name }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input type="hidden" name="seller_id" value="{{ current_user.id }}">
+        <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
+      {% endif %}
       <input type="hidden" name="day_iso" id="mapaModalDayIso" />
       <input class="input" type="time" name="time_hhmm" required step="900" />
       <input class="input" name="patient_name" placeholder="Nome do paciente" required />
