@@ -110,11 +110,11 @@
 
               <div>
                 <div class="text-slate-100 font-semibold">
-                    {% if b.start_date == b.end_date %}
-                    {{ b.start_date.strftime("%d/%m/%Y") if b.start_date else "-" }}
+                    {% if b.start_date != b.end_date %}
+                    {{ b.start_date.strftime("%d/%m/%Y") }} → {{ b.end_date.strftime("%d/%m/%Y") }}
                     {% else %}
-                    {{ b.end_date.strftime("%d/%m/%Y") if b.end_date else "-" }}
-                    {% endif %}  
+                    {{ b.start_date.strftime("%d/%m/%Y") }}
+                    {% endif %}
                 </div>
 
                 <div class="text-slate-300 text-sm">
