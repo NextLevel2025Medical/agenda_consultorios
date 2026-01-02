@@ -375,7 +375,7 @@
             </div>
 
 
-          {% set iso = day.iso %}
+          {% set iso = day.isoformat() %}
 
           {% set is_blocked_all = iso in blocked_all_days %}
           {% set is_blocked_for_any = iso in blocked_surgeons_by_day %}
@@ -388,17 +388,18 @@
             >
               Bloqueado
             </button>
-
           {% else %}
             <button
               type="button"
               class="btn-cta btn-small day-agendar-btn"
               data-open-mapa-modal="1"
-              data-day="{{ d.iso }}"
-              data-human="{{ d.human }}"
+              data-day="{{ iso }}"
+              data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
             >
               Agendar
             </button>
+          {% endif %}
+
           {% endif %}
 
         </div>
