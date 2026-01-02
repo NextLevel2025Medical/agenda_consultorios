@@ -538,8 +538,14 @@ def bloqueios_page(
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
 
-    blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.desc())).all()
-    surgeons = session.exec(select(User).where(User.role == "surgery")).all()
+    # ✅ Cirurgiões de verdade (role doctor)
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
+    blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.asc())).all()
 
     edit_block = None
     if edit:
@@ -550,9 +556,9 @@ def bloqueios_page(
         {
             "request": request,
             "current_user": user,
-            "blocks": blocks,
             "surgeons": surgeons,
-            "edit_block": edit_block,  # <<< ESSENCIAL
+            "blocks": blocks,
+            "edit_block": edit_block,
         },
     )
 
@@ -571,9 +577,15 @@ def registrar_bloqueio(
 
     # converte "YYYY-MM-DD" para date
     day = date.fromisoformat(data)
-
+    
     applies_to_all = (profissional == "todos")
     surgeon_id = None if applies_to_all else int(profissional)
+
+    # ✅ trava: só aceita surgeon_id de DOCTOR
+    if surgeon_id is not None:
+        doc = session.get(User, surgeon_id)
+        if not doc or doc.role != "doctor":
+            return RedirectResponse(url="/bloqueios", status_code=303)
 
     block = AgendaBlock(
         day=day,
@@ -582,6 +594,16 @@ def registrar_bloqueio(
         surgeon_id=surgeon_id,
         created_by_id=user.id,
     )
+
+    exists = session.exec(
+        select(AgendaBlock).where(
+            AgendaBlock.day == day,
+            AgendaBlock.applies_to_all == applies_to_all,
+            AgendaBlock.surgeon_id == surgeon_id,
+        )
+    ).first()
+    if exists:
+        return RedirectResponse(url="/bloqueios", status_code=303)
 
     session.add(block)
     session.commit()
@@ -617,35 +639,6 @@ def doctor_page(
         },
     )
 
-@app.get("/bloqueios", response_class=HTMLResponse)
-def bloqueios_page(
-    request: Request,
-    edit: Optional[int] = None,
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-    require(user.role in ("admin", "surgery"))
-
-    surgeons = session.exec(select(User).where(User.role == "surgery")).all()
-    blocks = session.exec(select(AgendaBlock).order_by(AgendaBlock.day.asc())).all()
-
-    edit_block = None
-    if edit:
-        edit_block = session.get(AgendaBlock, edit)
-
-    return templates.TemplateResponse(
-        "bloqueios.html",
-        {
-            "request": request,
-            "current_user": user,
-            "surgeons": surgeons,
-            "blocks": blocks,
-            "edit_block": edit_block,
-        },
-    )
-
 @app.post("/bloqueios/{block_id}/update")
 def atualizar_bloqueio(
     request: Request,
@@ -668,6 +661,21 @@ def atualizar_bloqueio(
     block.reason = (motivo or "").strip()
     block.applies_to_all = (profissional == "todos")
     block.surgeon_id = None if block.applies_to_all else int(profissional)
+    if block.surgeon_id is not None:
+        doc = session.get(User, block.surgeon_id)
+        if not doc or doc.role != "doctor":
+            return RedirectResponse("/bloqueios", status_code=303)
+
+    exists = session.exec(
+        select(AgendaBlock).where(
+            AgendaBlock.id != block.id,
+            AgendaBlock.day == block.day,
+            AgendaBlock.applies_to_all == block.applies_to_all,
+            AgendaBlock.surgeon_id == block.surgeon_id,
+        )
+    ).first()
+    if exists:
+        return RedirectResponse(url="/bloqueios", status_code=303)
 
     session.add(block)
     session.commit()
