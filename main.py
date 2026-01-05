@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import Session, select, delete
-from sqlalchemy import or_, text
+from sqlalchemy import or_, text, func
 
 from db import create_db_and_tables, get_session, engine
 from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon
@@ -264,30 +264,56 @@ def validate_mapa_rules(
     surgeon_id: int,
     procedure_type: str,
     uses_hsr: bool = False,
-    exclude_entry_id: int | None = None,  # usado na edição pra não contar o próprio registro
+    exclude_entry_id: int | None = None,
 ) -> str | None:
     """
     Regras do Mapa Cirúrgico
 
-    1) Dr. Gustavo Aquino: máximo 2 agendamentos no mesmo dia (independente de tipo).
-    2) Não pode existir CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia.
+    ✅ Reserva conta como agendamento (SurgicalMapEntry com is_pre_reservation=True também entra na contagem).
+
+    Regras:
+    - Dr. Gustavo Aquino:
+        * Cirurgia / Procedimento Simples: somente Segunda e Quarta (máx 2 por dia)
+        * Refinamento: Segunda e Quarta (máx 2 por dia) + Sexta (máx 1 por dia)
+    - Dra. Alice Osório e Dr. Ricardo Vilela:
+        * Operam Terça, Quinta e Sexta (máx 1 por dia)
+        * Não podem operar no mesmo dia (se um tem qualquer agendamento/reserva, o outro não pode)
+    - Slot HSR: proibido em Janeiro e Julho
     """
 
     gustavo = session.exec(select(User).where(User.full_name == "Dr. Gustavo Aquino")).first()
     alice = session.exec(select(User).where(User.full_name == "Dra. Alice Osório")).first()
     ricardo = session.exec(select(User).where(User.full_name == "Dr. Ricardo Vilela")).first()
 
-    # Helper: aplica "excluir este registro" quando estamos editando
     def _apply_exclude(q):
         if exclude_entry_id is not None:
             return q.where(SurgicalMapEntry.id != exclude_entry_id)
         return q
-    
+
+    # HSR jan/jul
     if uses_hsr and day.month in (1, 7):
         return "Regra: não é permitido agendar Slot HSR em Janeiro e Julho."
 
-    # (1) Gustavo: conta TODOS os agendamentos no dia (cirurgia/refino/simples, pré-reserva etc.)
+    wd = day.weekday()  # 0=Seg,1=Ter,2=Qua,3=Qui,4=Sex,5=Sáb,6=Dom
+
+    # =========================
+    # (A) Dr. Gustavo Aquino
+    # =========================
     if gustavo and surgeon_id == gustavo.id:
+        if procedure_type == "Refinamento":
+            # Seg/Qua até 2, Sex até 1
+            if wd in (0, 2):
+                cap = 2
+            elif wd == 4:
+                cap = 1
+            else:
+                return "Regra: Dr. Gustavo Aquino opera Refinamento apenas na Segunda, Quarta ou Sexta."
+        else:
+            # Cirurgia / Procedimento Simples: só Seg/Qua até 2
+            if wd not in (0, 2):
+                return "Regra: Dr. Gustavo Aquino opera Cirurgia/Procedimento Simples apenas na Segunda e Quarta."
+            cap = 2
+
         q = select(SurgicalMapEntry.id).where(
             SurgicalMapEntry.day == day,
             SurgicalMapEntry.surgeon_id == gustavo.id,
@@ -295,34 +321,43 @@ def validate_mapa_rules(
         q = _apply_exclude(q)
         already = session.exec(q).all()
 
-        if len(already) >= 2:
-            return (
-                "Regra: Dr. Gustavo Aquino não pode ter mais de 2 agendamentos no mesmo dia "
-                "(independente se é cirurgia, refinamento ou procedimento simples)."
-            )
+        if len(already) >= cap:
+            if cap == 2:
+                return "Regra: Dr. Gustavo Aquino não pode ter mais de 2 agendamentos no mesmo dia."
+            return "Regra: Dr. Gustavo Aquino não pode ter mais de 1 agendamento (Refinamento) na Sexta-feira."
 
-    # (2) Alice x Ricardo: a restrição é somente para CIRURGIA
-    if procedure_type == "Cirurgia" and alice and ricardo:
-        if surgeon_id == alice.id:
-            q = select(SurgicalMapEntry.id).where(
-                SurgicalMapEntry.day == day,
-                SurgicalMapEntry.surgeon_id == ricardo.id,
-                SurgicalMapEntry.procedure_type == "Cirurgia",
-            )
-            q = _apply_exclude(q)
-            if session.exec(q).first():
-                return "Regra: Não pode haver CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia."
+        return None
 
-        if surgeon_id == ricardo.id:
-            q = select(SurgicalMapEntry.id).where(
-                SurgicalMapEntry.day == day,
-                SurgicalMapEntry.surgeon_id == alice.id,
-                SurgicalMapEntry.procedure_type == "Cirurgia",
-            )
-            q = _apply_exclude(q)
-            if session.exec(q).first():
-                return "Regra: Não pode haver CIRURGIA para Dra. Alice e Dr. Ricardo Vilela no mesmo dia."
+    # =========================
+    # (B) Alice e Ricardo
+    # =========================
+    if alice and ricardo and surgeon_id in (alice.id, ricardo.id):
+        # dias permitidos: Ter/Qui/Sex
+        if wd not in (1, 3, 4):
+            return "Regra: Dra. Alice Osório e Dr. Ricardo Vilela operam apenas na Terça, Quinta ou Sexta."
 
+        # capacidade do próprio médico: 1 por dia
+        q_self = select(SurgicalMapEntry.id).where(
+            SurgicalMapEntry.day == day,
+            SurgicalMapEntry.surgeon_id == surgeon_id,
+        )
+        q_self = _apply_exclude(q_self)
+        if session.exec(q_self).first():
+            return "Regra: Dra. Alice Osório e Dr. Ricardo Vilela não podem ter mais de 1 procedimento no mesmo dia."
+
+        # conflito Alice x Ricardo: se o outro tem qualquer agendamento/reserva no dia, bloqueia
+        other_id = ricardo.id if surgeon_id == alice.id else alice.id
+        q_other = select(SurgicalMapEntry.id).where(
+            SurgicalMapEntry.day == day,
+            SurgicalMapEntry.surgeon_id == other_id,
+        )
+        q_other = _apply_exclude(q_other)
+        if session.exec(q_other).first():
+            return "Regra: Dra. Alice Osório e Dr. Ricardo Vilela não podem operar no mesmo dia."
+
+        return None
+
+    # Outros cirurgiões (se existirem) sem regras específicas aqui
     return None
 
 def _weekday_pt(idx: int) -> str:
@@ -362,6 +397,89 @@ def validate_mapa_block_rules(session: Session, day: date, surgeon_id: int) -> s
         return "Data bloqueada para este profissional."
 
     return None
+
+def compute_month_availability(
+    session: Session,
+    surgeon_id: int,
+    month_ym: str,
+    procedure_type: str,
+) -> list[dict[str, str]]:
+    """
+    Retorna lista de datas operáveis no mês para o cirurgião + tipo de procedimento,
+    respeitando:
+      - validate_mapa_rules
+      - validate_mapa_block_rules
+      - reserva = agendamento
+    Mostra só 🔴 (livre) e 🟡 (parcial). Dias lotados NÃO retornam.
+    """
+
+    selected_month, first_day, next_first, days = safe_selected_month(month_ym)
+
+    surgeon = session.exec(select(User).where(User.id == surgeon_id)).first()
+    if not surgeon:
+        return []
+
+    results: list[dict[str, str]] = []
+
+    weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
+
+    # Para o emoji 🟡 precisamos saber a capacidade do dia (no caso do Gustavo)
+    gustavo = session.exec(select(User).where(User.full_name == "Dr. Gustavo Aquino")).first()
+
+    for d in days:
+        # 1) bloqueios
+        block_err = validate_mapa_block_rules(session, d, surgeon_id)
+        if block_err:
+            continue
+
+        # 2) regras de agenda (usa o mesmo motor do create/edit)
+        err = validate_mapa_rules(
+            session=session,
+            day=d,
+            surgeon_id=surgeon_id,
+            procedure_type=procedure_type,
+            uses_hsr=False,   # consulta não define HSR; se quiser, adiciona no card depois
+            exclude_entry_id=None,
+        )
+        if err:
+            # inclui "dia fora do padrão" e "dia lotado" -> não aparece
+            continue
+
+        # 3) conta ocupações do cirurgião no dia (inclui reservas)
+        cnt = session.exec(
+            select(func.count()).select_from(SurgicalMapEntry).where(
+                SurgicalMapEntry.day == d,
+                SurgicalMapEntry.surgeon_id == surgeon_id,
+            )
+        ).one()
+
+        # 4) define capacidade do dia para o emoji (só Gustavo pode gerar 🟡 com cap=2)
+        cap = 1
+        if gustavo and surgeon_id == gustavo.id:
+            wd = d.weekday()
+            if procedure_type == "Refinamento" and wd == 4:
+                cap = 1
+            else:
+                cap = 2
+
+        # só 🔴 e 🟡 (dias lotados não chegam aqui, mas garantimos)
+        if cnt <= 0:
+            emoji = "🔴"
+        elif cnt < cap:
+            emoji = "🟡"
+        else:
+            continue  # lotado -> não aparece
+
+        results.append(
+            {
+                "day_iso": d.isoformat(),
+                "label": d.strftime("%d/%m"),
+                "human": f"{d.strftime('%d/%m/%Y')} - {weekday_map[d.weekday()]}",
+                "emoji": emoji,
+            }
+        )
+
+    return results
 
 def compute_priority_card(session: Session) -> dict:
     today = datetime.now(TZ).date()
@@ -1200,7 +1318,11 @@ def deny_request(request: Request, request_id: int, session: Session = Depends(g
 def mapa_page(
     request: Request,
     month: Optional[str] = None,
-    err: str | None = None,          
+    err: str | None = None,
+    av_do: Optional[str] = None,
+    av_surgeon_id: Optional[int] = None,
+    av_month: Optional[str] = None,
+    av_procedure_type: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -1304,6 +1426,22 @@ def mapa_page(
 
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
 
+    # =========================
+    # Consulta de Disponibilidade (card)
+    # =========================
+    av_results: list[dict[str, str]] = []
+    av_selected_month = av_month or selected_month
+    av_selected_surgeon_id = av_surgeon_id
+    av_selected_procedure_type = av_procedure_type or "Cirurgia"
+
+    if av_do == "1" and av_selected_surgeon_id:
+        av_results = compute_month_availability(
+            session=session,
+            surgeon_id=int(av_selected_surgeon_id),
+            month_ym=av_selected_month,
+            procedure_type=av_selected_procedure_type,
+        )
+    
     return templates.TemplateResponse(
         "mapa.html",
         {
@@ -1328,6 +1466,10 @@ def mapa_page(
             "sellers": sellers,
             "blocked_all_days": blocked_all_days,  # set[str] -> "2026-01-15"
             "blocked_surgeons_by_day": blocked_surgeons_by_day,  # dict[str, list[int]]
+            "av_selected_month": av_selected_month,
+            "av_selected_surgeon_id": av_selected_surgeon_id,
+            "av_selected_procedure_type": av_selected_procedure_type,
+            "av_results": av_results,
         },
     )
 
