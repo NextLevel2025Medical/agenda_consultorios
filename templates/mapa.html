@@ -77,36 +77,42 @@
     padding: 12px;
   }
 
-  /* ✅ Banner de bloqueio (ocupa a largura toda acima dos cards) */
-  .entry-card.block{
-    background: rgba(239,68,68,0.12);      /* mantém o vermelho */
-    border: 1px solid rgba(239,68,68,0.28);
-
-    /* faz ocupar a linha inteira do grid (2 colunas) */
+    /* 🔴 BLOQUEIO — estilo alerta compacto */
+  .block-banner{
     grid-column: 1 / -1;
 
-    /* deixa com cara de faixa/banner */
-    padding: 12px 16px;
-    border-radius: 16px;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 14px;
+
+    padding: 10px 14px;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  .entry-card.block .patient-name{
-    color: rgba(255,255,255,0.92);
-    font-size: 15px;           /* levemente menor pra parecer banner */
+  /* remove cara de card */
+  .block-banner .entry-top,
+  .block-banner .entry-sub,
+  .block-banner .chips{
+    margin: 0;
+  }
+
+  /* título vira texto inline */
+  .block-banner .patient-name{
+    font-size: 14px;
+    font-weight: 600;
     letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.95);
   }
 
-  .entry-card.block .entry-top{
-    align-items: center;       /* centraliza melhor no formato de faixa */
+  /* esconder infos que poluem visual */
+  .block-banner .chips,
+  .block-banner .entry-sub{
+    display: none;
   }
 
-  .entry-card.block .entry-sub{
-    margin-top: 6px;           /* reduz altura */
-  }
-
-  .entry-card.block .chips{
-    margin-top: 8px;           /* reduz altura */
-  }
 
   .entry-sub{
   margin-top: 8px;
@@ -439,10 +445,12 @@
             {% for b in day_blocks %}
               {% set creator = users_by_id.get(b.created_by_id) %}
               {% set surgeons_list = block_surgeons_map.get(b.id, ["—"]) %}
-              <div class="entry-card block">
+              <div class="entry-card block block-banner">
                 <div class="entry-top">
                   <div>
-                    <div class="patient-name">BLOQUEIO DE AGENDA</div>
+                    <div class="patient-name">
+                      BLOQUEIO DE AGENDA: {{ b.profissionais or "Profissional não informado" }} — {{ b.motivo or "Motivo não informado" }}
+                    </div>
                     <div class="muted" style="margin-top:4px; font-weight:600; margin-bottom: 10px;">
                       {{ b.start_date.strftime("%d/%m/%Y") }} → {{ b.end_date.strftime("%d/%m/%Y") }}
                     </div>
