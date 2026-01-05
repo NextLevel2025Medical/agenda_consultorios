@@ -464,7 +464,6 @@
                     data-entry-id="{{ e.id }}"
                     data-day="{{ e.day.isoformat() }}"
                     data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
-                    data-time="{{ e.time_hhmm or '' }}"
                     data-patient="{{ e.patient_name }}"
                     data-surgeon="{{ e.surgeon_id }}"
                     data-procedure="{{ e.procedure_type }}"
