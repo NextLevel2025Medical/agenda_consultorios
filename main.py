@@ -262,6 +262,7 @@ def validate_mapa_rules(
     day: date,
     surgeon_id: int,
     procedure_type: str,
+    uses_hsr: bool = False,
     exclude_entry_id: int | None = None,  # usado na edição pra não contar o próprio registro
 ) -> str | None:
     """
@@ -280,6 +281,9 @@ def validate_mapa_rules(
         if exclude_entry_id is not None:
             return q.where(SurgicalMapEntry.id != exclude_entry_id)
         return q
+    
+    if uses_hsr and day.month in (1, 7):
+        return "Regra: não é permitido agendar Slot HSR em Janeiro e Julho."
 
     # (1) Gustavo: conta TODOS os agendamentos no dia (cirurgia/refino/simples, pré-reserva etc.)
     if gustavo and surgeon_id == gustavo.id:
@@ -385,6 +389,20 @@ def compute_priority_card(session: Session) -> dict:
     surgeons_by_block: dict[int, list[int]] = {}
     for r in rels:
         surgeons_by_block.setdefault(r.block_id, []).append(r.surgeon_id)
+        
+    # ✅ block_id -> lista de nomes (para exibir no MAPA)
+    surgeons_name_by_id = {s.id: s.full_name for s in surgeons if s.id is not None}
+    block_surgeons_map: dict[int, list[str]] = {}
+
+    for b in blocks:
+        if not b.id:
+            continue
+        if b.applies_to_all:
+            block_surgeons_map[b.id] = ["Todos"]
+        else:
+            ids = surgeons_by_block.get(b.id, [])
+            names = [surgeons_name_by_id.get(sid) for sid in ids]
+            block_surgeons_map[b.id] = [n for n in names if n] or ["—"]
 
     blocked_days: set[date] = set()
 
@@ -1281,6 +1299,7 @@ def mapa_page(
             "users_by_id": users_by_id,
             "blocks": blocks,
             "blocks_by_day": blocks_by_day,
+            "block_surgeons_map": block_surgeons_map,  # ✅ NOVO
             "blocked_all_days": blocked_all_days,
             "blocked_surgeons_by_day": blocked_surgeons_by_day,
             "priority_mode": priority["mode"],
@@ -1341,7 +1360,7 @@ def mapa_create(
             f"&seller_id={seller_id_final}"
         )
 
-    err = validate_mapa_rules(session, day, surgeon_id, procedure_type)
+    err = validate_mapa_rules(session, day, surgeon_id, procedure_type, uses_hsr=bool(uses_hsr))
     if err:
         month = day.strftime("%Y-%m")
         audit_event(
@@ -1446,7 +1465,14 @@ def mapa_update(
     is_pre = (mode == "reserve")
 
     # valida regras EXCLUINDO o próprio item (pra não bloquear edição à toa)
-    err = validate_mapa_rules(session, day, surgeon_id, procedure_type, exclude_entry_id=entry_id)
+    err = validate_mapa_rules(
+        session,
+        day,
+        surgeon_id,
+        procedure_type,
+        uses_hsr=bool(uses_hsr),
+        exclude_entry_id=entry_id,
+    )
     if err:
         month = day.strftime("%Y-%m")
         from urllib.parse import quote
