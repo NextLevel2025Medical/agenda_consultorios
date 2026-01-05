@@ -390,7 +390,13 @@ def compute_priority_card(session: Session) -> dict:
     for r in rels:
         surgeons_by_block.setdefault(r.block_id, []).append(r.surgeon_id)
         
-    # ✅ block_id -> lista de nomes (para exibir no MAPA)
+    # ✅ precisamos do "surgeons" aqui dentro (escopo da função)
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
     surgeons_name_by_id = {s.id: s.full_name for s in surgeons if s.id is not None}
     block_surgeons_map: dict[int, list[str]] = {}
 
@@ -1253,6 +1259,20 @@ def mapa_page(
     surgeons_by_block: dict[int, list[int]] = {}
     for r in rels:
         surgeons_by_block.setdefault(r.block_id, []).append(r.surgeon_id)
+    
+    # ✅ block_id -> lista de nomes dos cirurgiões (para exibir no mapa.html)
+    surgeons_by_id = {s.id: s.full_name for s in surgeons if s.id is not None}
+    block_surgeons_map: dict[int, list[str]] = {}
+
+    for b in blocks:
+        if not b.id:
+            continue
+        if b.applies_to_all:
+            block_surgeons_map[b.id] = ["Todos"]
+        else:
+            ids = surgeons_by_block.get(b.id, [])
+            names = [surgeons_by_id.get(sid) for sid in ids]
+            block_surgeons_map[b.id] = [n for n in names if n] or ["—"]
 
     blocks_by_day: dict[str, list[AgendaBlock]] = {}
     blocked_all_days: set[str] = set()
