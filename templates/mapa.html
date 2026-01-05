@@ -77,6 +77,15 @@
     padding: 12px;
   }
 
+  /* ✅ Card de bloqueio (vermelho mais claro) */
+  .entry-card.block{
+    background: rgba(239,68,68,0.12);      /* vermelho suave */
+    border: 1px solid rgba(239,68,68,0.28);
+  }
+  .entry-card.block .patient-name{
+    color: rgba(255,255,255,0.92);
+  }
+
   .entry-sub{
   margin-top: 8px;
   display: flex;
@@ -401,6 +410,38 @@
 
         {% if items %}
         <div class="entries-grid">
+
+
+            {# ✅ 1) Cards de bloqueio primeiro #}
+            {% for b in day_blocks %}
+              {% set creator = users_by_id.get(b.created_by_id) %}
+              {% set surgeons_list = block_surgeons_map.get(b.id, ["—"]) %}
+              <div class="entry-card block">
+                <div class="entry-top">
+                  <div>
+                    <div class="patient-name">BLOQUEIO DE AGENDA</div>
+                    <div class="muted" style="margin-top:4px; font-weight:600; margin-bottom: 10px;">
+                      {{ b.start_date.strftime("%d/%m/%Y") }} → {{ b.end_date.strftime("%d/%m/%Y") }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="entry-sub">
+                  <span class="sub-pill">⛔ {{ b.reason or "—" }}</span>
+                  <span class="sub-pill">👤 {{ creator.full_name if creator else "—" }}</span>
+                  <span class="sub-pill">📌 Criado em {{ fmt_brasilia(b.created_at) }}</span>
+                </div>
+
+                <div class="chips">
+                  <span class="chip">
+                    <span class="chip-spot" style="background: rgba(239,68,68,0.9);"></span>
+                    Profissionais: {{ surgeons_list | join(", ") }}
+                  </span>
+                </div>
+              </div>
+            {% endfor %}
+
+            {# ✅ 2) Cards de agendamento/pre-reserva (seus atuais) #}
             {% for e in items %}
             {% set surgeon =
                 (surgeons | selectattr("id", "equalto", e.surgeon_id) | first)
