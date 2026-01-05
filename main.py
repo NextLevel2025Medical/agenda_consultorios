@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, date, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, Depends, Request, Form
@@ -242,6 +243,7 @@ def seed_if_empty(session: Session):
     ensure_user("cris.galdino", "Cristiane Galdino", "surgery", "CrisG@2025#47")
     ensure_user("carolina.abdo", "Carolina", "surgery", "Caro!2025#38")
     ensure_user("ariella.vieira", "Ariella", "surgery", "Ariella$2026")
+    ensure_user("camilla.martins", "Camilla", "comissao", "Camilla*2026")
 
     session.commit()
 
@@ -658,6 +660,106 @@ def migrate_sqlite_schema(engine):
             );
         """)
 
+def get_commercial_period(month_year: str) -> tuple[datetime, datetime]:
+    """
+    Retorna (start_datetime_utc_naive, end_datetime_utc_naive) do período comercial:
+    - padrão: dia 25 do mês anterior até dia 24 do mês selecionado
+    - exceção: Janeiro/2026 começa em 06/01/2026
+    """
+
+    tz = ZoneInfo("America/Sao_Paulo")
+    year, month = map(int, month_year.split("-"))
+
+    # início padrão: dia 25 do mês anterior (em horário SP)
+    if month == 1:
+        start_sp = datetime(year - 1, 12, 25, 0, 0, 0, tzinfo=tz)
+    else:
+        start_sp = datetime(year, month - 1, 25, 0, 0, 0, tzinfo=tz)
+
+    # fim padrão: dia 24 do mês atual (em horário SP)
+    end_sp = datetime(year, month, 24, 23, 59, 59, tzinfo=tz)
+
+    # 🚨 EXCEÇÃO: Janeiro/2026
+    if year == 2026 and month == 1:
+        start_sp = datetime(2026, 1, 6, 0, 0, 0, tzinfo=tz)
+
+    # Converte para UTC e remove tzinfo (para bater com created_at = utcnow() naive)
+    start_utc_naive = start_sp.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc_naive = end_sp.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return start_utc_naive, end_utc_naive
+
+@app.get("/comissoes")
+def comissoes_page(
+    request: Request,
+    month_year: str,
+    seller_id: int | None = None,
+    session: Session = Depends(get_session),
+):
+    """
+    Relatório de comissões por cirurgia agendada:
+    - procedure_type == "Cirurgia"
+    - não pode ser reserva (is_pre_reservation == False)
+    - período comercial (25->24, com exceção jan/2026 a partir de 06/01/2026)
+    - agrupado por vendedor (created_by_id)
+    """
+
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "comissao"))
+
+    period_start, period_end = get_commercial_period(month_year)
+
+    q = select(SurgicalMapEntry).where(
+        SurgicalMapEntry.procedure_type == "Cirurgia",
+        SurgicalMapEntry.is_pre_reservation == False,
+        SurgicalMapEntry.created_at >= period_start,
+        SurgicalMapEntry.created_at <= period_end,
+    )
+
+    if seller_id:
+        q = q.where(SurgicalMapEntry.created_by_id == seller_id)
+
+    entries = session.exec(q).all()
+
+    # mapa de usuários (para resolver nome do vendedor pelo created_by_id)
+    users = session.exec(select(User)).all()
+    users_by_id = {u.id: u for u in users}
+
+    # lista de vendedores para o filtro (somente quem pode “vender”)
+    sellers = [u for u in users if u.role in ("admin", "surgery") and u.is_active]
+
+    # Agrupamento por vendedor (nome vem do users_by_id)
+    grouped: dict[str, list[SurgicalMapEntry]] = {}
+
+    for e in entries:
+        seller_name = "Sem vendedor"
+        if e.created_by_id and e.created_by_id in users_by_id:
+            seller_name = users_by_id[e.created_by_id].full_name
+
+        grouped.setdefault(seller_name, []).append(e)
+
+    # Ordenar cirurgias dentro de cada vendedor (mais recentes primeiro)
+    for k in grouped:
+        grouped[k].sort(key=lambda x: x.created_at, reverse=True)
+
+    return templates.TemplateResponse(
+        "comissoes.html",
+        {
+            "request": request,
+            "current_user": user,
+            "month_year": month_year,
+            "period_start": period_start,
+            "period_end": period_end,
+            "grouped": grouped,
+            "total": len(entries),
+            "sellers": sellers,
+            "seller_id": seller_id,
+            "users_by_id": users_by_id,  # opcional (se quiser mostrar algo extra no template)
+        },
+    )
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
@@ -679,8 +781,20 @@ def home(request: Request, session: Session = Depends(get_session)):
         return redirect("/admin")
     if user.role == "doctor":
         return redirect("/doctor")
-    if user.role == "surgery":   # NOVO
+    if user.role == "surgery":
         return redirect("/mapa")
+    if user.role == "comissao":
+        # redireciona para o mês atual (você pode manter manual também)
+        today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+        # regra do “mês comercial”: se hoje >= 25, isso pertence ao próximo month_year
+        if today.day >= 25:
+            y = today.year + (1 if today.month == 12 else 0)
+            m = 1 if today.month == 12 else today.month + 1
+        else:
+            y = today.year
+            m = today.month
+        month_year = f"{y:04d}-{m:02d}"
+        return redirect(f"/comissoes?month_year={month_year}")
 
     return redirect("/login")
 
