@@ -32,9 +32,11 @@
 
       {% if current_user %}
       <div class="flex flex-col gap-2 items-end">
-        <a class="btn-secondary top-action-btn w-52 text-center" href="/bloqueios">
-          Bloqueios de Agenda
-        </a>
+        {% if current_user and current_user.role in ("admin", "surgery") %}
+          <a class="btn-secondary top-action-btn w-52 text-center" href="/bloqueios">
+            Bloqueios de Agenda
+          </a>
+        {% endif %}
 
         <form method="post" action="/logout" class="w-52">
           <button class="btn-secondary top-action-btn w-full" type="submit">
