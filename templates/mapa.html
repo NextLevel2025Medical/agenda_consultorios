@@ -449,10 +449,13 @@
                 <div class="entry-top">
                   <div>
                     <div class="patient-name">
-                      BLOQUEIO DE AGENDA: {{ b.profissionais or "Profissional não informado" }} — {{ b.motivo or "Motivo não informado" }}
-                    </div>
-                    <div class="muted" style="margin-top:4px; font-weight:600; margin-bottom: 10px;">
-                      {{ b.start_date.strftime("%d/%m/%Y") }} → {{ b.end_date.strftime("%d/%m/%Y") }}
+                      BLOQUEIO DE AGENDA:
+                      {% if b.applies_to_all %}
+                        Todos os profissionais
+                      {% else %}
+                        {{ surgeons_list | join(", ") }}
+                      {% endif %}
+                      — {{ b.reason }}
                     </div>
                   </div>
                 </div>
