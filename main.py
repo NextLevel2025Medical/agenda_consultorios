@@ -1332,7 +1332,7 @@ def mapa_create(
             f"&err={quote(block_err)}"
             f"&day_iso={quote(day_iso)}"
             f"&mode={quote(mode)}"
-            f"&time_hhmm={quote(time_hhmm)}"
+            f"&time_hhmm={quote(time_hhmm or "")}"
             f"&patient_name={quote(patient_name)}"
             f"&surgeon_id={surgeon_id}"
             f"&procedure_type={quote(procedure_type)}"
@@ -1472,7 +1472,7 @@ def mapa_update(
 
     # aplica alterações
     row.day = day
-    row.time_hhmm = (time_hhmm or None)
+    row.time_hhmm = time_hhmm or None
     row.patient_name = patient_name.strip().upper()
     row.surgeon_id = surgeon_id
     row.procedure_type = procedure_type
