@@ -241,6 +241,7 @@ def seed_if_empty(session: Session):
     ensure_user("ana.maria", "Ana Maria", "surgery", "AnaM#2025@91")
     ensure_user("cris.galdino", "Cristiane Galdino", "surgery", "CrisG@2025#47")
     ensure_user("carolina.abdo", "Carolina", "surgery", "Caro!2025#38")
+    ensure_user("ariella.vieira", "Ariella", "surgery", "Ariella$2026")
 
     session.commit()
 
