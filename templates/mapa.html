@@ -4,6 +4,10 @@
 {% set parts = selected_month.split('-') %}
 {% set sel_year = parts[0] %}
 {% set sel_month = parts[1] %}
+{% set av_month_ym = av_selected_month or selected_month %}
+{% set av_parts = av_month_ym.split('-') %}
+{% set av_year = av_parts[0] %}
+{% set av_month = av_parts[1] %}
 
 <style>
   /* Controles de mês/ano */
@@ -334,7 +338,77 @@
     width: auto !important;
     display: inline-flex !important;
   }
+  /* ===== Consulta de Disponibilidade (card irmão do Priority) ===== */
+  .avail-wrap{
+    display:flex;
+    justify-content:center;
+    margin-bottom: 22px;
+  }
 
+  .avail-card{
+    width: min(980px, 100%);
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(18,24,36,.55);
+    box-shadow: 0 18px 60px rgba(0,0,0,.45);
+    padding: 18px 18px 16px 18px;
+  }
+
+  .avail-title{
+    font-size: 16px;
+    font-weight: 900;
+    text-align: center;
+    width: 100%;
+    color: rgba(255,255,255,.92);
+  }
+
+  .avail-grid{
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.8fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .avail-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .avail-results{
+    margin-top: 14px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding-top: 12px;
+  }
+
+  .avail-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.03);
+    margin-bottom: 8px;
+  }
+
+  .avail-left{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    font-weight: 800;
+  }
+
+  .avail-date{
+    min-width: 56px;
+  }
+
+  .avail-emoji{
+    width: 20px;
+    text-align:center;
+  }
 </style>
 
 <div class="page">
@@ -356,6 +430,91 @@
         {% else %}
           <div class="priority-ok">✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.</div>
         {% endif %}
+      </div>
+    </div>
+
+    <div class="avail-wrap">
+      <div class="avail-card">
+        <div class="avail-title">🔎 Consulta de Disponibilidade</div>
+
+        <form method="get" action="/mapa">
+          <!-- mantém o mês atual do mapa INALTERADO -->
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="av_do" value="1">
+
+          <div class="avail-grid">
+            <select class="input" name="av_surgeon_id" required>
+              <option value="">Selecione o cirurgião</option>
+              {% for s in surgeons %}
+                <option value="{{ s.id }}" {% if av_selected_surgeon_id and s.id == av_selected_surgeon_id %}selected{% endif %}>
+                  {{ s.full_name }}
+                </option>
+              {% endfor %}
+            </select>
+
+            <select class="input" name="av_month" required>
+              <option value="{{ av_year }}-01" {% if av_month == "01" %}selected{% endif %}>Janeiro</option>
+              <option value="{{ av_year }}-02" {% if av_month == "02" %}selected{% endif %}>Fevereiro</option>
+              <option value="{{ av_year }}-03" {% if av_month == "03" %}selected{% endif %}>Março</option>
+              <option value="{{ av_year }}-04" {% if av_month == "04" %}selected{% endif %}>Abril</option>
+              <option value="{{ av_year }}-05" {% if av_month == "05" %}selected{% endif %}>Maio</option>
+              <option value="{{ av_year }}-06" {% if av_month == "06" %}selected{% endif %}>Junho</option>
+              <option value="{{ av_year }}-07" {% if av_month == "07" %}selected{% endif %}>Julho</option>
+              <option value="{{ av_year }}-08" {% if av_month == "08" %}selected{% endif %}>Agosto</option>
+              <option value="{{ av_year }}-09" {% if av_month == "09" %}selected{% endif %}>Setembro</option>
+              <option value="{{ av_year }}-10" {% if av_month == "10" %}selected{% endif %}>Outubro</option>
+              <option value="{{ av_year }}-11" {% if av_month == "11" %}selected{% endif %}>Novembro</option>
+              <option value="{{ av_year }}-12" {% if av_month == "12" %}selected{% endif %}>Dezembro</option>
+            </select>
+
+            <select class="input" name="av_year" disabled>
+              <!-- só visual, porque o valor real está embutido no av_month (YYYY-MM) -->
+              <option selected>{{ av_year }}</option>
+            </select>
+
+            <select class="input" name="av_procedure_type" required>
+              <option {% if av_selected_procedure_type == "Cirurgia" %}selected{% endif %}>Cirurgia</option>
+              <option {% if av_selected_procedure_type == "Refinamento" %}selected{% endif %}>Refinamento</option>
+              <option {% if av_selected_procedure_type == "Procedimento Simples" %}selected{% endif %}>Procedimento Simples</option>
+            </select>
+          </div>
+
+          <div class="avail-actions">
+            <button class="btn-cta" type="submit">Consultar</button>
+          </div>
+        </form>
+
+        {% if av_results is defined %}
+          <div class="avail-results">
+            <div style="font-weight:900; margin-bottom:10px;">Datas disponíveis:</div>
+
+            {% if av_results and av_results|length > 0 %}
+              {% for r in av_results %}
+                <div class="avail-row">
+                  <div class="avail-left">
+                    <span class="avail-date">{{ r.label }}</span>
+                    <span class="avail-emoji">{{ r.emoji }}</span>
+                  </div>
+
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    data-open-mapa-modal
+                    data-day="{{ r.day_iso }}"
+                    data-human="{{ r.human }}"
+                    data-surgeon="{{ av_selected_surgeon_id }}"
+                    data-procedure="{{ av_selected_procedure_type }}"
+                  >
+                    Reservar
+                  </button>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="muted">Nenhuma data disponível para os filtros selecionados.</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
       </div>
     </div>
 
@@ -694,6 +853,19 @@
   document.querySelectorAll("[data-open-mapa-modal]").forEach(btn => {
     btn.addEventListener("click", () => {
       openCreateModal(btn.getAttribute("data-day"), btn.getAttribute("data-human"));
+
+      // se vier do card de disponibilidade, preenche defaults:
+      const s = btn.getAttribute("data-surgeon");
+      const p = btn.getAttribute("data-procedure");
+
+      if (s) {
+        const el = formEl.querySelector('select[name="surgeon_id"]');
+        if (el) el.value = s;
+      }
+      if (p) {
+        const el = formEl.querySelector('select[name="procedure_type"]');
+        if (el) el.value = p;
+      }
     });
   });
 
