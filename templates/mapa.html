@@ -378,7 +378,7 @@
                 <span class="muted">· {{ weekday_map[day.weekday()] }}</span>
             </div>
 
-            {% if items and items|length > 0 %}
+            {% if items and items|length > 0 %} 
                 <span class="badge-count">{{ items|length }} agendamento{{ "s" if items|length > 1 else "" }}</span>
             {% endif %}
             </div>
@@ -408,7 +408,7 @@
 
         </div>
 
-        {% if items %}
+        {% if (items and items|length > 0) or (day_blocks and day_blocks|length > 0) %}
         <div class="entries-grid">
 
 
