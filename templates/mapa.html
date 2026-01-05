@@ -368,6 +368,7 @@
     {% for day in days %}
       {% set key = day.isoformat() %}
       {% set items = entries_by_day.get(key, []) %}
+      {% set day_blocks = blocks_by_day.get(key, []) %}
 
       <div class="day-block">
         <!-- (3) Cabeçalho do dia + botão que abre modal -->
