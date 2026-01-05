@@ -1406,7 +1406,7 @@ def mapa_create(
             f"&err={quote(err)}"
             f"&day_iso={quote(day_iso)}"
             f"&mode={quote(mode)}"
-            f"&time_hhmm={quote(time_hhmm)}"
+            f"&time_hhmm={quote(time_hhmm or '')}"
             f"&patient_name={quote(patient_name)}"
             f"&surgeon_id={surgeon_id}"
             f"&procedure_type={quote(procedure_type)}"
