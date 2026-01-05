@@ -693,7 +693,7 @@ def get_commercial_period(month_year: str) -> tuple[datetime, datetime]:
 def comissoes_page(
     request: Request,
     month_year: str,
-    seller_id: int | None = None,
+    seller_id: str  | None = None,
     session: Session = Depends(get_session),
 ):
     """
@@ -710,6 +710,13 @@ def comissoes_page(
     require(user.role in ("admin", "comissao"))
 
     period_start, period_end = get_commercial_period(month_year)
+    
+    seller_id_int: int | None = None
+    if seller_id and seller_id.strip():
+        try:
+            seller_id_int = int(seller_id)
+        except ValueError:
+            seller_id_int = None
 
     q = select(SurgicalMapEntry).where(
         SurgicalMapEntry.procedure_type == "Cirurgia",
@@ -718,8 +725,8 @@ def comissoes_page(
         SurgicalMapEntry.created_at <= period_end,
     )
 
-    if seller_id:
-        q = q.where(SurgicalMapEntry.created_by_id == seller_id)
+    if seller_id_int is not None:
+        q = q.where(SurgicalMapEntry.created_by_id == seller_id_int)
 
     entries = session.exec(q).all()
 
