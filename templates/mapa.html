@@ -424,7 +424,6 @@
 
                 {% set creator = users_by_id.get(e.created_by_id) %}
                 <div class="entry-sub">
-                    <span class="sub-pill">🕒 {{ e.time_hhmm or "—" }}</span>
                     <span class="sub-pill">👤 {{ creator.full_name if creator else "—" }}</span>
                     <span class="sub-pill">📌 Agendado em {{ fmt_brasilia(e.created_at) }}</span>
                     {% if e.is_pre_reservation %}
