@@ -77,13 +77,35 @@
     padding: 12px;
   }
 
-  /* ✅ Card de bloqueio (vermelho mais claro) */
+  /* ✅ Banner de bloqueio (ocupa a largura toda acima dos cards) */
   .entry-card.block{
-    background: rgba(239,68,68,0.12);      /* vermelho suave */
+    background: rgba(239,68,68,0.12);      /* mantém o vermelho */
     border: 1px solid rgba(239,68,68,0.28);
+
+    /* faz ocupar a linha inteira do grid (2 colunas) */
+    grid-column: 1 / -1;
+
+    /* deixa com cara de faixa/banner */
+    padding: 12px 16px;
+    border-radius: 16px;
   }
+
   .entry-card.block .patient-name{
     color: rgba(255,255,255,0.92);
+    font-size: 15px;           /* levemente menor pra parecer banner */
+    letter-spacing: 0.02em;
+  }
+
+  .entry-card.block .entry-top{
+    align-items: center;       /* centraliza melhor no formato de faixa */
+  }
+
+  .entry-card.block .entry-sub{
+    margin-top: 6px;           /* reduz altura */
+  }
+
+  .entry-card.block .chips{
+    margin-top: 8px;           /* reduz altura */
   }
 
   .entry-sub{
