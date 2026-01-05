@@ -1424,12 +1424,19 @@ def mapa_update(
     procedure_type: str = Form(...),
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
+        seller_id: Optional[int] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
+    
+    # ✅ regra do vendedor (mesma do /mapa/create)
+    if user.username != "johnny.ge":
+        seller_id_final = user.id
+    else:
+        seller_id_final = int(seller_id) if seller_id else user.id
 
     row = session.get(SurgicalMapEntry, entry_id)
     if not row:
@@ -1479,6 +1486,7 @@ def mapa_update(
     row.location = location
     row.uses_hsr = bool(uses_hsr)
     row.is_pre_reservation = is_pre
+    row.created_by_id = seller_id_final 
 
     session.add(row)
     session.commit()
