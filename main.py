@@ -924,6 +924,7 @@ def bloqueios_page(
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
+    require(user.role in ("admin", "surgery"), "Acesso restrito.")
 
     surgeons = session.exec(
         select(User)
@@ -1000,7 +1001,7 @@ def registrar_bloqueio(
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
-    require(user.role in ("admin", "surgery"))
+    require(user.role in ("admin", "surgery"), "Acesso restrito.")
 
     # converte "YYYY-MM-DD" para date
     start_date = date.fromisoformat(data_inicio)
@@ -1042,6 +1043,7 @@ def bloqueio_update(
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
+    require(user.role in ("admin", "surgery"), "Acesso restrito.")
 
     b = session.get(AgendaBlock, block_id)
     if not b:
@@ -1081,6 +1083,7 @@ def bloqueio_delete(
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
+    require(user.role in ("admin", "surgery"), "Acesso restrito.")
 
     # apaga relações
     session.exec(
