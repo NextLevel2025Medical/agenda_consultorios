@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Relatório Dr. Gustavo</title>
+  <link rel="stylesheet" href="/static/globals.css">
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="max-w-5xl mx-auto p-6">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-semibold">Relatório Dr. Gustavo (Snapshots)</h1>
+      <a href="/mapa" class="text-sm underline opacity-80 hover:opacity-100">Voltar</a>
+    </div>
+
+    <form method="get" action="/relatorio-gustavo" class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <div>
+          <label class="block text-sm mb-1 opacity-80">Data do relatório</label>
+          <select name="snapshot_date" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800">
+            <option value="">Selecione...</option>
+            {% for d in available_dates %}
+              <option value="{{ d }}" {% if d == snapshot_date %}selected{% endif %}>{{ d }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="flex gap-2">
+        <button type="submit"
+            class="px-4 py-2 rounded-lg bg-blue-700 hover:bg-blue-600">
+            Ver relatório
+        </button>
+
+        {% if current_user.role in ("admin", "surgery") %}
+        <form method="post" action="/relatorio-gustavo/run-now">
+            <button type="submit"
+            class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600">
+            Gerar agora
+            </button>
+        </form>
+        {% endif %}
+        </div>
+      </div>
+    </form>
+
+    {% if snapshot %}
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-sm opacity-80 mb-2">Mensagem 1 (Panorama)</div>
+          <pre class="whitespace-pre-wrap text-sm leading-6">{{ snapshot.message_1 }}</pre>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+          <div class="text-sm opacity-80 mb-2">Mensagem 2 (Detalhe)</div>
+          <pre class="whitespace-pre-wrap text-sm leading-6">{{ snapshot.message_2 }}</pre>
+        </div>
+      </div>
+    {% else %}
+      {% if snapshot_date %}
+        <div class="bg-yellow-900/30 border border-yellow-800 rounded-xl p-4">
+          Não existe snapshot salvo para a data selecionada.
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+</body>
+</html>
