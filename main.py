@@ -2194,7 +2194,7 @@ def mapa_delete(
     )
     return redirect("/mapa")
 
-@app.get("/relatorio-gustavo", response_class=HTMLResponse)
+@app.get("/relatorio_gustavo", response_class=HTMLResponse)
 def relatorio_gustavo_page(
     request: Request,
     snapshot_date: str = "",
@@ -2231,7 +2231,7 @@ def relatorio_gustavo_page(
             "snapshot_date": snapshot_date or "",
         },
     )
-@app.post("/relatorio-gustavo/run-now")
+@app.post("/relatorio_gustavo/run-now")
 def relatorio_gustavo_run_now(
     request: Request,
     session: Session = Depends(get_session),
@@ -2258,4 +2258,4 @@ def relatorio_gustavo_run_now(
         raise HTTPException(status_code=500, detail="Erro ao gerar snapshot")
 
     # Volta para a tela já selecionando a data gerada
-    return redirect(f"/relatorio-gustavo?snapshot_date={today_sp.isoformat()}")
+    return redirect(f"/relatorio_gustavo?snapshot_date={today_sp.isoformat()}")
