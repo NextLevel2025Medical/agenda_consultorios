@@ -4,7 +4,8 @@ from datetime import datetime, date
 from typing import Optional
 
 from sqlmodel import SQLModel, Field, UniqueConstraint
-
+from sqlalchemy import Column
+from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 
 class User(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("username"),)
@@ -53,6 +54,27 @@ class AgendaBlock(SQLModel, table=True):
 class AgendaBlockSurgeon(SQLModel, table=True):
     block_id: int = Field(foreign_key="agendablock.id", primary_key=True)
     surgeon_id: int = Field(foreign_key="user.id", primary_key=True)
+
+class GustavoAgendaSnapshot(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("snapshot_date"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Data do fechamento (referente ao horário de SP às 19h)
+    snapshot_date: date = Field(index=True)
+
+    # Quando o snapshot foi gerado (UTC)
+    generated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    period_start: date
+    period_end: date
+
+    # Mensagens prontas (WhatsApp/site)
+    message_1: str
+    message_2: str
+
+    # Estrutura opcional para renderização no site (JSON)
+    payload: Optional[dict] = Field(default=None, sa_column=Column(SQLiteJSON))
 
 class Room(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("name"),)

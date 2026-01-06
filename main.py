@@ -11,9 +11,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import Session, select, delete
 from sqlalchemy import or_, text, func
+from sqlalchemy.exc import IntegrityError
 
 from db import create_db_and_tables, get_session, engine
-from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon
+from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon, GustavoAgendaSnapshot
 from auth import hash_password, verify_password, require
 
 from pathlib import Path
@@ -23,6 +24,9 @@ import os
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+
+import threading
+import time as pytime
 
 TZ = timezone(timedelta(hours=-3))  # Brasil (-03:00)
 SLOT_MINUTES = 30
@@ -365,6 +369,319 @@ def validate_mapa_rules(
 def _weekday_pt(idx: int) -> str:
     names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     return names[idx]
+
+# ============================
+# RELATÓRIO DR. GUSTAVO (snapshot diário às 19h)
+# ============================
+
+PT_MONTHS = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+]
+DOW_ABBR = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+def _add_months(year: int, month: int, delta: int) -> tuple[int, int]:
+    """Soma delta meses em (year, month). Retorna (new_year, new_month)."""
+    m = month + delta
+    y = year + (m - 1) // 12
+    m = (m - 1) % 12 + 1
+    return y, m
+
+def _month_start(year: int, month: int) -> date:
+    return date(year, month, 1)
+
+def _month_end(year: int, month: int) -> date:
+    import calendar as _cal
+    last_day = _cal.monthrange(year, month)[1]
+    return date(year, month, last_day)
+
+def _month_label_pt(year: int, month: int) -> str:
+    # você pode escolher title() no display
+    return PT_MONTHS[month-1].upper()
+
+def _proc_bucket(procedure_type: str | None) -> str:
+    """
+    Retorna 'cir' | 'ref' | 'simp' baseado no texto.
+    - Cirurgia: 'cirurgia'
+    - Refinamento: contém 'ref'
+    - Procedimento simples: contém 'simp' ou 'proced'
+    """
+    if not procedure_type:
+        return "cir"
+    pt = procedure_type.strip().lower()
+    if pt == "cirurgia":
+        return "cir"
+    if "ref" in pt:
+        return "ref"
+    if "simp" in pt or "proced" in pt:
+        return "simp"
+    return "cir"
+
+def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> tuple[str, str, dict]:
+    """
+    Gera as duas mensagens (Panorama + Detalhe 3 meses)
+
+    Regras:
+    - meses fechados: mês atual + 2
+    - Seg/Qua sempre aparecem
+    - Sex só aparece se houver agendamento
+    - Emojis: ✅ cheio | 🟡 parcial | 🔴 livre | 🔵 bloqueio/recesso
+    - Descrição (linha 2) só aparece quando há Ref ou Proc. simples
+      (se for só Cirurgia, não mostra detalhamento)
+    """
+
+    gustavo = session.exec(select(User).where(User.username == "drgustavo")).first()
+    if not gustavo:
+        raise RuntimeError("Usuário drgustavo não encontrado no banco.")
+
+    y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
+    months = [(y0, m0), _add_months(y0, m0, 1), _add_months(y0, m0, 2)]
+
+    period_start = _month_start(months[0][0], months[0][1])
+    period_end = _month_end(months[-1][0], months[-1][1])
+
+    # carrega tudo do período (performance)
+    entries = session.exec(
+        select(SurgicalMapEntry).where(
+            SurgicalMapEntry.surgeon_id == gustavo.id,
+            SurgicalMapEntry.day >= period_start,
+            SurgicalMapEntry.day <= period_end,
+        )
+    ).all()
+
+    by_day: dict[date, list[SurgicalMapEntry]] = {}
+    for e in entries:
+        by_day.setdefault(e.day, []).append(e)
+
+    pano_lines: list[str] = [
+        "AGENDA DR. GUSTAVO AQUINO",
+        f"📅 {PT_MONTHS[months[0][1]-1].title()} • {PT_MONTHS[months[1][1]-1].title()} • {PT_MONTHS[months[2][1]-1].title()}",
+        ""
+    ]
+
+    detail_parts: list[str] = []
+    months_payload = []
+
+    for (yy, mm) in months:
+        m_start = _month_start(yy, mm)
+        m_end = _month_end(yy, mm)
+
+        lines: list[str] = []
+        prev_day: date | None = None
+        counts = {"✅": 0, "🟡": 0, "🔴": 0, "🔵": 0}
+
+        d = m_start
+        while d <= m_end:
+            dow = d.weekday()  # 0=Mon
+            is_mon_wed = dow in (0, 2)
+            is_fri = dow == 4
+
+            day_entries = by_day.get(d, [])
+
+            # sexta só aparece se tiver agendamento
+            if not is_mon_wed and not (is_fri and day_entries):
+                d += timedelta(days=1)
+                continue
+
+            # bloqueio? (seg/qua sempre consideram)
+            block_reason = validate_mapa_block_rules(session, d, gustavo.id)
+            if block_reason:
+                emoji = "🔵"
+            else:
+                total = len(day_entries)  # conta reservas também (se está reservado, não dá pra vender)
+                if is_fri:
+                    emoji = "🟡" if total >= 1 else "🔴"
+                else:
+                    if total >= 2:
+                        emoji = "✅"
+                    elif total == 1:
+                        emoji = "🟡"
+                    else:
+                        emoji = "🔴"
+
+            counts[emoji] += 1
+
+            # quebra visual entre semanas
+            if prev_day is not None and (d - prev_day).days > 3:
+                lines.append("")
+
+            lines.append(f"{DOW_ABBR[dow]} {d.strftime('%d/%m')}  {emoji}")
+
+            # descrição só se houver refino ou procedimento simples (para ficar limpo)
+            if emoji != "🔵" and day_entries:
+                cir = ref = simp = 0
+                for e in day_entries:
+                    b = _proc_bucket(e.procedure_type)
+                    if b == "ref":
+                        ref += 1
+                    elif b == "simp":
+                        simp += 1
+                    else:
+                        cir += 1
+
+                if ref > 0 or simp > 0:
+                    parts = []
+                    if cir:
+                        parts.append(f"{cir} Cir")
+                    if ref:
+                        parts.append(f"{ref} Ref")
+                    if simp:
+                        parts.append(f"{simp} Simp")
+                    lines.append(f"({ ' + '.join(parts) })")
+
+            prev_day = d
+            d += timedelta(days=1)
+
+        # Panorama do mês
+        pano_lines.append(_month_label_pt(yy, mm))
+        pano_lines.append(f"✅ {counts['✅']}")
+        pano_lines.append(f"🟡 {counts['🟡']}")
+        pano_lines.append(f"🔴 {counts['🔴']}")
+        pano_lines.append(f"🔵 {counts['🔵']}")
+        pano_lines.append("")
+
+        # Detalhe do mês
+        detail_parts.append(_month_label_pt(yy, mm))
+        detail_parts.append("")
+        detail_parts.extend(lines)
+        detail_parts.append("")
+
+        months_payload.append({
+            "year": yy,
+            "month": mm,
+            "label": _month_label_pt(yy, mm),
+            "counts": counts,
+            "lines": lines,
+        })
+
+    message_1 = "\n".join(pano_lines).strip()
+    message_2 = "\n".join(detail_parts).strip()
+
+    payload = {
+        "doctor_username": "drgustavo",
+        "snapshot_day_sp": snapshot_day_sp.isoformat(),
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "months": months_payload,
+    }
+
+    return message_1, message_2, payload
+
+def _whatsapp_send(message_1: str, message_2: str) -> None:
+    """
+    Disparo via API (opcional).
+    Só envia se WHATSAPP_API_URL / WHATSAPP_API_TOKEN / WHATSAPP_TO estiverem configuradas.
+    """
+    import requests
+
+    url = os.getenv("WHATSAPP_API_URL", "").strip()
+    token = os.getenv("WHATSAPP_API_TOKEN", "").strip()
+    to = os.getenv("WHATSAPP_TO", "").strip()
+
+    if not url or not token or not to:
+        audit_logger.info("WHATSAPP: envio ignorado (WHATSAPP_API_URL/TOKEN/TO não configurados).")
+        return
+
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    # Ajuste conforme seu provedor (BotConversa/Twilio/etc.)
+    payload = {"to": to, "messages": [message_1, message_2]}
+
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        audit_logger.info(f"WHATSAPP: status={r.status_code} body={r.text[:200]}")
+    except Exception as e:
+        audit_logger.exception(f"WHATSAPP: erro ao enviar: {e}")
+
+def save_gustavo_snapshot_and_send(session: Session, snapshot_day_sp: date) -> GustavoAgendaSnapshot:
+    """Gera e salva snapshot do dia (idempotente por snapshot_date)."""
+
+    existing = session.exec(
+        select(GustavoAgendaSnapshot).where(GustavoAgendaSnapshot.snapshot_date == snapshot_day_sp)
+    ).first()
+    if existing:
+        return existing
+
+    msg1, msg2, payload = build_gustavo_whatsapp_messages(session, snapshot_day_sp)
+
+    y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
+    y2, m2 = _add_months(y0, m0, 2)
+
+    snap = GustavoAgendaSnapshot(
+        snapshot_date=snapshot_day_sp,
+        generated_at=datetime.utcnow(),
+        period_start=_month_start(y0, m0),
+        period_end=_month_end(y2, m2),
+        message_1=msg1,
+        message_2=msg2,
+        payload=payload,
+    )
+
+    session.add(snap)
+    try:
+        session.commit()
+    except IntegrityError:
+        # idempotência em ambientes com +1 worker (Render/Uvicorn)
+        session.rollback()
+        existing = session.exec(
+            select(GustavoAgendaSnapshot).where(GustavoAgendaSnapshot.snapshot_date == snapshot_day_sp)
+        ).first()
+        if existing:
+            return existing
+        raise
+
+    session.refresh(snap)
+
+    # dispara WhatsApp usando o texto salvo
+    _whatsapp_send(msg1, msg2)
+
+    return snap
+
+def _next_run_19h_sp(now_sp: datetime) -> datetime:
+    run_today = now_sp.replace(hour=19, minute=0, second=0, microsecond=0)
+    if now_sp < run_today:
+        return run_today
+    return run_today + timedelta(days=1)
+
+def start_gustavo_snapshot_scheduler() -> None:
+    """
+    Scheduler simples (thread)
+    - roda diariamente às 19h (horário SP)
+    - fallback (Opção A): ao subir, se já passou de 19h e ainda não existe snapshot de hoje, gera imediatamente
+    """
+
+    def runner():
+        while True:
+            now_sp = datetime.now(TZ)
+            today_sp = now_sp.date()
+
+            # fallback: se já passou de 19h e não existe snapshot hoje, gera agora
+            if now_sp.hour >= 19:
+                with Session(engine) as session:
+                    exists = session.exec(
+                        select(GustavoAgendaSnapshot).where(GustavoAgendaSnapshot.snapshot_date == today_sp)
+                    ).first()
+                    if not exists:
+                        audit_logger.info(f"GUSTAVO_SNAPSHOT: fallback do dia {today_sp} (app subiu após 19h).")
+                        save_gustavo_snapshot_and_send(session, today_sp)
+
+            # dorme até o próximo 19h
+            nxt = _next_run_19h_sp(datetime.now(TZ))
+            seconds = max(5, int((nxt - datetime.now(TZ)).total_seconds()))
+            audit_logger.info(f"GUSTAVO_SNAPSHOT: próximo disparo em {nxt.isoformat()} (sleep {seconds}s).")
+            pytime.sleep(seconds)
+
+            # roda o snapshot do dia (19h)
+            run_day = datetime.now(TZ).date()
+            with Session(engine) as session:
+                try:
+                    audit_logger.info(f"GUSTAVO_SNAPSHOT: gerando snapshot do dia {run_day} (19h).")
+                    save_gustavo_snapshot_and_send(session, run_day)
+                except Exception as e:
+                    audit_logger.exception(f"GUSTAVO_SNAPSHOT: erro ao gerar/enviar: {e}")
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
 
 def validate_mapa_block_rules(session: Session, day: date, surgeon_id: int) -> str | None:
     # pega qualquer bloqueio que intersecte o dia
@@ -777,6 +1094,8 @@ def on_startup():
     with Session(engine) as session:
         seed_if_empty(session)
 
+    # ✅ Snapshot diário (19h) - Relatório Dr. Gustavo
+    start_gustavo_snapshot_scheduler()
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, session: Session = Depends(get_session)):
@@ -1874,3 +2193,69 @@ def mapa_delete(
         target_id=entry_id,
     )
     return redirect("/mapa")
+
+@app.get("/relatorio-gustavo", response_class=HTMLResponse)
+def relatorio_gustavo_page(
+    request: Request,
+    snapshot_date: str = "",
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    snaps = session.exec(
+        select(GustavoAgendaSnapshot).order_by(GustavoAgendaSnapshot.snapshot_date.desc())
+    ).all()
+    available_dates = [s.snapshot_date.isoformat() for s in snaps]
+
+    selected = None
+    if snapshot_date:
+        try:
+            y, m, d = map(int, snapshot_date.split("-"))
+            sel = date(y, m, d)
+            selected = session.exec(
+                select(GustavoAgendaSnapshot).where(GustavoAgendaSnapshot.snapshot_date == sel)
+            ).first()
+        except Exception:
+            selected = None
+
+    return templates.TemplateResponse(
+        "relatorio_gustavo.html",
+        {
+            "request": request,
+            "current_user": user,
+            "available_dates": available_dates,
+            "snapshot": selected,
+            "snapshot_date": snapshot_date or "",
+        },
+    )
+@app.post("/relatorio-gustavo/run-now")
+def relatorio_gustavo_run_now(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    # Somente admin ou surgery podem gerar manualmente
+    require(user.role in ("admin", "surgery"))
+
+    # Data de hoje no fuso de SP
+    now_sp = datetime.now(TZ)
+    today_sp = now_sp.date()
+
+    audit_logger.info(
+        f"GUSTAVO_SNAPSHOT: geração manual solicitada por {user.username} em {today_sp}"
+    )
+
+    try:
+        save_gustavo_snapshot_and_send(session, today_sp)
+    except Exception as e:
+        audit_logger.exception("Erro ao gerar snapshot manualmente")
+        raise HTTPException(status_code=500, detail="Erro ao gerar snapshot")
+
+    # Volta para a tela já selecionando a data gerada
+    return redirect(f"/relatorio-gustavo?snapshot_date={today_sp.isoformat()}")
