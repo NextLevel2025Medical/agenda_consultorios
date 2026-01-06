@@ -2203,7 +2203,7 @@ def relatorio_gustavo_page(
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
-    require(user.role in ("admin", "surgery"))
+    require(user.username == "johnny.ge")
 
     snaps = session.exec(
         select(GustavoAgendaSnapshot).order_by(GustavoAgendaSnapshot.snapshot_date.desc())
@@ -2241,7 +2241,7 @@ def relatorio_gustavo_run_now(
         return redirect("/login")
 
     # Somente admin ou surgery podem gerar manualmente
-    require(user.role in ("admin", "surgery"))
+    require(user.username == "johnny.ge")
 
     # Data de hoje no fuso de SP
     now_sp = datetime.now(TZ)
