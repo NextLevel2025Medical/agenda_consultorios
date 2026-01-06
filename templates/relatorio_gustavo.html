@@ -14,7 +14,7 @@
       <a href="/mapa" class="text-sm underline opacity-80 hover:opacity-100">Voltar</a>
     </div>
 
-    <form method="get" action="/relatorio-gustavo" class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-6">
+    <form method="get" action="/relatorio_gustavo" class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-6">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
         <div>
           <label class="block text-sm mb-1 opacity-80">Data do relatório</label>
@@ -31,8 +31,8 @@
             Ver relatório
         </button>
 
-        {% if current_user.role in ("admin", "surgery") %}
-        <form method="post" action="/relatorio-gustavo/run-now">
+        {% if current_user.username == "johnny" %}
+        <form method="post" action="/relatorio_gustavo/run-now">
             <button type="submit"
             class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600">
             Gerar agora
