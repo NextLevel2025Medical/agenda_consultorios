@@ -38,6 +38,14 @@
           </a>
         {% endif %}
 
+        {% if current_user and current_user.username == "johnny" %}
+          <a href="/relatorio-gustavo"
+            class="block w-full rounded-lg px-3 py-2 text-sm font-medium text-slate-100
+                    hover:bg-white/10 transition">
+            📊 Relatório Dr. Gustavo
+          </a>
+        {% endif %}
+
         <form method="post" action="/logout" class="w-52">
           <button class="btn-secondary top-action-btn w-full" type="submit">
             Sair
