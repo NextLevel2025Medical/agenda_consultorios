@@ -1,0 +1,906 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set parts = selected_month.split('-') %}
+{% set sel_year = parts[0] %}
+{% set sel_month = parts[1] %}
+{% set av_month_ym = av_selected_month or selected_month %}
+{% set av_parts = av_month_ym.split('-') %}
+{% set av_year = av_parts[0] %}
+{% set av_month = av_parts[1] %}
+
+<style>
+  /* Controles de mês/ano */
+  .month-controls { display: flex; gap: 10px; align-items: center; }
+  .month-controls .input { min-width: 160px; }
+
+  /* Cabeçalho do dia + botão Agendar */
+  .day-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .btn-small { padding: 10px 14px; font-size: 14px; border-radius: 12px; }
+
+  /* Visual dos itens (Paciente/Cirurgião/...) em linhas */
+  .kv { display: grid; gap: 8px; }
+  .kv-row { display: grid; grid-template-columns: 90px 1fr; gap: 12px; align-items: baseline; }
+  .kv-k { color: var(--muted); font-weight: 600; }
+  .kv-v { color: var(--text); font-weight: 600; }
+
+  /* Modal */
+  #mapaModalBackdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 16px;
+    z-index: 9999;
+  }
+  #mapaModal {
+    width: min(720px, 96vw);
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 18px;
+    padding: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap: 12px; margin-bottom: 10px; }
+  .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
+
+  /* ====== Mapa: cards por agendamento ====== */
+  .day-meta {
+    display:flex; align-items:center; gap:10px;
+  }
+
+  .badge-count{
+    display:inline-flex;
+    align-items:center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(226,184,87,.12);
+    border: 1px solid rgba(226,184,87,.22);
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: .2px;
+  }
+
+  /* container de cards */
+  .entries-grid{
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 980px){
+    .entries-grid{ grid-template-columns: 1fr; }
+  }
+
+  /* card */
+  .entry-card{
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 16px;
+    padding: 12px;
+  }
+
+    /* 🔴 BLOQUEIO — estilo alerta compacto */
+  .block-banner{
+    grid-column: 1 / -1;
+
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 14px;
+
+    padding: 10px 14px;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* remove cara de card */
+  .block-banner .entry-top,
+  .block-banner .entry-sub,
+  .block-banner .chips{
+    margin: 0;
+  }
+
+  /* título vira texto inline */
+  .block-banner .patient-name{
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.95);
+  }
+
+  /* esconder infos que poluem visual */
+  .block-banner .chips,
+  .block-banner .entry-sub{
+    display: none;
+  }
+
+
+  .entry-sub{
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  }
+  .sub-pill{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.08);
+    color: rgba(255,255,255,.82);
+    font-size: 12.5px;
+    font-weight: 650;
+  }
+
+  .entry-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .patient-name{
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .chips{
+    display:flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .chip{
+    display:inline-flex;
+    align-items:center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.08);
+  }
+
+  .chip-spot{
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    background: var(--muted);
+    opacity: .9;
+  }
+
+  /* cores rápidas por tipo */
+  .chip.type-cirurgia .chip-spot{ background: var(--ok); }
+  .chip.type-refinamento .chip-spot{ background: var(--warn); }
+  .chip.type-simples .chip-spot{ background: #60A5FA; }
+  
+  /* slot HSR destaque */
+  .chip.hsr-yes{
+    border-color: rgba(226,184,87,.30);
+    background: rgba(226,184,87,.10);
+  }
+  .entry-actions{
+    display:flex; justify-content:flex-end; margin-top: 10px;
+  }
+  .entry-actions .btn-secondary{
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 12px;
+  }
+
+  .alert{
+    margin: 0 0 14px 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(239,68,68,.10);
+    border: 1px solid rgba(239,68,68,.25);
+    color: rgba(255,255,255,.92);
+    font-weight: 700;
+  }
+
+  .entry-card.pre{
+    background: rgba(226,184,87,.10);
+    border-color: rgba(226,184,87,.28);
+  }
+
+  .entry-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .card {
+    margin-bottom: 25px;
+    transition: transform 0.2s;
+  }
+  .card:hover {
+    transform: scale(1.02);
+  }
+
+    /* ===== Datas Prioritárias (card premium) ===== */
+  .priority-wrap{
+    display:flex;
+    justify-content:center;
+    margin: 20px 0;
+  }
+
+  .priority-card{
+    width: min(900px, 92vw);
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 18px;
+    padding: 16px 18px;
+    box-shadow: 0 18px 55px rgba(0,0,0,.35);
+  }
+
+  .priority-head{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-bottom: 10px;
+  }
+
+  .priority-title{
+    font-size: 16px;
+    font-weight: 900;
+    text-align: center;
+    width: 100%;
+    color: rgba(255,255,255,.92);
+    letter-spacing: .2px;
+  }
+
+  .priority-sub{
+    font-size: 12.5px;
+    font-weight: 700;
+    color: rgba(255,255,255,.70);
+  }
+
+  .priority-list{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 22px; /* linha / coluna */
+    margin-top: 6px;
+  }
+
+  .priority-item{
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(255,255,255,.90);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.15;
+    padding: 2px 0;
+  }
+
+  /* variações por modo (você já passa priority_mode do backend) */
+  .priority-card.red{
+    border-color: rgba(239,68,68,.22);
+    background: linear-gradient(180deg, rgba(239,68,68,.06), rgba(255,255,255,.02));
+  }
+
+  .priority-card.yellow{
+    border-color: rgba(226,184,87,.25);
+    background: linear-gradient(180deg, rgba(226,184,87,.08), rgba(255,255,255,.02));
+  }
+
+  .priority-card.green{
+    border-color: rgba(16,185,129,.20);
+    background: linear-gradient(180deg, rgba(16,185,129,.08), rgba(255,255,255,.02));
+  }
+
+  .priority-ok{
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(255,255,255,.88);
+  }
+
+  .filters-panel{
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.04);
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  }
+
+  .day-block{
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.03);
+    box-shadow: 0 16px 40px rgba(0,0,0,.30);
+  }
+
+    /* Força o botão "Agendar" do cabeçalho do dia a não virar barra */
+  .day-head .day-agendar-btn{
+    width: auto !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px !important;
+    border-radius: 12px !important;
+  }
+
+  /* Se o globals.css estiver setando .btn-cta como 100% */
+  .day-head .btn-cta{
+    width: auto !important;
+    display: inline-flex !important;
+  }
+  /* ===== Consulta de Disponibilidade (card irmão do Priority) ===== */
+  .avail-wrap{
+    display:flex;
+    justify-content:center;
+    margin-bottom: 22px;
+  }
+
+  .avail-card{
+    width: min(980px, 100%);
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(18,24,36,.55);
+    box-shadow: 0 18px 60px rgba(0,0,0,.45);
+    padding: 18px 18px 16px 18px;
+  }
+
+  .avail-title{
+    font-size: 16px;
+    font-weight: 900;
+    text-align: center;
+    width: 100%;
+    color: rgba(255,255,255,.92);
+  }
+
+  .avail-grid{
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr 0.8fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .avail-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .avail-results{
+    margin-top: 14px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    padding-top: 12px;
+  }
+
+  .avail-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.03);
+    margin-bottom: 8px;
+  }
+
+  .avail-left{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    font-weight: 800;
+  }
+
+  .avail-date{
+    min-width: 56px;
+  }
+
+  .avail-emoji{
+    width: 20px;
+    text-align:center;
+  }
+</style>
+
+<div class="page">
+  <div class="page-head">
+    <div class="priority-wrap">
+      <div class="priority-card {{ priority_mode }}">
+        <div class="priority-head">
+          <div>
+            <div class="priority-title">📅 Datas Prioritárias (Próximos 90 dias)</div>
+          </div>
+        </div>
+
+        {% if priority_items and priority_items|length > 0 %}
+          <div class="priority-list">
+            {% for item in priority_items %}
+              <div class="priority-item">{{ item }}</div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="priority-ok">✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="avail-wrap">
+      <div class="avail-card">
+        <div class="avail-title">🔎 Consulta de Disponibilidade</div>
+
+        <form method="get" action="/mapa">
+          <!-- mantém o mês atual do mapa INALTERADO -->
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="av_do" value="1">
+
+          <div class="avail-grid">
+            <select class="input" name="av_surgeon_id" required>
+              <option value="">Selecione o cirurgião</option>
+              {% for s in surgeons %}
+                <option value="{{ s.id }}" {% if av_selected_surgeon_id and s.id == av_selected_surgeon_id %}selected{% endif %}>
+                  {{ s.full_name }}
+                </option>
+              {% endfor %}
+            </select>
+
+            <select class="input" name="av_month" required>
+              <option value="{{ av_year }}-01" {% if av_month == "01" %}selected{% endif %}>Janeiro</option>
+              <option value="{{ av_year }}-02" {% if av_month == "02" %}selected{% endif %}>Fevereiro</option>
+              <option value="{{ av_year }}-03" {% if av_month == "03" %}selected{% endif %}>Março</option>
+              <option value="{{ av_year }}-04" {% if av_month == "04" %}selected{% endif %}>Abril</option>
+              <option value="{{ av_year }}-05" {% if av_month == "05" %}selected{% endif %}>Maio</option>
+              <option value="{{ av_year }}-06" {% if av_month == "06" %}selected{% endif %}>Junho</option>
+              <option value="{{ av_year }}-07" {% if av_month == "07" %}selected{% endif %}>Julho</option>
+              <option value="{{ av_year }}-08" {% if av_month == "08" %}selected{% endif %}>Agosto</option>
+              <option value="{{ av_year }}-09" {% if av_month == "09" %}selected{% endif %}>Setembro</option>
+              <option value="{{ av_year }}-10" {% if av_month == "10" %}selected{% endif %}>Outubro</option>
+              <option value="{{ av_year }}-11" {% if av_month == "11" %}selected{% endif %}>Novembro</option>
+              <option value="{{ av_year }}-12" {% if av_month == "12" %}selected{% endif %}>Dezembro</option>
+            </select>
+
+            <select class="input" name="av_year" disabled>
+              <!-- só visual, porque o valor real está embutido no av_month (YYYY-MM) -->
+              <option selected>{{ av_year }}</option>
+            </select>
+
+            <select class="input" name="av_procedure_type" required>
+              <option {% if av_selected_procedure_type == "Cirurgia" %}selected{% endif %}>Cirurgia</option>
+              <option {% if av_selected_procedure_type == "Refinamento" %}selected{% endif %}>Refinamento</option>
+              <option {% if av_selected_procedure_type == "Procedimento Simples" %}selected{% endif %}>Procedimento Simples</option>
+            </select>
+          </div>
+
+          <div class="avail-actions">
+            <button class="btn-cta" type="submit">Consultar</button>
+          </div>
+        </form>
+
+        {% if av_results is defined %}
+          <div class="avail-results">
+            <div style="font-weight:900; margin-bottom:10px;">Datas disponíveis:</div>
+
+            {% if av_results and av_results|length > 0 %}
+              {% for r in av_results %}
+                <div class="avail-row">
+                  <div class="avail-left">
+                    <span class="avail-date">{{ r.label }}</span>
+                    <span class="avail-emoji">{{ r.emoji }}</span>
+                  </div>
+
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    data-open-mapa-modal
+                    data-day="{{ r.day_iso }}"
+                    data-human="{{ r.human }}"
+                    data-surgeon="{{ av_selected_surgeon_id }}"
+                    data-procedure="{{ av_selected_procedure_type }}"
+                  >
+                    Reservar
+                  </button>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="muted">Nenhuma data disponível para os filtros selecionados.</div>
+            {% endif %}
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <div class="filters-panel">
+      <div class="controls">
+        <label class="lbl">Mês/Ano</label>
+        <div class="month-controls">
+        <select id="monthSelect" class="input">
+          <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
+          <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
+          <option value="03" {% if sel_month == "03" %}selected{% endif %}>Março</option>
+          <option value="04" {% if sel_month == "04" %}selected{% endif %}>Abril</option>
+          <option value="05" {% if sel_month == "05" %}selected{% endif %}>Maio</option>
+          <option value="06" {% if sel_month == "06" %}selected{% endif %}>Junho</option>
+          <option value="07" {% if sel_month == "07" %}selected{% endif %}>Julho</option>
+          <option value="08" {% if sel_month == "08" %}selected{% endif %}>Agosto</option>
+          <option value="09" {% if sel_month == "09" %}selected{% endif %}>Setembro</option>
+          <option value="10" {% if sel_month == "10" %}selected{% endif %}>Outubro</option>
+          <option value="11" {% if sel_month == "11" %}selected{% endif %}>Novembro</option>
+          <option value="12" {% if sel_month == "12" %}selected{% endif %}>Dezembro</option>
+        </select>
+
+        {% set y = sel_year|int %}
+        <select id="yearSelect" class="input">
+          {% for yy in range(y - 1, y + 3) %}
+            <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
+          {% endfor %}
+        </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    {% if err %}
+        <div class="alert">{{ err }}</div>
+    {% endif %}
+    {% for day in days %}
+      {% set key = day.isoformat() %}
+      {% set items = entries_by_day.get(key, []) %}
+      {% set day_blocks = blocks_by_day.get(key, []) %}
+
+      <div class="day-block">
+        <!-- (3) Cabeçalho do dia + botão que abre modal -->
+        <div class="day-head">
+            <div class="day-title day-meta">
+            <div>
+                <strong>{{ day.strftime("%d/%m/%Y") }}</strong>
+                <span class="muted">· {{ weekday_map[day.weekday()] }}</span>
+            </div>
+
+            {% if items and items|length > 0 %} 
+                <span class="badge-count">{{ items|length }} agendamento{{ "s" if items|length > 1 else "" }}</span>
+            {% endif %}
+            </div>
+
+
+          {% set iso = day.isoformat() %}
+
+          {% if iso in blocked_all_days %}
+            <button
+              class="w-full mt-2 px-3 py-2 rounded bg-slate-700 text-slate-400 cursor-not-allowed"
+              disabled
+              title="Dia bloqueado para todos os profissionais"
+            >
+              Bloqueado
+            </button>
+          {% else %}
+            <button
+              type="button"
+              class="btn-cta btn-small day-agendar-btn"
+              data-open-mapa-modal="1"
+              data-day="{{ iso }}"
+              data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+            >
+              Agendar
+            </button>
+          {% endif %}
+
+        </div>
+
+        {% if (items and items|length > 0) or (day_blocks and day_blocks|length > 0) %}
+        <div class="entries-grid">
+
+
+            {# ✅ 1) Cards de bloqueio primeiro #}
+            {% for b in day_blocks %}
+              {% set creator = users_by_id.get(b.created_by_id) %}
+              {% set surgeons_list = block_surgeons_map.get(b.id, ["—"]) %}
+              <div class="entry-card block block-banner">
+                <div class="entry-top">
+                  <div>
+                    <div class="patient-name">
+                      BLOQUEIO DE AGENDA:
+                      {% if b.applies_to_all %}
+                        Todos os profissionais
+                      {% else %}
+                        {{ surgeons_list | join(", ") }}
+                      {% endif %}
+                      — {{ b.reason }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="entry-sub">
+                  <span class="sub-pill">⛔ {{ b.reason or "—" }}</span>
+                  <span class="sub-pill">👤 {{ creator.full_name if creator else "—" }}</span>
+                  <span class="sub-pill">📌 Criado em {{ fmt_brasilia(b.created_at) }}</span>
+                </div>
+
+                <div class="chips">
+                  <span class="chip">
+                    <span class="chip-spot" style="background: rgba(239,68,68,0.9);"></span>
+                    Profissionais: {{ surgeons_list | join(", ") }}
+                  </span>
+                </div>
+              </div>
+            {% endfor %}
+
+            {# ✅ 2) Cards de agendamento/pre-reserva (seus atuais) #}
+            {% for e in items %}
+            {% set surgeon =
+                (surgeons | selectattr("id", "equalto", e.surgeon_id) | first)
+                if (surgeons | selectattr("id", "equalto", e.surgeon_id) | list) else None
+            %}
+
+            {% set type_class =
+                "type-cirurgia" if e.procedure_type == "Cirurgia"
+                else ("type-refinamento" if e.procedure_type == "Refinamento" else "type-simples")
+            %}
+
+            <div class="entry-card {% if e.is_pre_reservation %}pre{% endif %}">
+                <div class="entry-top">
+                <div>
+                    <div class="patient-name">{{ e.patient_name }}</div>
+                    <div class="muted" style="margin-top:4px; font-weight:600;margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 10px;">
+                    {{ day.strftime("%d/%m/%Y") }}
+                    </div>
+                </div>
+                </div>
+
+                {% set creator = users_by_id.get(e.created_by_id) %}
+                <div class="entry-sub">
+                    <span class="sub-pill">👤 {{ creator.full_name if creator else "—" }}</span>
+                    <span class="sub-pill">📌 Agendado em {{ fmt_brasilia(e.created_at) }}</span>
+                    {% if e.is_pre_reservation %}
+                        <span class="sub-pill" style="border-color: rgba(226,184,87,.35); background: rgba(226,184,87,.10);">
+                            🟡 Pré-reserva
+                        </span>
+                    {% endif %}
+                </div>
+
+                <div class="chips">
+                <span class="chip">
+                    <span class="chip-spot"></span>
+                    {{ surgeon.full_name if surgeon else "Cirurgião: —" }}
+                </span>
+
+                <span class="chip {{ type_class }}">
+                    <span class="chip-spot"></span>
+                    {{ e.procedure_type }}
+                </span>
+
+                <span class="chip">
+                    <span class="chip-spot"></span>
+                    {{ e.location }}
+                </span>
+
+                <span class="chip {% if e.uses_hsr %}hsr-yes{% endif %}">
+                    <span class="chip-spot" style="{% if e.uses_hsr %}background: var(--accent);{% endif %}"></span>
+                    Slot: {{ "HSR" if e.uses_hsr else "Não" }}
+                </span>
+                </div>
+
+                <div class="entry-actions">
+                <button
+                    type="button"
+                    class="btn-secondary"
+                    data-edit-mapa="1"
+                    data-entry-id="{{ e.id }}"
+                    data-day="{{ e.day.isoformat() }}"
+                    data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+                    data-patient="{{ e.patient_name }}"
+                    data-surgeon="{{ e.surgeon_id }}"
+                    data-procedure="{{ e.procedure_type }}"
+                    data-location="{{ e.location }}"
+                    data-hsr="{{ 1 if e.uses_hsr else 0 }}"
+                    data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
+                >
+                    Editar
+                </button>
+
+                <form method="post" action="/mapa/delete/{{ e.id }}">
+                    <button class="btn-secondary" type="submit">Excluir</button>
+                </form>
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+      </div>
+
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Modal único reutilizável -->
+<div id="mapaModalBackdrop" aria-hidden="true">
+  <div id="mapaModal" role="dialog" aria-modal="true" aria-labelledby="mapaModalTitle">
+    <div class="modal-head">
+      <div>
+        <div class="kicker">Novo agendamento</div>
+        <div class="h2" id="mapaModalTitle">—</div>
+      </div>
+      <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
+    </div>
+
+    <form id="mapaModalForm" class="day-form space-y-4" method="post" action="/mapa/create">
+      <div id="mapaModalErr" class="alert" style="display:none;"></div>
+      <label class="block text-sm text-slate-300 mb-1">Vendedor</label>
+
+      {% if current_user and current_user.username == "johnny.ge" %}
+        <select name="seller_id" class="input w-full">
+          {% for s in sellers %}
+            <option value="{{ s.id }}">{{ s.full_name }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input type="hidden" name="seller_id" value="{{ current_user.id }}">
+        <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
+      {% endif %}
+      <input type="hidden" name="day_iso" id="mapaModalDayIso" />
+      <input class="input" name="patient_name" placeholder="Nome do paciente" required />
+
+      <select class="input" name="surgeon_id" required>
+        <option value="">Selecione o cirurgião</option>
+        {% for s in surgeons %}
+          <option value="{{ s.id }}">{{ s.full_name }}</option>
+        {% endfor %}
+      </select>
+
+      <select class="input" name="procedure_type" required>
+        <option>Cirurgia</option>
+        <option>Refinamento</option>
+        <option>Procedimento Simples</option>
+      </select>
+
+      <select class="input" name="location" required>
+        <option>Hospital São Rafael</option>
+        <option>Materdei</option>
+        <option>HCP</option>
+        <option>Concept Clinic</option>
+      </select>
+
+      <label class="chk">
+        <input type="checkbox" name="uses_hsr" />
+        Usa slot HSR?
+      </label>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="mapaModalCancelBtn">Cancelar</button>
+        <button class="btn-secondary" type="submit" name="mode" value="reserve">Reservar</button>
+        <button class="btn-cta" type="submit" name="mode" value="book">Agendar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const backdrop = document.getElementById("mapaModalBackdrop");
+  const closeBtn = document.getElementById("mapaModalCloseBtn");
+  const cancelBtn = document.getElementById("mapaModalCancelBtn");
+  const titleEl = document.getElementById("mapaModalTitle");
+  const dayIsoEl = document.getElementById("mapaModalDayIso");
+  const formEl = document.getElementById("mapaModalForm");
+  const modalErrEl = document.getElementById("mapaModalErr");
+
+  function setModalError(msg){
+    if(!modalErrEl) return;
+    if(msg){
+      modalErrEl.textContent = msg;
+      modalErrEl.style.display = "block";
+    } else {
+      modalErrEl.textContent = "";
+      modalErrEl.style.display = "none";
+    }
+  }
+
+  function openModalBase(dayIso, dayHuman) {
+    formEl.reset();
+    dayIsoEl.value = dayIso;
+    titleEl.textContent = dayHuman;
+    setModalError("");
+    backdrop.style.display = "flex";
+
+    // foca no time
+    const first = formEl.querySelector('input[name="patient_name"]');
+    if (first) first.focus();
+  }
+
+  // NOVO
+  function openCreateModal(dayIso, dayHuman) {
+    formEl.action = "/mapa/create";
+    openModalBase(dayIso, dayHuman);
+  }
+
+  // EDITAR
+  function openEditModalFromBtn(btn) {
+    const d = btn.dataset;
+
+    formEl.action = "/mapa/update/" + d.entryId;
+
+    openModalBase(d.day, d.human);
+
+    formEl.querySelector('input[name="patient_name"]').value = d.patient || "";
+
+    formEl.querySelector('select[name="surgeon_id"]').value = d.surgeon || "";
+    formEl.querySelector('select[name="procedure_type"]').value = d.procedure || "Cirurgia";
+    formEl.querySelector('select[name="location"]').value = d.location || "Hospital São Rafael";
+
+    // checkbox HSR
+    const hsr = formEl.querySelector('input[name="uses_hsr"]');
+    if (hsr) hsr.checked = (d.hsr === "1");
+
+    // (opcional) você pode deixar o estado pré-reserva/agenda pro clique do botão (Reservar/Agendar)
+    // pois quem define é o botão submit (mode=reserve ou mode=book).
+  }
+
+  function closeModal() {
+    backdrop.style.display = "none";
+  }
+
+  // botões "Agendar" do dia
+  document.querySelectorAll("[data-open-mapa-modal]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openCreateModal(btn.getAttribute("data-day"), btn.getAttribute("data-human"));
+
+      // se vier do card de disponibilidade, preenche defaults:
+      const s = btn.getAttribute("data-surgeon");
+      const p = btn.getAttribute("data-procedure");
+
+      if (s) {
+        const el = formEl.querySelector('select[name="surgeon_id"]');
+        if (el) el.value = s;
+      }
+      if (p) {
+        const el = formEl.querySelector('select[name="procedure_type"]');
+        if (el) el.value = p;
+      }
+    });
+  });
+
+  // botões "Editar"
+  document.querySelectorAll("[data-edit-mapa]").forEach(btn => {
+    btn.addEventListener("click", () => openEditModalFromBtn(btn));
+  });
+
+  closeBtn.addEventListener("click", closeModal);
+  cancelBtn.addEventListener("click", closeModal);
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
+</script>
+
+<script>
+  (function(){
+    const monthSel = document.getElementById("monthSelect");
+    const yearSel  = document.getElementById("yearSelect");
+    if(!monthSel || !yearSel) return;
+
+    function go(){
+      const m = monthSel.value; // "01", "02", ...
+      const y = yearSel.value;  // "2026"
+      window.location.href = `/mapa?month=${y}-${m}`;
+    }
+
+    monthSel.addEventListener("change", go);
+    yearSel.addEventListener("change", go);
+  })();
+</script>
+
+{% endblock %}
