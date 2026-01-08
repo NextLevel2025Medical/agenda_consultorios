@@ -1035,11 +1035,34 @@ def comissoes_page(
         except ValueError:
             seller_id_int = None
 
-    q = select(SurgicalMapEntry).where(
-        SurgicalMapEntry.procedure_type == "Cirurgia",
-        SurgicalMapEntry.is_pre_reservation == False,
-        SurgicalMapEntry.created_at >= period_start,
-        SurgicalMapEntry.created_at <= period_end,
+    # 1) Subquery: pega o primeiro agendamento (created_at mais antigo) por paciente
+    first_created_subq = (
+        select(
+            SurgicalMapEntry.patient_name,
+            func.min(SurgicalMapEntry.created_at).label("first_created_at"),
+        )
+        .where(
+            SurgicalMapEntry.procedure_type == "Cirurgia",
+            SurgicalMapEntry.is_pre_reservation == False,
+            SurgicalMapEntry.patient_name.is_not(None),
+            SurgicalMapEntry.patient_name != "",
+        )
+        .group_by(SurgicalMapEntry.patient_name)
+        .subquery()
+    )
+
+    # 2) Query principal: só traz as cirurgias que são o PRIMEIRO agendamento do paciente
+    q = (
+        select(SurgicalMapEntry)
+        .join(
+            first_created_subq,
+            (SurgicalMapEntry.patient_name == first_created_subq.c.patient_name)
+            & (SurgicalMapEntry.created_at == first_created_subq.c.first_created_at),
+        )
+        .where(
+            SurgicalMapEntry.created_at >= period_start,
+            SurgicalMapEntry.created_at <= period_end,
+        )
     )
 
     if seller_id_int is not None:
@@ -1929,12 +1952,16 @@ def mapa_create(
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
     seller_id: Optional[int] = Form(None),
+    force_override: Optional[str] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
+    
+    is_johnny = (user.username == "johnny.ge")
+    override = is_johnny and bool(force_override)
 
     # ✅ regra do vendedor (depois do user existir!)
     if user.username != "johnny.ge":
@@ -1947,7 +1974,7 @@ def mapa_create(
     is_pre = (mode == "reserve")
 
     block_err = validate_mapa_block_rules(session, day, surgeon_id)
-    if block_err:
+    if block_err and not override:
         month = day.strftime("%Y-%m")
         from urllib.parse import quote
         audit_event(request, user, "surgical_map_blocked_by_agenda_block", success=False, message=block_err)
@@ -1966,8 +1993,12 @@ def mapa_create(
             f"&seller_id={seller_id_final}"
         )
 
+    # se passou com override, registra auditoria
+    if block_err and override:
+        audit_event(request, user, "surgical_map_override_agenda_block", success=True, message=block_err)
+
     err = validate_mapa_rules(session, day, surgeon_id, procedure_type, uses_hsr=bool(uses_hsr))
-    if err:
+    if err and not override:
         month = day.strftime("%Y-%m")
         audit_event(
             request,
@@ -2146,6 +2177,9 @@ def mapa_update(
 
     month = day.strftime("%Y-%m")
     return redirect(f"/mapa?month={month}")
+
+    if err and override:
+        audit_event(request, user, "surgical_map_override_rule", success=True, message=err)
 
 @app.post("/mapa/delete/{entry_id}")
 def mapa_delete(
