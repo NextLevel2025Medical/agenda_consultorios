@@ -550,8 +550,41 @@
 
   <div class="panel">
     {% if err %}
-        <div class="alert">{{ err }}</div>
+      <div class="alert">
+        {{ err }}
+
+        {% if current_user and current_user.username == "johnny.ge" and request.query_params.get("day_iso") %}
+          <form method="post" action="/mapa/create" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
+            <input type="hidden" name="mode" value="{{ request.query_params.get('mode', 'book') }}">
+            <input type="hidden" name="time_hhmm" value="{{ request.query_params.get('time_hhmm', '') }}">
+            <input type="hidden" name="patient_name" value="{{ request.query_params.get('patient_name', '') }}">
+            <input type="hidden" name="surgeon_id" value="{{ request.query_params.get('surgeon_id', '') }}">
+            <input type="hidden" name="procedure_type" value="{{ request.query_params.get('procedure_type', '') }}">
+            <input type="hidden" name="location" value="{{ request.query_params.get('location', '') }}">
+
+            {% if request.query_params.get('uses_hsr') == '1' %}
+              <input type="hidden" name="uses_hsr" value="1">
+            {% endif %}
+
+            {% if request.query_params.get('seller_id') %}
+              <input type="hidden" name="seller_id" value="{{ request.query_params.get('seller_id') }}">
+            {% endif %}
+
+            <input type="hidden" name="force_override" value="1">
+
+            <button type="submit" class="btn-cta btn-small">
+              Agendar mesmo assim
+            </button>
+
+            <span class="muted" style="font-size:12px;">
+              (Somente Johnny pode ignorar a regra)
+            </span>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
+
     {% for day in days %}
       {% set key = day.isoformat() %}
       {% set items = entries_by_day.get(key, []) %}
