@@ -14,7 +14,7 @@ from sqlalchemy import or_, text, func
 from sqlalchemy.exc import IntegrityError
 
 from db import create_db_and_tables, get_session, engine
-from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon, GustavoAgendaSnapshot
+from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon, GustavoAgendaSnapshot, LodgingReservation
 from auth import hash_password, verify_password, require
 
 from pathlib import Path
@@ -365,6 +365,48 @@ def validate_mapa_rules(
 
     # Outros cirurgiões (se existirem) sem regras específicas aqui
     return None
+
+# ============================================================
+# HOSPEDAGEM (2 suítes + 1 apartamento) - reservas por período
+# check_out é NÃO inclusivo (data de saída)
+# ============================================================
+
+def validate_lodging_period(check_in: date, check_out: date) -> Optional[str]:
+    if not check_in or not check_out:
+        return "Informe check-in e check-out."
+    if check_out <= check_in:
+        return "Período inválido: check-out deve ser após check-in."
+    return None
+
+
+def validate_lodging_conflict(
+    session: Session,
+    unit: str,
+    check_in: date,
+    check_out: date,
+    exclude_id: Optional[int] = None,
+) -> Optional[str]:
+    # conflito se: novo_in < existente_out AND novo_out > existente_in
+    q = select(LodgingReservation).where(
+        LodgingReservation.unit == unit,
+        LodgingReservation.check_in < check_out,
+        LodgingReservation.check_out > check_in,
+    )
+    if exclude_id is not None:
+        q = q.where(LodgingReservation.id != exclude_id)
+
+    exists = session.exec(q).first()
+    if exists:
+        return "Hospedagem indisponível: já existe reserva nesse período para esta acomodação."
+    return None
+
+
+def human_unit(unit: str) -> str:
+    return {
+        "suite_1": "Suíte 1",
+        "suite_2": "Suíte 2",
+        "apto": "Apartamento",
+    }.get(unit, unit)
 
 def _weekday_pt(idx: int) -> str:
     names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
@@ -2080,13 +2122,16 @@ def mapa_update(
     procedure_type: str = Form(...),
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
-        seller_id: Optional[int] = Form(None),
+    seller_id: Optional[int] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
+    
+    is_johnny = (user.username == "johnny.ge")
+    override = is_johnny and bool(force_override)
     
     # ✅ regra do vendedor (mesma do /mapa/create)
     if user.username != "johnny.ge":
@@ -2293,3 +2338,258 @@ def relatorio_gustavo_run_now(
 
     # Volta para a tela já selecionando a data gerada
     return redirect(f"/relatorio_gustavo?snapshot_date={today_sp.isoformat()}")
+
+# ============================================================
+# HOSPEDAGEM
+# ============================================================
+
+@app.get("/hospedagem", response_class=HTMLResponse)
+def hospedagem_page(
+    request: Request,
+    month: Optional[str] = None,
+    err: Optional[str] = None,
+    open: Optional[str] = None,
+    unit: Optional[str] = None,
+    check_in: Optional[str] = None,
+    check_out: Optional[str] = None,
+    patient_name: Optional[str] = None,
+    is_pre_reservation: Optional[str] = None,
+    edit_id: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    selected_month = safe_selected_month(month)
+
+    y, m = map(int, selected_month.split("-"))
+    first_day = date(y, m, 1)
+    _, last_day = calendar.monthrange(y, m)
+    next_month_first = (date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1))
+
+    days = [date(y, m, d) for d in range(1, last_day + 1)]
+    day_index = {d: i for i, d in enumerate(days)}
+
+    units = ["suite_1", "suite_2", "apto"]
+
+    # busca reservas que encostam no mês (por período)
+    q = select(LodgingReservation).where(
+        LodgingReservation.check_in < next_month_first,
+        LodgingReservation.check_out > first_day,
+    )
+    reservations = session.exec(q).all()
+
+    # barras por unidade (grid com colunas = dias)
+    bars_by_unit: dict[str, list[dict]] = {u: [] for u in units}
+
+    for r in reservations:
+        u = r.unit or ""
+        if u not in bars_by_unit:
+            continue
+
+        # clamp dentro do mês visível
+        start = max(r.check_in, first_day)
+        end = min(r.check_out, next_month_first)
+
+        if start >= end:
+            continue
+
+        start_col = day_index[start] + 1
+        end_col = day_index[end - timedelta(days=1)] + 2  # fim exclusivo
+
+        bars_by_unit[u].append(
+            {
+                "id": r.id,
+                "patient_name": r.patient_name,
+                "check_in": r.check_in.strftime("%d/%m/%Y"),
+                "check_out": r.check_out.strftime("%d/%m/%Y"),
+                "start_col": start_col,
+                "end_col": end_col,
+                "is_pre": 1 if r.is_pre_reservation else 0,
+            }
+        )
+
+    # ordena barras na linha
+    for u in bars_by_unit:
+        bars_by_unit[u].sort(key=lambda b: (b["start_col"], b["end_col"]))
+
+    return templates.TemplateResponse(
+        "hospedagem.html",
+        {
+            "request": request,
+            "current_user": user,
+            "selected_month": selected_month,
+            "days": days,
+            "units": units,
+            "bars_by_unit": bars_by_unit,
+            "human_unit": human_unit,
+            "err": err or "",
+            "open": open or "",
+            "unit_prefill": unit or "",
+            "check_in_prefill": check_in or "",
+            "check_out_prefill": check_out or "",
+            "patient_prefill": patient_name or "",
+            "pre_prefill": 1 if (is_pre_reservation == "1") else 0,
+            "edit_id": edit_id or "",
+        },
+    )
+
+
+@app.post("/hospedagem/create")
+def hospedagem_create(
+    request: Request,
+    unit: str = Form(...),
+    patient_name: str = Form(...),
+    check_in: str = Form(...),
+    check_out: str = Form(...),
+    is_pre_reservation: Optional[str] = Form(None),
+    note: Optional[str] = Form(None),
+    surgery_entry_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    selected_month = safe_selected_month(None)
+
+    try:
+        ci = date.fromisoformat(check_in)
+        co = date.fromisoformat(check_out)
+    except Exception:
+        return redirect(f"/hospedagem?err={quote('Datas inválidas.')}&open=1")
+
+    e = validate_lodging_period(ci, co)
+    if e:
+        return redirect(f"/hospedagem?err={quote(e)}&open=1")
+
+    e = validate_lodging_conflict(session, unit, ci, co)
+    if e:
+        return redirect(
+            f"/hospedagem?err={quote(e)}&open=1"
+            f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
+            f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+        )
+
+    row = LodgingReservation(
+        unit=unit,
+        patient_name=patient_name.strip().upper(),
+        check_in=ci,
+        check_out=co,
+        is_pre_reservation=bool(is_pre_reservation),
+        note=(note or None),
+        created_by_id=user.id,
+        updated_by_id=user.id,
+        surgery_entry_id=surgery_entry_id,
+    )
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        action="lodging_create",
+        success=True,
+        message=None,
+        target_type="lodging",
+        target_id=row.id,
+    )
+
+    month_param = f"{ci.year:04d}-{ci.month:02d}"
+    return redirect(f"/hospedagem?month={month_param}")
+
+
+@app.post("/hospedagem/update/{res_id}")
+def hospedagem_update(
+    request: Request,
+    res_id: int,
+    unit: str = Form(...),
+    patient_name: str = Form(...),
+    check_in: str = Form(...),
+    check_out: str = Form(...),
+    is_pre_reservation: Optional[str] = Form(None),
+    note: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    row = session.get(LodgingReservation, res_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Reserva não encontrada")
+
+    try:
+        ci = date.fromisoformat(check_in)
+        co = date.fromisoformat(check_out)
+    except Exception:
+        return redirect(f"/hospedagem?err={quote('Datas inválidas.')}&open=1")
+
+    e = validate_lodging_period(ci, co)
+    if e:
+        return redirect(f"/hospedagem?err={quote(e)}&open=1&edit_id={res_id}")
+
+    e = validate_lodging_conflict(session, unit, ci, co, exclude_id=res_id)
+    if e:
+        return redirect(f"/hospedagem?err={quote(e)}&open=1&edit_id={res_id}")
+
+    row.unit = unit
+    row.patient_name = patient_name.strip().upper()
+    row.check_in = ci
+    row.check_out = co
+    row.is_pre_reservation = bool(is_pre_reservation)
+    row.note = (note or None)
+    row.updated_by_id = user.id
+    row.updated_at = datetime.utcnow()
+
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        action="lodging_update",
+        success=True,
+        message=None,
+        target_type="lodging",
+        target_id=row.id,
+    )
+
+    month_param = f"{ci.year:04d}-{ci.month:02d}"
+    return redirect(f"/hospedagem?month={month_param}")
+
+
+@app.post("/hospedagem/delete/{res_id}")
+def hospedagem_delete(
+    request: Request,
+    res_id: int,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    row = session.get(LodgingReservation, res_id)
+    if not row:
+        return redirect("/hospedagem")
+
+    month_param = f"{row.check_in.year:04d}-{row.check_in.month:02d}"
+
+    session.delete(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        action="lodging_delete",
+        success=True,
+        message=None,
+        target_type="lodging",
+        target_id=res_id,
+    )
+    return redirect(f"/hospedagem?month={month_param}")

@@ -140,3 +140,27 @@ class AuditLog(SQLModel, table=True):
     method: Optional[str] = None
 
     extra_json: Optional[str] = None  # json.dumps(extra)
+
+class LodgingReservation(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # suite_1 | suite_2 | apto
+    unit: str = Field(index=True)
+
+    # pré-reserva bloqueia igual, mas fica marcado
+    is_pre_reservation: bool = Field(default=False, index=True)
+
+    patient_name: str = Field(index=True)
+    check_in: date = Field(index=True)
+    check_out: date = Field(index=True)  # NÃO inclusivo (data de saída)
+
+    note: Optional[str] = None
+
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    # opcional: vincular à cirurgia (SurgicalMapEntry)
+    surgery_entry_id: Optional[int] = Field(default=None, foreign_key="surgicalmapentry.id", index=True)
+
