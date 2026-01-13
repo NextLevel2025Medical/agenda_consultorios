@@ -2367,13 +2367,28 @@ def hospedagem_page(
 
     units = ["suite_1", "suite_2", "apto"]
 
+    audit_logger.info(
+        f"HOSPEDAGEM_PAGE: selected_month={selected_month} "
+        f"first_day={first_day} next_month_first={next_month_first}"
+    )
+    
     # busca reservas que encostam no mês (por período)
     q = select(LodgingReservation).where(
         LodgingReservation.check_in < next_month_first,
         LodgingReservation.check_out > first_day,
     )
     reservations = session.exec(q).all()
-
+    
+    audit_logger.info(f"HOSPEDAGEM_PAGE: reservations_found={len(reservations)}")
+    if reservations:
+        audit_logger.info(
+            "HOSPEDAGEM_PAGE_SAMPLE: " +
+            " | ".join([
+                f"id={r.id},unit={r.unit},ci={r.check_in},co={r.check_out}"
+                for r in reservations[:5]
+            ])
+        )
+    
     # barras por unidade (grid com colunas = dias)
     bars_by_unit: dict[str, list[dict]] = {u: [] for u in units}
 
@@ -2433,6 +2448,7 @@ def hospedagem_page(
 @app.post("/hospedagem/create")
 def hospedagem_create(
     request: Request,
+    month: str = Form(""),
     unit: str = Form(...),
     patient_name: str = Form(...),
     check_in: str = Form(...),
@@ -2489,9 +2505,13 @@ def hospedagem_create(
         target_id=row.id,
     )
 
-    month_param = f"{ci.year:04d}-{ci.month:02d}"
+    audit_logger.info(
+        f"HOSPEDAGEM_CREATE: id={row.id} unit={row.unit} "
+        f"ci={row.check_in} co={row.check_out} patient={row.patient_name}"
+    )
+ 
+    month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
     return redirect(f"/hospedagem?month={month_param}")
-
 
 @app.post("/hospedagem/update/{res_id}")
 def hospedagem_update(
