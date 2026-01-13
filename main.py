@@ -2362,14 +2362,7 @@ def hospedagem_page(
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
 
-    selected_month = safe_selected_month(month)
-
-    y, m = map(int, selected_month.split("-"))
-    first_day = date(y, m, 1)
-    _, last_day = calendar.monthrange(y, m)
-    next_month_first = (date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1))
-
-    days = [date(y, m, d) for d in range(1, last_day + 1)]
+    selected_month, first_day, next_month_first, days = safe_selected_month(month)
     day_index = {d: i for i, d in enumerate(days)}
 
     units = ["suite_1", "suite_2", "apto"]
@@ -2453,8 +2446,6 @@ def hospedagem_create(
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "surgery"))
-
-    selected_month = safe_selected_month(None)
 
     try:
         ci = date.fromisoformat(check_in)
