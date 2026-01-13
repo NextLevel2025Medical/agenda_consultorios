@@ -2431,6 +2431,16 @@ def hospedagem_page(
     for u in bars_by_unit:
         bars_by_unit[u].sort(key=lambda b: (b["start_col"], b["end_col"]))
 
+    
+    prefill = {
+        "unit": unit or "",
+        "check_in": check_in or "",
+        "check_out": check_out or "",
+        "patient_name": patient_name or "",
+        "is_pre_reservation": 1 if (is_pre_reservation == "1") else 0,
+        "edit_id": edit_id or "",
+    }
+    
     return templates.TemplateResponse(
         "hospedagem.html",
         {
@@ -2449,6 +2459,7 @@ def hospedagem_page(
             "patient_prefill": patient_name or "",
             "pre_prefill": 1 if (is_pre_reservation == "1") else 0,
             "edit_id": edit_id or "",
+            "prefill": prefill,
         },
     )
 
