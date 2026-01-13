@@ -2406,7 +2406,7 @@ def hospedagem_page(
             continue
 
         # colunas baseadas em índice ZERO do grid
-        start_col = (start - first_day).days + 1
+        start_col = (start - first_day).days + 2
 
         # end_col precisa ser +1 para funcionar como limite exclusivo do CSS grid
         end_col = (end - first_day).days + 2
