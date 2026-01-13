@@ -37,9 +37,7 @@
   }
 
   .scroll-x{
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;      
   }
 
   .days-head{
@@ -65,25 +63,7 @@
    position: relative;
    height: 54px;
    background: rgba(255,255,255,0.02);
-   align-items: center;     /* ✅ NOVO: garante alinhamento vertical consistente */
- }
-
- .bar{
-   align-self: center;
-   grid-row: 1;             /* ✅ NOVO: força a barra ficar na primeira linha do grid */
-   height: 38px;
-   border-radius: 12px;
-   background: rgba(255,255,255,0.18);
-   border: 1px solid rgba(255,255,255,0.12);
-   padding: 8px 10px;
-   display:flex;
-   align-items:center;
-   gap:10px;
-   overflow:hidden;
-   white-space:nowrap;
-   text-overflow: ellipsis;
-   z-index: 3;
-   cursor: pointer;
+   grid-template-columns: repeat({{ days|length }}, minmax(22px, 1fr));
  }
 
   .day-cell{
@@ -98,8 +78,8 @@
     align-self: center;
     height: 38px;
     border-radius: 12px;
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(34,197,94,0.25);      /* ✅ verde claro */
+    border: 1px solid rgba(34,197,94,0.45);
     padding: 8px 10px;
     display:flex;
     align-items:center;
@@ -109,11 +89,26 @@
     text-overflow: ellipsis;
     z-index: 3;
     cursor: pointer;
+    color: #ecfdf5;
   }
+
   .bar.pre{
-    background: rgba(255,255,255,0.10);
-    border: 2px dashed rgba(255,255,255,0.30);
+    background: rgba(253,224,71,0.30);     /* ✅ amarelo claro */
+    border: 1px dashed rgba(253,224,71,0.70);
+    color: #422006;
   }
+
+  .btn-warning{
+    background: linear-gradient(180deg,#facc15,#eab308);
+    color:#422006;
+    font-weight:900;
+    border: none;
+  }
+
+  .btn-warning:hover{
+    filter: brightness(1.05);
+  }
+
   .bar .pname{
     font-weight: 900;
     font-size: 13px;
@@ -156,22 +151,29 @@
 
 <div class="card">
   <div class="toolbar">
-    <div>
-      <div class="title">Hospedagem</div>
-      <div class="muted">Controle de reservas das 2 suítes e do apartamento.</div>
-    </div>
-
     <div class="month-controls">
-      <a class="btn btn-small" href="/hospedagem?month={{ sel_year }}-{{ '%02d'|format((sel_month|int - 2) if (sel_month|int) > 1 else 12) }}{% if sel_month|int == 1 %}{{ '' }}{% endif %}">←</a>
-
       <form method="get" action="/hospedagem" class="month-controls">
-        <select class="input" name="month">
-          <option value="{{ selected_month }}">{{ selected_month }}</option>
+        <form method="get" action="/hospedagem" class="month-controls">
+        <select class="input" name="year" onchange="this.form.submit()">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == sel_year|int %}selected{% endif %}>
+                {{ y }}
+            </option>
+            {% endfor %}
         </select>
-        <button class="btn btn-small" type="submit">Ir</button>
+
+        <select class="input" name="month" onchange="this.form.submit()">
+            {% for m in range(1,13) %}
+            <option value="{{ '%04d-%02d'|format(sel_year|int, m) }}"
+                {% if m == sel_month|int %}selected{% endif %}>
+                {{ '%02d'|format(m) }}
+            </option>
+            {% endfor %}
+        </select>
+        </form>
       </form>
 
-      <button class="btn btn-small" type="button" onclick="openCreateModal(null)">Nova Reserva</button>
+      <button class="btn btn-small btn-warning" type="button" onclick="openCreateModal(null)">Nova Reserva</button>
     </div>
   </div>
 
