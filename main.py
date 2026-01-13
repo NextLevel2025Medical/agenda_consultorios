@@ -2453,16 +2453,25 @@ def hospedagem_page(
             "human_unit": human_unit,
             "err": err or "",
             "open": open or "",
+
+            # mantém o que você já tinha (pode continuar usando no template, se quiser)
             "unit_prefill": unit or "",
             "check_in_prefill": check_in or "",
             "check_out_prefill": check_out or "",
             "patient_prefill": patient_name or "",
             "pre_prefill": 1 if (is_pre_reservation == "1") else 0,
             "edit_id": edit_id or "",
-            "prefill": prefill,
+
+            # ✅ ADICIONE ISTO (para o template não quebrar com prefill.unit)
+            "prefill": {
+                "unit": unit or "",
+                "check_in": check_in or "",
+                "check_out": check_out or "",
+                "patient_name": patient_name or "",
+                "is_pre_reservation": 1 if (is_pre_reservation == "1") else 0,
+            },
         },
     )
-
 
 @app.post("/hospedagem/create")
 def hospedagem_create(
@@ -2495,6 +2504,7 @@ def hospedagem_create(
     e = validate_lodging_conflict(session, unit, ci, co)
     if e:
         return redirect(
+            f"/hospedagem?month={quote(month_param)}"
             f"/hospedagem?err={quote(e)}&open=1"
             f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
             f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
