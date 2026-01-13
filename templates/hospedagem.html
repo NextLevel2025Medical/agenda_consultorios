@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set parts = selected_month.split('-') %}
+{% set sel_year = parts[0] %}
+{% set sel_month = parts[1] %}
+
+<style>
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .month-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .btn-small { padding: 10px 14px; font-size: 14px; border-radius: 12px; }
+  .legend { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
+  .legend .swatch { display:inline-block; width:26px; height:10px; border-radius: 999px; background: rgba(255,255,255,0.18); }
+  .legend .swatch.pre { background: transparent; border: 2px dashed rgba(255,255,255,0.35); }
+
+  /* GRID */
+  .lodging-wrap{
+    margin-top: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .grid-head, .grid-row{
+    display:grid;
+    grid-template-columns: 170px 1fr;
+    align-items: stretch;
+  }
+
+  .left-cell{
+    padding: 14px 14px;
+    border-right: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.15);
+    font-weight: 900;
+    color: var(--text);
+  }
+
+  .scroll-x{
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .days-head{
+    display:grid;
+    gap: 0;
+    position: relative;
+    background: rgba(0,0,0,0.10);
+  }
+
+  .day-pill{
+    height: 44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight: 900;
+    font-size: 12px;
+    color: rgba(255,255,255,0.70);
+    border-right: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .row-grid{
+    display:grid;
+    position: relative;
+    height: 54px;
+    background: rgba(255,255,255,0.02);
+  }
+
+  .day-cell{
+    border-right: 1px solid rgba(255,255,255,0.05);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    height: 54px;
+    cursor: pointer;
+  }
+  .day-cell:hover{ background: rgba(255,255,255,0.05); }
+
+  .bar{
+    align-self: center;
+    height: 38px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 8px 10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow: ellipsis;
+    z-index: 3;
+    cursor: pointer;
+  }
+  .bar.pre{
+    background: rgba(255,255,255,0.10);
+    border: 2px dashed rgba(255,255,255,0.30);
+  }
+  .bar .pname{
+    font-weight: 900;
+    font-size: 13px;
+    color: var(--text);
+    overflow:hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* MODAL igual ao padrão do mapa */
+  .modal-backdrop{
+    display:none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 18px;
+  }
+  .modal{
+    width: min(720px, 96vw);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+  }
+  .modal-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .modal-title{ font-size: 18px; font-weight: 900; }
+  .modal-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .modal-grid .full{ grid-column: 1 / -1; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top: 14px; }
+  .err-box{ margin-top:12px; padding:12px 14px; border-radius: 14px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.35); color: rgba(255,255,255,0.88); font-weight: 700; }
+
+  @media (max-width: 780px){
+    .grid-head, .grid-row{ grid-template-columns: 140px 1fr; }
+    .modal-grid{ grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <div class="title">Hospedagem</div>
+      <div class="muted">Controle de reservas das 2 suítes e do apartamento.</div>
+    </div>
+
+    <div class="month-controls">
+      <a class="btn btn-small" href="/hospedagem?month={{ sel_year }}-{{ '%02d'|format((sel_month|int - 2) if (sel_month|int) > 1 else 12) }}{% if sel_month|int == 1 %}{{ '' }}{% endif %}">←</a>
+
+      <form method="get" action="/hospedagem" class="month-controls">
+        <select class="input" name="month">
+          <option value="{{ selected_month }}">{{ selected_month }}</option>
+        </select>
+        <button class="btn btn-small" type="submit">Ir</button>
+      </form>
+
+      <button class="btn btn-small" type="button" onclick="openCreateModal(null)">Nova Reserva</button>
+    </div>
+  </div>
+
+  {% if err %}
+    <div class="err-box">{{ err }}</div>
+  {% endif %}
+
+  <div class="legend" style="margin-top:10px;">
+    <span><span class="swatch"></span> Confirmada</span>
+    <span><span class="swatch pre"></span> Pré-reserva</span>
+  </div>
+
+  <div class="lodging-wrap">
+    <!-- Cabeçalho -->
+    <div class="grid-head">
+      <div class="left-cell">Acomodação</div>
+      <div class="scroll-x">
+        <div class="days-head" style="grid-template-columns: repeat({{ days|length }}, 44px);">
+          {% for d in days %}
+            <div class="day-pill">{{ '%02d'|format(d.day) }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% for u in units %}
+      <div class="grid-row">
+        <div class="left-cell">{{ human_unit(u) }}</div>
+        <div class="scroll-x">
+          <div class="row-grid" style="grid-template-columns: repeat({{ days|length }}, 44px);" data-unit="{{ u }}">
+            {% for d in days %}
+              <div class="day-cell" onclick="openCreateModal('{{ u }}','{{ d.isoformat() }}')"></div>
+            {% endfor %}
+
+            {% for b in bars_by_unit[u] %}
+              <div
+                class="bar {% if b.is_pre %}pre{% endif %}"
+                style="grid-column: {{ b.start_col }} / {{ b.end_col }};"
+                onclick="openEditModal(this)"
+                data-id="{{ b.id }}"
+                data-unit="{{ u }}"
+                data-patient="{{ b.patient_name }}"
+                data-check-in="{{ b.check_in }}"
+                data-check-out="{{ b.check_out }}"
+                data-is-pre="{{ 1 if b.is_pre else 0 }}"
+                data-note="{{ b.note|e }}"
+                data-created-by="{{ b.created_by_id or '' }}"
+              >
+                <div class="pname">{{ b.patient_name }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-backdrop" id="lodgingBackdrop" onclick="maybeClose(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="lodgingTitle">Reserva de Hospedagem</div>
+        <div class="muted" id="lodgingSub">Preencha o período (check-out é a saída).</div>
+      </div>
+      <button class="btn btn-small" type="button" onclick="closeModal()">Fechar</button>
+    </div>
+
+    <form id="lodgingForm" method="post" action="/hospedagem/create">
+      <input type="hidden" name="month" value="{{ selected_month }}">
+      <div class="modal-grid">
+        <div>
+          <label class="muted">Acomodação</label>
+          <select class="input" name="unit" id="unitEl">
+            <option value="suite_1">Suíte 1</option>
+            <option value="suite_2">Suíte 2</option>
+            <option value="apto">Apartamento</option>
+          </select>
+        </div>
+
+        <div style="display:flex; align-items:flex-end; gap:10px;">
+          <label style="display:flex; gap:10px; align-items:center; padding-bottom: 4px;">
+            <input type="checkbox" name="is_pre_reservation" id="preEl">
+            <span class="muted">Pré-reserva</span>
+          </label>
+        </div>
+
+        <div>
+          <label class="muted">Check-in</label>
+          <input class="input" type="date" name="check_in" id="checkInEl" required>
+        </div>
+
+        <div>
+          <label class="muted">Check-out</label>
+          <input class="input" type="date" name="check_out" id="checkOutEl" required>
+        </div>
+
+        <div class="full">
+          <label class="muted">Paciente</label>
+          <input class="input" type="text" name="patient_name" id="patientEl" required placeholder="NOME DO PACIENTE">
+        </div>
+
+        <div class="full">
+          <label class="muted">Observação (opcional)</label>
+          <textarea class="input" name="note" id="noteEl" rows="2" placeholder="Ex: entrada antes da cirurgia, acompanhante, etc."></textarea>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" type="button" id="deleteBtn" onclick="submitDelete()" style="display:none;">Excluir</button>
+        <button class="btn btn-primary" type="submit" id="saveBtn">Salvar Reserva</button>
+      </div>
+    </form>
+
+    <form id="deleteForm" method="post" style="display:none;">
+      <input type="hidden" name="month" value="{{ selected_month }}">
+    </form>
+  </div>
+</div>
+
+<script>
+  const backdrop = document.getElementById("lodgingBackdrop");
+  const formEl = document.getElementById("lodgingForm");
+
+  const titleEl = document.getElementById("lodgingTitle");
+  const unitEl = document.getElementById("unitEl");
+  const preEl = document.getElementById("preEl");
+  const checkInEl = document.getElementById("checkInEl");
+  const checkOutEl = document.getElementById("checkOutEl");
+  const patientEl = document.getElementById("patientEl");
+  const noteEl = document.getElementById("noteEl");
+
+  const deleteBtn = document.getElementById("deleteBtn");
+  const deleteForm = document.getElementById("deleteForm");
+
+  function toDateInput(iso){ return iso; }
+
+  function addDays(iso, n){
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + n);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function openCreateModal(unit, dayIso){
+    formEl.action = "/hospedagem/create";
+    titleEl.textContent = "Reserva de Hospedagem";
+    deleteBtn.style.display = "none";
+
+    // reset
+    formEl.reset();
+
+    if (unit) unitEl.value = unit;
+
+    if (dayIso){
+      checkInEl.value = toDateInput(dayIso);
+      checkOutEl.value = addDays(dayIso, 1);
+    }
+
+    backdrop.style.display = "flex";
+    patientEl.focus();
+  }
+
+  function openEditModal(el){
+    const d = el.dataset;
+    formEl.action = "/hospedagem/update/" + d.id;
+    titleEl.textContent = "Editar Reserva";
+    deleteBtn.style.display = "inline-flex";
+
+    // preencher
+    unitEl.value = d.unit;
+    patientEl.value = d.patient || "";
+    preEl.checked = (d.isPre === "1");
+    noteEl.value = d.note || "";
+
+    // datas vêm em dd/mm/yyyy -> converter
+    const ci = d.checkIn.split("/");
+    const co = d.checkOut.split("/");
+    checkInEl.value = `${ci[2]}-${ci[1]}-${ci[0]}`;
+    checkOutEl.value = `${co[2]}-${co[1]}-${co[0]}`;
+
+    // form delete
+    deleteForm.action = "/hospedagem/delete/" + d.id;
+
+    backdrop.style.display = "flex";
+  }
+
+  function closeModal(){
+    backdrop.style.display = "none";
+  }
+
+  function maybeClose(e){
+    if (e.target === backdrop) closeModal();
+  }
+
+  function submitDelete(){
+    if (!confirm("Excluir esta reserva de hospedagem?")) return;
+    deleteForm.submit();
+  }
+
+  // Prefill via query params (open=1)
+  (function(){
+    const openFlag = "{{ prefill and prefill.get('unit') is not none and open }}" ;
+  })();
+
+  {% if open and open == "1" %}
+    (function(){
+      const u = "{{ prefill.unit }}";
+      const ci = "{{ prefill.check_in }}";
+      const co = "{{ prefill.check_out }}";
+      const p = "{{ prefill.patient_name }}";
+      const isPre = "{{ prefill.is_pre_reservation }}";
+      const editId = "{{ prefill.edit_id }}";
+
+      if (editId){
+        // se veio para editar, apenas abrir modal vazio; edição normalmente vem por clique
+        openCreateModal(u || null, null);
+      } else {
+        openCreateModal(u || null, ci || null);
+        if (co) checkOutEl.value = co;
+        if (p) patientEl.value = p;
+        if (isPre === "1") preEl.checked = true;
+      }
+    })();
+  {% endif %}
+</script>
+
+{% endblock %}

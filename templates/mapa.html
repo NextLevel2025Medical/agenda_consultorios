@@ -809,11 +809,21 @@
         Usa slot HSR?
       </label>
 
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:6px;">
+        <button type="button" class="btn-secondary btn-small" id="openLodgingBtn">
+          Hospedagem
+        </button>
+        <span style="font-size:12px; color: var(--muted);">
+          (abre o grid para reservar período)
+        </span>
+      </div>
+
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="mapaModalCancelBtn">Cancelar</button>
         <button class="btn-secondary" type="submit" name="mode" value="reserve">Reservar</button>
         <button class="btn-cta" type="submit" name="mode" value="book">Agendar</button>
       </div>
+
     </form>
   </div>
 </div>
@@ -825,6 +835,45 @@
   const titleEl = document.getElementById("mapaModalTitle");
   const dayIsoEl = document.getElementById("mapaModalDayIso");
   const formEl = document.getElementById("mapaModalForm");
+  const openLodgingBtn = document.getElementById("openLodgingBtn");
+
+  function addDaysISO(iso, days){
+    // iso: YYYY-MM-DD
+    const [y,m,d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth()+1).padStart(2,"0");
+    const dd = String(dt.getUTCDate()).padStart(2,"0");
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  if (openLodgingBtn){
+    openLodgingBtn.addEventListener("click", () => {
+      const dayIso = dayIsoEl.value; // data da cirurgia no modal
+      const patient = (formEl.querySelector('input[name="patient_name"]')?.value || "").trim();
+
+      if (!dayIso){
+        alert("Selecione uma data antes.");
+        return;
+      }
+
+      const month = dayIso.slice(0,7); // YYYY-MM
+      const checkIn = addDaysISO(dayIso, 2);     // sugestão padrão: +2
+      const checkOut = addDaysISO(dayIso, 3);    // 1 diária
+
+      const url =
+        `/hospedagem?month=${encodeURIComponent(month)}` +
+        `&open=1` +
+        `&check_in=${encodeURIComponent(checkIn)}` +
+        `&check_out=${encodeURIComponent(checkOut)}` +
+        `&patient_name=${encodeURIComponent(patient)}` +
+        `&is_pre_reservation=1`;
+
+      window.open(url, "_blank");
+    });
+  }
+
   const modalErrEl = document.getElementById("mapaModalErr");
 
   function setModalError(msg){
