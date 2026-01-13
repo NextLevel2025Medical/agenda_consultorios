@@ -2404,8 +2404,15 @@ def hospedagem_page(
         if start >= end:
             continue
 
-        start_col = day_index[start] + 1
-        end_col = day_index[end - timedelta(days=1)] + 2  # fim exclusivo
+        # colunas baseadas em índice ZERO do grid
+        start_col = (start - first_day).days + 1
+
+        # end_col precisa ser +1 para funcionar como limite exclusivo do CSS grid
+        end_col = (end - first_day).days + 2
+
+        # proteção final (garantia visual)
+        if end_col <= start_col:
+            continue
 
         bars_by_unit[u].append(
             {
