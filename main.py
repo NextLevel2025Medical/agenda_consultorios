@@ -12,6 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from sqlmodel import Session, select, delete
 from sqlalchemy import or_, text, func
 from sqlalchemy.exc import IntegrityError
+from urllib.parse import quote
 
 from db import create_db_and_tables, get_session, engine
 from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon, GustavoAgendaSnapshot, LodgingReservation
