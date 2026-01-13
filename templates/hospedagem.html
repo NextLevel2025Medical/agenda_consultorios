@@ -363,12 +363,12 @@
 
   {% if open and open == "1" %}
     (function(){
-      const u = "{{ prefill.unit }}";
-      const ci = "{{ prefill.check_in }}";
-      const co = "{{ prefill.check_out }}";
-      const p = "{{ prefill.patient_name }}";
-      const isPre = "{{ prefill.is_pre_reservation }}";
-      const editId = "{{ prefill.edit_id }}";
+      const u = "{{ (prefill.unit if prefill is defined else '') }}";
+      const ci = "{{ (prefill.check_in if prefill is defined else '') }}";
+      const co = "{{ (prefill.check_out if prefill is defined else '') }}";
+      const p = "{{ (prefill.patient_name if prefill is defined else '') }}";
+      const isPre = "{{ (prefill.is_pre_reservation if prefill is defined else 0) }}";
+      const editId = "{{ (prefill.edit_id if prefill is defined else '') }}";
 
       if (editId){
         // se veio para editar, apenas abrir modal vazio; edição normalmente vem por clique
