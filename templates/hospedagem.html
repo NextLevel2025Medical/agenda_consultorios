@@ -60,12 +60,31 @@
     border-right: 1px solid rgba(255,255,255,0.05);
   }
 
-  .row-grid{
-    display:grid;
-    position: relative;
-    height: 54px;
-    background: rgba(255,255,255,0.02);
-  }
+ .row-grid{
+   display:grid;
+   position: relative;
+   height: 54px;
+   background: rgba(255,255,255,0.02);
+   align-items: center;     /* ✅ NOVO: garante alinhamento vertical consistente */
+ }
+
+ .bar{
+   align-self: center;
+   grid-row: 1;             /* ✅ NOVO: força a barra ficar na primeira linha do grid */
+   height: 38px;
+   border-radius: 12px;
+   background: rgba(255,255,255,0.18);
+   border: 1px solid rgba(255,255,255,0.12);
+   padding: 8px 10px;
+   display:flex;
+   align-items:center;
+   gap:10px;
+   overflow:hidden;
+   white-space:nowrap;
+   text-overflow: ellipsis;
+   z-index: 3;
+   cursor: pointer;
+ }
 
   .day-cell{
     border-right: 1px solid rgba(255,255,255,0.05);
@@ -179,16 +198,16 @@
     </div>
 
     {% for u in units %}
-      <div class="grid-row">
+    <div class="grid-row">
         <div class="left-cell">{{ human_unit(u) }}</div>
         <div class="scroll-x">
-          <div class="row-grid" style="grid-template-columns: repeat({{ days|length }}, 44px);" data-unit="{{ u }}">
+        <div class="row-grid" style="grid-template-columns: repeat({{ days|length }}, 44px);" data-unit="{{ u }}">
             {% for d in days %}
-              <div class="day-cell" onclick="openCreateModal('{{ u }}','{{ d.isoformat() }}')"></div>
+            <div class="day-cell" onclick="openCreateModal('{{ u }}','{{ d.isoformat() }}')"></div>
             {% endfor %}
 
-            {% for b in bars_by_unit[u] %}
-              <div
+            {% for b in bars_by_unit.get(u, []) %}
+            <div
                 class="bar {% if b.is_pre %}pre{% endif %}"
                 style="grid-column: {{ b.start_col }} / {{ b.end_col }};"
                 onclick="openEditModal(this)"
@@ -200,14 +219,15 @@
                 data-is-pre="{{ 1 if b.is_pre else 0 }}"
                 data-note="{{ b.note|e }}"
                 data-created-by="{{ b.created_by_id or '' }}"
-              >
+            >
                 <div class="pname">{{ b.patient_name }}</div>
-              </div>
+            </div>
             {% endfor %}
-          </div>
         </div>
-      </div>
+        </div>
+    </div>
     {% endfor %}
+
   </div>
 </div>
 
