@@ -550,8 +550,41 @@
 
   <div class="panel">
     {% if err %}
-        <div class="alert">{{ err }}</div>
+      <div class="alert">
+        {{ err }}
+
+        {% if current_user and current_user.username == "johnny.ge" and request.query_params.get("day_iso") %}
+          <form method="post" action="/mapa/create" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
+            <input type="hidden" name="mode" value="{{ request.query_params.get('mode', 'book') }}">
+            <input type="hidden" name="time_hhmm" value="{{ request.query_params.get('time_hhmm', '') }}">
+            <input type="hidden" name="patient_name" value="{{ request.query_params.get('patient_name', '') }}">
+            <input type="hidden" name="surgeon_id" value="{{ request.query_params.get('surgeon_id', '') }}">
+            <input type="hidden" name="procedure_type" value="{{ request.query_params.get('procedure_type', '') }}">
+            <input type="hidden" name="location" value="{{ request.query_params.get('location', '') }}">
+
+            {% if request.query_params.get('uses_hsr') == '1' %}
+              <input type="hidden" name="uses_hsr" value="1">
+            {% endif %}
+
+            {% if request.query_params.get('seller_id') %}
+              <input type="hidden" name="seller_id" value="{{ request.query_params.get('seller_id') }}">
+            {% endif %}
+
+            <input type="hidden" name="force_override" value="1">
+
+            <button type="submit" class="btn-cta btn-small">
+              Agendar mesmo assim
+            </button>
+
+            <span class="muted" style="font-size:12px;">
+              (Somente Johnny pode ignorar a regra)
+            </span>
+          </form>
+        {% endif %}
+      </div>
     {% endif %}
+
     {% for day in days %}
       {% set key = day.isoformat() %}
       {% set items = entries_by_day.get(key, []) %}
@@ -776,11 +809,17 @@
         Usa slot HSR?
       </label>
 
+      <label class="chk">
+        <input type="checkbox" name="has_lodging" id="hasLodging" class="h-4 w-4 rounded border-slate-600">
+        <span>Hospedagem</span>
+      </label>
+
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="mapaModalCancelBtn">Cancelar</button>
         <button class="btn-secondary" type="submit" name="mode" value="reserve">Reservar</button>
         <button class="btn-cta" type="submit" name="mode" value="book">Agendar</button>
       </div>
+
     </form>
   </div>
 </div>
@@ -792,6 +831,45 @@
   const titleEl = document.getElementById("mapaModalTitle");
   const dayIsoEl = document.getElementById("mapaModalDayIso");
   const formEl = document.getElementById("mapaModalForm");
+  const openLodgingBtn = document.getElementById("openLodgingBtn");
+
+  function addDaysISO(iso, days){
+    // iso: YYYY-MM-DD
+    const [y,m,d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d));
+    dt.setUTCDate(dt.getUTCDate() + days);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth()+1).padStart(2,"0");
+    const dd = String(dt.getUTCDate()).padStart(2,"0");
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  if (openLodgingBtn){
+    openLodgingBtn.addEventListener("click", () => {
+      const dayIso = dayIsoEl.value; // data da cirurgia no modal
+      const patient = (formEl.querySelector('input[name="patient_name"]')?.value || "").trim();
+
+      if (!dayIso){
+        alert("Selecione uma data antes.");
+        return;
+      }
+
+      const month = dayIso.slice(0,7); // YYYY-MM
+      const checkIn = addDaysISO(dayIso, 2);     // sugestão padrão: +2
+      const checkOut = addDaysISO(dayIso, 3);    // 1 diária
+
+      const url =
+        `/hospedagem?month=${encodeURIComponent(month)}` +
+        `&open=1` +
+        `&check_in=${encodeURIComponent(checkIn)}` +
+        `&check_out=${encodeURIComponent(checkOut)}` +
+        `&patient_name=${encodeURIComponent(patient)}` +
+        `&is_pre_reservation=1`;
+
+      window.open(url, "_blank");
+    });
+  }
+
   const modalErrEl = document.getElementById("mapaModalErr");
 
   function setModalError(msg){
