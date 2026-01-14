@@ -2407,6 +2407,40 @@ def relatorio_gustavo_run_now(
 # HOSPEDAGEM
 # ============================================================
 
+def normalize_unit(raw: str | None) -> str:
+    v = (raw or "").strip().lower()
+
+    # remove acentos simples (o suficiente pro seu caso)
+    v = (
+        v.replace("í", "i")
+         .replace("é", "e")
+         .replace("ê", "e")
+         .replace("ã", "a")
+         .replace("á", "a")
+         .replace("ç", "c")
+    )
+
+    aliases = {
+        "suite1": "suite_1",
+        "suite_1": "suite_1",
+        "suite 1": "suite_1",
+        "suíte 1": "suite_1",
+        "suíte_1": "suite_1",
+
+        "suite2": "suite_2",
+        "suite_2": "suite_2",
+        "suite 2": "suite_2",
+        "suíte 2": "suite_2",
+        "suíte_2": "suite_2",
+
+        "apto": "apto",
+        "apartamento": "apto",
+        "apartmento": "apto",
+        "apt": "apto",
+    }
+
+    return aliases.get(v, v)
+
 @app.get("/hospedagem", response_class=HTMLResponse)
 def hospedagem_page(
     request: Request,
@@ -2498,27 +2532,77 @@ def hospedagem_page(
     # barras por unidade (grid com colunas = dias)
     bars_by_unit: dict[str, list[dict]] = {u: [] for u in units}
 
+    # lista do mês (para exibir abaixo do grid)
+    month_reservations = []
     for r in reservations:
-        u = r.unit or ""
+        u = normalize_unit(getattr(r, "unit", None))
+        if u not in ("suite_1", "suite_2", "apto"):
+            continue
+
+        creator_username = ""
+        if getattr(r, "created_by_id", None) in users_by_id:
+            creator_username = users_by_id[r.created_by_id].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            try:
+                created_at_str = datetime.fromtimestamp(created_at.timestamp(), TZ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                created_at_str = created_at.strftime("%d/%m/%Y %H:%M")
+
+        month_reservations.append({
+            "id": r.id,
+            "unit": u,
+            "unit_label": human_unit(u),
+            "patient_name": r.patient_name,
+            "check_in": r.check_in.strftime("%d/%m/%Y"),
+            "check_out": r.check_out.strftime("%d/%m/%Y"),
+            "is_pre": 1 if r.is_pre_reservation else 0,
+            "note": getattr(r, "note", "") or "",
+            "created_by": creator_username,
+            "created_at": created_at_str,
+        })
+
+    month_reservations.sort(key=lambda x: (x["check_in"], x["unit"]))
+
+    # pré-carrega usuários criadores (para exibir no template)
+    creator_ids = list({r.created_by_id for r in reservations if getattr(r, "created_by_id", None)})
+    users_by_id: dict[int, User] = {}
+    if creator_ids:
+        users = session.exec(select(User).where(User.id.in_(creator_ids))).all()
+        users_by_id = {u.id: u for u in users if u.id is not None}
+
+    for r in reservations:
+        u = normalize_unit(getattr(r, "unit", None))
         if u not in bars_by_unit:
+            # loga pra você enxergar se aparecer algum valor novo inesperado
+            audit_logger.warning(f"HOSPEDAGEM_PAGE: unit_desconhecida_no_db id={r.id} unit={getattr(r,'unit',None)}")
             continue
 
         # clamp dentro do mês visível
         start = max(r.check_in, first_day)
         end = min(r.check_out, next_month_first)
-
         if start >= end:
             continue
 
-        # colunas baseadas em índice ZERO do grid
         start_col = (start - first_day).days + 2
-
-        # end_col precisa ser +1 para funcionar como limite exclusivo do CSS grid
         end_col = (end - first_day).days + 2
-
-        # proteção final (garantia visual)
         if end_col <= start_col:
             continue
+
+        creator_username = ""
+        if getattr(r, "created_by_id", None) in users_by_id:
+            creator_username = users_by_id[r.created_by_id].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            # se você já usa TZ no projeto, mantém padrão (SP)
+            try:
+                created_at_str = datetime.fromtimestamp(created_at.timestamp(), TZ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                created_at_str = created_at.strftime("%d/%m/%Y %H:%M")
 
         bars_by_unit[u].append(
             {
@@ -2529,8 +2613,12 @@ def hospedagem_page(
                 "start_col": start_col,
                 "end_col": end_col,
                 "is_pre": 1 if r.is_pre_reservation else 0,
-                "note": (r.note or ""),
-                "created_by_id": (r.created_by_id or ""),
+
+                # ✅ novos campos (seu template já tenta usar note/created_by)
+                "note": getattr(r, "note", "") or "",
+                "created_by_id": getattr(r, "created_by_id", None),
+                "created_by_username": creator_username,
+                "created_at": created_at_str,
             }
         )
 
@@ -2559,6 +2647,7 @@ def hospedagem_page(
             "units": units,
             "bars_by_unit": bars_by_unit,
             "reservations_list": reservations_list,
+            "month_reservations": month_reservations,
             "human_unit": human_unit,
             "err": err or "",
             "open": open or "",
