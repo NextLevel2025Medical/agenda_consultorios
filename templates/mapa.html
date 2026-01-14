@@ -809,14 +809,10 @@
         Usa slot HSR?
       </label>
 
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:6px;">
-        <button type="button" class="btn-secondary btn-small" id="openLodgingBtn">
-          Hospedagem
-        </button>
-        <span style="font-size:12px; color: var(--muted);">
-          (abre o grid para reservar período)
-        </span>
-      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-200 mt-2">
+        <input type="checkbox" name="has_lodging" id="hasLodging" class="h-4 w-4 rounded border-slate-600">
+        <span>Hospedagem</span>
+      </label>
 
       <div class="modal-actions">
         <button type="button" class="btn-secondary" id="mapaModalCancelBtn">Cancelar</button>
