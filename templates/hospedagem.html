@@ -212,8 +212,9 @@
         <input type="hidden" name="check_out" value="{{ prefill.check_out }}">
         <input type="hidden" name="is_pre_reservation" value="{{ 1 if prefill.is_pre_reservation else '' }}">
         <input type="hidden" name="note" value="{{ prefill_note }}">
-        <input type="hidden" name="surgery_entry_id" value="{{ surgery_entry_id or '' }}">
-
+        {% if surgery_entry_id %}
+            <input type="hidden" name="surgery_entry_id" value="{{ surgery_entry_id }}">
+        {% endif %}
         <button class="btn btn-primary" type="submit">Sobrepor</button>
       </form>
     </div>
