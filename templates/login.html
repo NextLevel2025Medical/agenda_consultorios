@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block page_title %}CONCEPT SYS{% endblock %}
-{% block header_title %}CONCEPT SYS{% endblock %}
+{% block page_title %}CONCEPT SYS - LOGIN{% endblock %}
+{% block header_title %}CONCEPT SYS - LOGIN{% endblock %}
 {% block content %}
 <div class="max-w-lg mx-auto">
   <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
@@ -19,7 +19,14 @@
         <label class="text-sm text-slate-300">Senha</label>
         <input type="password" name="password" required class="mt-2 w-full rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 outline-none focus:border-white/30" />
       </div>
-      <button class="w-full rounded-xl bg-emerald-500/90 px-4 py-3 font-medium text-slate-950 hover:bg-emerald-500 transition">
+      <button
+        class="w-full rounded-xl
+              bg-amber-500 px-4 py-3
+              font-semibold text-slate-900
+              hover:bg-amber-600
+              transition-all duration-200
+              shadow-lg shadow-amber-500/20
+              hover:shadow-amber-500/40">
         Entrar
       </button>
     </form>
