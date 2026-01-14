@@ -2112,6 +2112,20 @@ def mapa_create(
     )
 
     month = day.strftime("%Y-%m")
+    if has_lodging:
+        from urllib.parse import quote
+        # check-in e check-out default: 1 dia (você pode mudar depois)
+        ci = day.isoformat()
+        co = (day + timedelta(days=1)).isoformat()
+        return redirect(
+            f"/hospedagem?month={quote(month)}&open=1"
+            f"&unit={quote('')}"
+            f"&check_in={quote(ci)}&check_out={quote(co)}"
+            f"&patient_name={quote(patient_name.strip().upper())}"
+            f"&is_pre_reservation={(1 if is_pre else 0)}"
+            f"&surgery_entry_id={row.id}"
+        )
+
     return redirect(f"/mapa?month={month}")
 
 @app.post("/mapa/update/{entry_id}")
@@ -2126,7 +2140,9 @@ def mapa_update(
     procedure_type: str = Form(...),
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
+    has_lodging: Optional[str] = Form(None),  
     seller_id: Optional[int] = Form(None),
+    force_override: Optional[str] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -2245,9 +2261,6 @@ def mapa_update(
         )
 
     return redirect(f"/mapa?month={month}")
-
-    if err and override:
-        audit_event(request, user, "surgical_map_override_rule", success=True, message=err)
 
 @app.post("/mapa/delete/{entry_id}")
 def mapa_delete(
@@ -2528,11 +2541,13 @@ def hospedagem_create(
 
     e = validate_lodging_conflict(session, unit, ci, co)
     if e:
+        month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
         return redirect(
-            f"/hospedagem?month={quote(month_param)}"
-            f"/hospedagem?err={quote(e)}&open=1"
+            f"/hospedagem?month={quote(month_param)}&open=1"
+            f"&err={quote(e)}"
             f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
             f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+            f"&surgery_entry_id={surgery_entry_id or ''}"
         )
 
     row = LodgingReservation(
