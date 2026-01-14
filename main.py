@@ -1994,6 +1994,7 @@ def mapa_create(
     procedure_type: str = Form(...),
     location: str = Form(...),
     uses_hsr: Optional[str] = Form(None),
+    has_lodging: Optional[str] = Form(None),
     seller_id: Optional[int] = Form(None),
     force_override: Optional[str] = Form(None),
     session: Session = Depends(get_session),
@@ -2033,6 +2034,7 @@ def mapa_create(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
+            f"&has_lodging={1 if has_lodging else 0}" 
             f"&seller_id={seller_id_final}"
         )
 
@@ -2072,6 +2074,7 @@ def mapa_create(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
+            f"&has_lodging={1 if has_lodging else 0}" 
             f"&seller_id={seller_id_final}"
         )
     
@@ -2170,6 +2173,7 @@ def mapa_update(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
+            f"&has_lodging={1 if has_lodging else 0}" 
         )
 
     # snapshot (opcional) pra auditoria
@@ -2222,6 +2226,24 @@ def mapa_update(
     )
 
     month = day.strftime("%Y-%m")
+
+    # ✅ Se marcou "Hospedagem", abre a tela de hospedagem depois de salvar
+    if has_lodging:
+        from urllib.parse import quote
+
+        # regra padrão: check-in 2 dias após a cirurgia; check-out 1 dia depois (ajuste se quiser)
+        check_in = (day + timedelta(days=2)).isoformat()
+        check_out = (day + timedelta(days=3)).isoformat()
+
+        return redirect(
+            f"/hospedagem?month={month}&open=1"
+            f"&unit="  # vazio (usuário escolhe suite/apto no modal)
+            f"&check_in={quote(check_in)}"
+            f"&check_out={quote(check_out)}"
+            f"&patient_name={quote(patient_name.strip().upper())}"
+            f"&is_pre_reservation={1 if is_pre else 0}"
+        )
+
     return redirect(f"/mapa?month={month}")
 
     if err and override:
