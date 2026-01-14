@@ -191,6 +191,35 @@
     <div class="err-box">{{ err }}</div>
   {% endif %}
 
+  {% if conflict and allow_override %}
+  <div class="err-box" style="background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.35);">
+    <div style="font-weight:700; margin-bottom:6px;">Conflito encontrado</div>
+    <div style="opacity:.95;">
+      Já existe uma reserva para <b>{{ conflict.patient_name }}</b>
+      ({{ conflict.check_in }} → {{ conflict.check_out }}) na acomodação <b>{{ conflict.unit }}</b>.
+    </div>
+    <div style="margin-top:10px; display:flex; gap:10px; justify-content:flex-end;">
+      <a class="btn" href="/hospedagem?month={{ selected_month }}">Cancelar</a>
+
+      <form method="post" action="/hospedagem/override" style="display:inline;">
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        <input type="hidden" name="conflict_id" value="{{ conflict.id }}">
+
+        <!-- payload novo (vem do prefill do modal) -->
+        <input type="hidden" name="unit" value="{{ prefill.unit }}">
+        <input type="hidden" name="patient_name" value="{{ prefill.patient_name }}">
+        <input type="hidden" name="check_in" value="{{ prefill.check_in }}">
+        <input type="hidden" name="check_out" value="{{ prefill.check_out }}">
+        <input type="hidden" name="is_pre_reservation" value="{{ 1 if prefill.is_pre_reservation else '' }}">
+        <input type="hidden" name="note" value="{{ prefill_note }}">
+        <input type="hidden" name="surgery_entry_id" value="{{ surgery_entry_id or '' }}">
+
+        <button class="btn btn-primary" type="submit">Sobrepor</button>
+      </form>
+    </div>
+  </div>
+{% endif %}
+
   <div class="legend" style="margin-top:10px;">
     <span><span class="swatch"></span> Confirmada</span>
     <span><span class="swatch pre"></span> Pré-reserva</span>
