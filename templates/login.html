@@ -1,35 +1,109 @@
 {% extends "base.html" %}
-{% block page_title %}CONCEPT SYS - LOGIN{% endblock %}
-{% block header_title %}CONCEPT SYS - LOGIN{% endblock %}
-{% block content %}
-<div class="max-w-lg mx-auto">
-  <div class="rounded-2xl bg-white/5 border border-white/10 p-6">
-    {% if error %}
-      <div class="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
-        {{ error }}
-      </div>
-    {% endif %}
 
-    <form class="mt-6 space-y-4" method="post" action="/login">
-      <div>
-        <label class="text-sm text-slate-300">Usuário</label>
-        <input name="username" required class="mt-2 w-full rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 outline-none focus:border-white/30" />
+{# Título da aba do navegador #}
+{% block page_title %}CONCEPT SYS — LOGIN{% endblock %}
+
+{# Título grande no topo (base.html) #}
+{% block header_title %}CONCEPT SYS{% endblock %}
+
+{% block content %}
+<style>
+  /* Paleta “ouro champagne” (combina com seu logo) */
+  :root{
+    --gold-1: #E6D3A3;   /* highlight */
+    --gold-2: #D6BFA3;   /* principal */
+    --gold-3: #CBB38A;   /* borda */
+    --ink:    #0B1220;   /* quase preto azulado */
+    --panel:  rgba(255,255,255,0.04);
+    --stroke: rgba(255,255,255,0.10);
+    --muted:  rgba(255,255,255,0.70);
+  }
+
+  /* Ajustes de tipografia só nesta página */
+  .login-brand{
+    font-family: "Cormorant Garamond", serif;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+</style>
+
+<div class="min-h-[65vh] flex items-center justify-center">
+  <div class="w-full max-w-md">
+
+    <!-- BRAND (logo centralizado) -->
+    <div class="flex flex-col items-center text-center mb-6">
+      <!-- ✅ Troque o src para o arquivo real do seu logo em /static -->
+      <img
+        src="/static/logo.png"
+        alt="Concept"
+        class="h-20 w-20 rounded-full"
+        style="filter: drop-shadow(0 14px 30px rgba(0,0,0,.45));"
+      />
+
+      <div class="mt-4 text-3xl login-brand text-[color:var(--gold-2)]">
+        CONCEPT SYS
       </div>
-      <div>
-        <label class="text-sm text-slate-300">Senha</label>
-        <input type="password" name="password" required class="mt-2 w-full rounded-xl bg-slate-900/60 border border-white/10 px-4 py-3 outline-none focus:border-white/30" />
+
+      <div class="mt-1 text-sm text-white/60">
+        Sistema interno de gestão clínica
       </div>
-      <button
-        class="w-full rounded-xl
-              bg-amber-500 px-4 py-3
-              font-semibold text-slate-900
-              hover:bg-amber-600
-              transition-all duration-200
-              shadow-lg shadow-amber-500/20
-              hover:shadow-amber-500/40">
-        Entrar
-      </button>
-    </form>
+    </div>
+
+    <!-- CARD -->
+    <div class="rounded-2xl bg-white/5 border border-white/10 p-7"
+         style="box-shadow: 0 24px 80px rgba(0,0,0,.45);">
+      {% if error %}
+        <div class="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
+          {{ error }}
+        </div>
+      {% endif %}
+
+      <form class="space-y-4" method="post" action="/login">
+        <div>
+          <label class="text-sm text-white/70">Usuário</label>
+          <input
+            name="username"
+            required
+            class="mt-2 w-full rounded-xl bg-white/90 text-slate-950 border border-white/10 px-4 py-3 outline-none focus:border-white/30"
+            autocomplete="username"
+          />
+        </div>
+
+        <div>
+          <label class="text-sm text-white/70">Senha</label>
+          <input
+            type="password"
+            name="password"
+            required
+            class="mt-2 w-full rounded-xl bg-white/90 text-slate-950 border border-white/10 px-4 py-3 outline-none focus:border-white/30"
+            autocomplete="current-password"
+          />
+        </div>
+
+        <!-- BOTÃO premium (escuro + borda champagne) -->
+        <button
+          type="submit"
+          class="w-full rounded-xl px-4 py-3 font-semibold transition"
+          style="
+            background: rgba(10, 12, 18, 0.92);
+            border: 1px solid var(--gold-3);
+            color: var(--gold-2);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          "
+          onmouseover="this.style.filter='brightness(1.06)'"
+          onmouseout="this.style.filter='none'"
+        >
+          Entrar
+        </button>
+
+        <div class="pt-2 text-xs text-white/45 text-center">
+          Acesso restrito • Concept Clinic
+        </div>
+      </form>
+    </div>
+
   </div>
 </div>
 {% endblock %}
