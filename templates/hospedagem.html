@@ -175,10 +175,14 @@
         </select>
 
         <select class="input" name="month" onchange="this.form.submit()">
+            {% set month_names = {
+            1:"Janeiro", 2:"Fevereiro", 3:"Março", 4:"Abril", 5:"Maio", 6:"Junho",
+            7:"Julho", 8:"Agosto", 9:"Setembro", 10:"Outubro", 11:"Novembro", 12:"Dezembro"
+            } %}
             {% for m in range(1,13) %}
             <option value="{{ '%04d-%02d'|format(sel_year|int, m) }}"
                 {% if m == sel_month|int %}selected{% endif %}>
-                {{ '%02d'|format(m) }}
+                {{ month_names[m] }}
             </option>
             {% endfor %}
         </select>
@@ -285,7 +289,7 @@
           <div>
             <div style="font-weight:900;">
               {{ r.check_in_br }} → {{ r.check_out_br }}
-              {% if r.is_pre %}<span class="pill pre" style="margin-left:8px;">Pré</span>{% endif %}
+              {% if r.is_pre %}<span class="pill pre" style="margin-left:8px;">Pré-reserva</span>{% endif %}
             </div>
 
             <div style="color: rgba(255,255,255,0.85); margin-top:4px;">
@@ -294,8 +298,7 @@
             </div>
 
             <div style="color: rgba(255,255,255,0.65); font-size: 13px; margin-top:6px;">
-              Criado por <b>{{ r.created_by_username or "-" }}</b>
-              {% if r.created_at_str %} em {{ r.created_at_str }}{% endif %}
+            Criado por <b>{{ r.created_by_username or "-" }}</b> em <b>{{ r.created_at_str or "-" }}</b>
             </div>
           </div>
 
