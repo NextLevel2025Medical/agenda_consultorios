@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <title>{{ title or "Agenda de Consultórios" }}</title>
+  <title>{% block page_title %}{{ title or "Agenda de Consultórios" }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/globals.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,7 +26,7 @@
     <div class="flex items-center justify-between gap-4">
       <div>
         <h1 class="brand-title text-4xl text-amber-400">
-          MAPA CIRÚRGICO
+            {% block header_title %}CONCEPT SYS - MAPA CIRÚRGICO{% endblock %}
         </h1>
       </div>
 
@@ -38,7 +38,7 @@
           </a>
         {% endif %}
 
-        {% if current_user and current_user.username == "johnny" %}
+        {% if current_user and current_user.username == "johnny.ge" %}
           <a href="/relatorio_gustavo"
             class="block w-full rounded-lg px-3 py-2 text-sm font-medium text-slate-100
                     hover:bg-white/10 transition">
