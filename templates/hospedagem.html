@@ -240,41 +240,6 @@
       </div>
     </div>
 
-    {% if month_reservations and month_reservations|length > 0 %}
-    <div style="margin-top:22px;">
-        <div style="font-weight:900; margin-bottom:10px;">Reservas do mês</div>
-
-        {% for r in month_reservations %}
-        <div style="display:flex; justify-content:space-between; gap:14px; padding:14px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; margin-bottom:10px; background: rgba(255,255,255,0.03);">
-            <div>
-            <div style="font-weight:900;">{{ r.check_in }} → {{ r.check_out }}</div>
-            <div style="color: rgba(255,255,255,0.85); margin-top:4px;">
-                {{ r.unit_label }} — {{ r.patient_name }}
-                {% if r.is_pre == 1 %}<span style="opacity:.75;">(Pré-reserva)</span>{% endif %}
-            </div>
-
-            <div style="color: rgba(255,255,255,0.65); font-size: 13px; margin-top:6px;">
-                Criado por <b>{{ r.created_by or "—" }}</b>
-                {% if r.created_at %} • em {{ r.created_at }}{% endif %}
-            </div>
-            </div>
-
-            <div style="display:flex; gap:10px; align-items:center;">
-            <button class="btn btn-small" type="button"
-                onclick="openEditModal(document.querySelector('.bar[data-id=\'{{ r.id }}\']'))">
-                Editar
-            </button>
-
-            <form method="post" action="/hospedagem/delete/{{ r.id }}" style="margin:0;">
-                <input type="hidden" name="month" value="{{ selected_month }}">
-                <button class="btn btn-small" type="submit" onclick="return confirm('Excluir esta reserva?')">Excluir</button>
-            </form>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
     {% for u in units %}
     <div class="grid-row">
         <div class="left-cell">{{ human_unit(u) }}</div>
@@ -309,27 +274,32 @@
   </div>
 </div>
 
-<!-- LISTA DE RESERVAS DO MÊS (abaixo do mapa) -->
-<div style="margin-top:16px;">
-  <div style="font-weight:700; margin-bottom:10px;">Reservas do mês</div>
+<!-- Reservas do mês (somente abaixo do quadro) -->
+{% if reservations_list and reservations_list|length > 0 %}
+  <div style="margin-top:22px;">
+    <div style="font-weight:900; margin-bottom:10px;">Reservas do mês</div>
 
-  {% if reservations_list and reservations_list|length > 0 %}
     <div style="display:flex; flex-direction:column; gap:10px;">
       {% for r in reservations_list %}
-        <div class="card-row" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="display:flex; justify-content:space-between; gap:14px; padding:14px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; background: rgba(255,255,255,0.03);">
           <div>
-            <div style="font-weight:700;">
+            <div style="font-weight:900;">
               {{ r.check_in_br }} → {{ r.check_out_br }}
               {% if r.is_pre %}<span class="pill pre" style="margin-left:8px;">Pré</span>{% endif %}
             </div>
-            <div class="muted" style="margin-top:2px;">
+
+            <div style="color: rgba(255,255,255,0.85); margin-top:4px;">
               {{ human_unit(r.unit) }} — {{ r.patient_name }}
-              {% if r.note %}<span style="opacity:.85;"> — {{ r.note }}</span>{% endif %}
+              {% if r.note %}<span style="opacity:.75;"> — {{ r.note }}</span>{% endif %}
+            </div>
+
+            <div style="color: rgba(255,255,255,0.65); font-size: 13px; margin-top:6px;">
+              Criado por <b>{{ r.created_by_username or "-" }}</b>
+              {% if r.created_at_str %} em {{ r.created_at_str }}{% endif %}
             </div>
           </div>
 
-          <div style="display:flex; gap:10px;">
-            <!-- Editar: reaproveita o mesmo openEditModal() -->
+          <div style="display:flex; gap:10px; align-items:center;">
             <button
               class="btn btn-small"
               type="button"
@@ -345,18 +315,19 @@
               Editar
             </button>
 
-            <!-- Excluir -->
-            <button class="btn btn-small btn-danger" type="button" onclick="submitDeleteFromList({{ r.id }})">
-              Excluir
-            </button>
+            <form method="post" action="/hospedagem/delete/{{ r.id }}" style="margin:0;">
+              <input type="hidden" name="month" value="{{ selected_month }}">
+              <button class="btn btn-small btn-danger" type="submit" onclick="return confirm('Excluir esta reserva?')">
+                Excluir
+              </button>
+            </form>
           </div>
         </div>
       {% endfor %}
     </div>
-  {% else %}
-    <div class="muted">Nenhuma reserva neste mês.</div>
-  {% endif %}
-</div>
+  </div>
+{% endif %}
+
 
 <!-- MODAL -->
 <div class="modal-backdrop" id="lodgingBackdrop" onclick="maybeClose(event)">
