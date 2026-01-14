@@ -273,6 +273,55 @@
   </div>
 </div>
 
+<!-- LISTA DE RESERVAS DO MÊS (abaixo do mapa) -->
+<div style="margin-top:16px;">
+  <div style="font-weight:700; margin-bottom:10px;">Reservas do mês</div>
+
+  {% if reservations_list and reservations_list|length > 0 %}
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      {% for r in reservations_list %}
+        <div class="card-row" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div>
+            <div style="font-weight:700;">
+              {{ r.check_in_br }} → {{ r.check_out_br }}
+              {% if r.is_pre %}<span class="pill pre" style="margin-left:8px;">Pré</span>{% endif %}
+            </div>
+            <div class="muted" style="margin-top:2px;">
+              {{ human_unit(r.unit) }} — {{ r.patient_name }}
+              {% if r.note %}<span style="opacity:.85;"> — {{ r.note }}</span>{% endif %}
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <!-- Editar: reaproveita o mesmo openEditModal() -->
+            <button
+              class="btn btn-small"
+              type="button"
+              onclick="openEditModal(this)"
+              data-id="{{ r.id }}"
+              data-unit="{{ r.unit }}"
+              data-patient="{{ r.patient_name }}"
+              data-check-in="{{ r.check_in_br }}"
+              data-check-out="{{ r.check_out_br }}"
+              data-is-pre="{{ 1 if r.is_pre else 0 }}"
+              data-note="{{ r.note|e }}"
+            >
+              Editar
+            </button>
+
+            <!-- Excluir -->
+            <button class="btn btn-small btn-danger" type="button" onclick="submitDeleteFromList({{ r.id }})">
+              Excluir
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="muted">Nenhuma reserva neste mês.</div>
+  {% endif %}
+</div>
+
 <!-- MODAL -->
 <div class="modal-backdrop" id="lodgingBackdrop" onclick="maybeClose(event)">
   <div class="modal" onclick="event.stopPropagation()">
@@ -416,6 +465,12 @@
     if (!confirm("Excluir esta reserva de hospedagem?")) return;
     deleteForm.submit();
   }
+
+  function submitDeleteFromList(id){
+    if (!confirm("Excluir esta reserva de hospedagem?")) return;
+    deleteForm.action = "/hospedagem/delete/" + id;
+    deleteForm.submit();
+    }
 
   // Prefill via query params (open=1)
   (function(){
