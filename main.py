@@ -2364,6 +2364,8 @@ def hospedagem_page(
     require(user.role in ("admin", "surgery"))
 
     selected_month, first_day, next_month_first, days = safe_selected_month(month)
+    # anos para o dropdown (ano atual até +5)
+    years = list(range(first_day.year, first_day.year + 6))
     day_index = {d: i for i, d in enumerate(days)}
 
     units = ["suite_1", "suite_2", "apto"]
@@ -2448,6 +2450,7 @@ def hospedagem_page(
             "current_user": user,
             "selected_month": selected_month,
             "days": days,
+            "years": years,
             "units": units,
             "bars_by_unit": bars_by_unit,
             "human_unit": human_unit,
