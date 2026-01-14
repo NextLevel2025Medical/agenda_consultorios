@@ -2499,7 +2499,12 @@ def hospedagem_page(
         LodgingReservation.check_out > first_day,
     )
     reservations = session.exec(q).all()
-    
+    creator_ids = {r.created_by_id for r in reservations if getattr(r, "created_by_id", None)}
+    users_by_id = {}
+    if creator_ids:
+        users_rows = session.exec(select(User).where(User.id.in_(creator_ids))).all()
+        users_by_id = {u.id: u for u in users_rows}
+
     reservations_list = []
     for r in reservations:
         reservations_list.append(
