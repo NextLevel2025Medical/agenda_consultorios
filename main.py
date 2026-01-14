@@ -2667,7 +2667,7 @@ def hospedagem_override(
     check_out: str = Form(...),
     is_pre_reservation: Optional[str] = Form(None),
     note: Optional[str] = Form(None),
-    surgery_entry_id: Optional[int] = Form(None),
+    surgery_entry_id: Optional[str] = Form(None),
 
     session: Session = Depends(get_session),
 ):
@@ -2706,7 +2706,12 @@ def hospedagem_override(
             f"&note={quote(note or '')}"
             f"&surgery_entry_id={surgery_entry_id or ''}"
         )
-
+    surgery_entry_id_int: Optional[int] = None
+    if surgery_entry_id is not None:
+        s = str(surgery_entry_id).strip()
+        if s.isdigit():
+            surgery_entry_id_int = int(s)
+            
     # cria a nova
     row = LodgingReservation(
         unit=unit,
@@ -2715,7 +2720,7 @@ def hospedagem_override(
         check_out=co,
         is_pre_reservation=bool(is_pre_reservation),
         note=(note or "").strip() or None,
-        surgery_entry_id=surgery_entry_id,
+        surgery_entry_id=surgery_entry_id_int,
     )
     session.add(row)
     session.commit()
