@@ -249,6 +249,7 @@ def seed_if_empty(session: Session):
     ensure_user("carolina.abdo", "Carolina", "surgery", "Caro!2025#38")
     ensure_user("ariella.vieira", "Ariella", "surgery", "Ariella$2026")
     ensure_user("camilla.martins", "Camilla", "comissao", "Camilla*2026")
+    ensure_user("sayonara.goncalves", "Sayonara", "surgery", "Sayonara*2026")
 
     session.commit()
 
@@ -2407,39 +2408,24 @@ def relatorio_gustavo_run_now(
 # HOSPEDAGEM
 # ============================================================
 
-def normalize_unit(raw: str | None) -> str:
+def normalize_unit(raw: Optional[str]) -> str:
     v = (raw or "").strip().lower()
+    v = v.replace("suíte", "suite").replace("suíte", "suite")
+    v = v.replace("-", " ").replace("_", " ")
+    v = " ".join(v.split())  # colapsa múltiplos espaços
 
-    # remove acentos simples (o suficiente pro seu caso)
-    v = (
-        v.replace("í", "i")
-         .replace("é", "e")
-         .replace("ê", "e")
-         .replace("ã", "a")
-         .replace("á", "a")
-         .replace("ç", "c")
-    )
+    if v in ("suite 1", "suite1", "suíte 1", "s1", "1", "01"):
+        return "suite_1"
+    if v in ("suite 2", "suite2", "suíte 2", "s2", "2", "02"):
+        return "suite_2"
+    if v in ("apto", "apt", "apartamento", "apartmento"):
+        return "apto"
 
-    aliases = {
-        "suite1": "suite_1",
-        "suite_1": "suite_1",
-        "suite 1": "suite_1",
-        "suíte 1": "suite_1",
-        "suíte_1": "suite_1",
+    # se já vier no padrão
+    if v in ("suite_1", "suite_2", "apto"):
+        return v
 
-        "suite2": "suite_2",
-        "suite_2": "suite_2",
-        "suite 2": "suite_2",
-        "suíte 2": "suite_2",
-        "suíte_2": "suite_2",
-
-        "apto": "apto",
-        "apartamento": "apto",
-        "apartmento": "apto",
-        "apt": "apto",
-    }
-
-    return aliases.get(v, v)
+    return v
 
 @app.get("/hospedagem", response_class=HTMLResponse)
 def hospedagem_page(
@@ -2499,30 +2485,105 @@ def hospedagem_page(
         LodgingReservation.check_out > first_day,
     )
     reservations = session.exec(q).all()
-    creator_ids = {r.created_by_id for r in reservations if getattr(r, "created_by_id", None)}
-    users_by_id = {}
-    if creator_ids:
-        users_rows = session.exec(select(User).where(User.id.in_(creator_ids))).all()
-        users_by_id = {u.id: u for u in users_rows}
 
-    reservations_list = []
+    # pré-carrega usuários criadores (para exibir no template)
+    creator_ids = list({getattr(r, "created_by_id", None) for r in reservations if getattr(r, "created_by_id", None)})
+    users_by_id: dict[int, User] = {}
+    if creator_ids:
+        users = session.exec(select(User).where(User.id.in_(creator_ids))).all()
+        users_by_id = {u.id: u for u in users if u.id is not None}
+
+    # barras por unidade (grid com colunas = dias)
+    bars_by_unit: dict[str, list[dict]] = {u: [] for u in units}
+
     for r in reservations:
-        reservations_list.append(
+        u = normalize_unit(getattr(r, "unit", None))
+        if u not in bars_by_unit:
+            audit_logger.warning(f"HOSPEDAGEM_PAGE: unit_desconhecida_no_db id={r.id} unit={getattr(r,'unit',None)}")
+            continue
+
+        # clamp dentro do mês visível
+        start = max(r.check_in, first_day)
+        end = min(r.check_out, next_month_first)
+        if start >= end:
+            continue
+
+        start_col = (start - first_day).days + 2
+        end_col = (end - first_day).days + 2
+        if end_col <= start_col:
+            continue
+
+        # resolve creator (robusto)
+        creator_username = ""
+        cid = getattr(r, "created_by_id", None)
+        if isinstance(cid, str) and cid.isdigit():
+            cid = int(cid)
+
+        if cid is not None and cid in users_by_id:
+            creator_username = users_by_id[cid].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            try:
+                created_at_str = created_at.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                created_at_str = str(created_at)
+
+        bars_by_unit[u].append(
             {
                 "id": r.id,
-                "unit": r.unit or "",
-                "patient_name": r.patient_name or "",
-                "check_in_iso": r.check_in.isoformat(),
-                "check_out_iso": r.check_out.isoformat(),
-                "check_in_br": r.check_in.strftime("%d/%m/%Y"),
-                "check_out_br": r.check_out.strftime("%d/%m/%Y"),
+                "patient_name": r.patient_name,
+                "check_in": r.check_in.strftime("%d/%m/%Y"),
+                "check_out": r.check_out.strftime("%d/%m/%Y"),
+                "start_col": start_col,
+                "end_col": end_col,
                 "is_pre": 1 if r.is_pre_reservation else 0,
-                "note": (r.note or ""),
-                "created_by_id": (r.created_by_id or ""),
+                "note": getattr(r, "note", "") or "",
+                "created_by_username": creator_username,
+                "created_at_str": created_at_str,
             }
         )
 
-    reservations_list.sort(key=lambda x: (x["check_in_iso"], x["unit"], x["patient_name"]))
+    # ✅ lista para exibir "Reservas do mês" abaixo do quadro
+    reservations_list = []
+    for r in reservations:
+        u = normalize_unit(getattr(r, "unit", None))
+        if u not in ("suite_1", "suite_2", "apto"):
+            continue
+
+        created_by_username = ""
+        cid = getattr(r, "created_by_id", None)
+        if isinstance(cid, str) and cid.isdigit():
+            cid = int(cid)
+
+        if cid is not None and cid in users_by_id:
+            created_by_username = users_by_id[cid].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            try:
+                created_at_str = created_at.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                created_at_str = str(created_at)
+
+        reservations_list.append(
+            {
+                "id": r.id,
+                "unit": u,
+                "unit_label": human_unit(u),
+                "patient_name": r.patient_name or "",
+                "check_in": r.check_in.strftime("%d/%m/%Y"),
+                "check_out": r.check_out.strftime("%d/%m/%Y"),
+                "is_pre": 1 if r.is_pre_reservation else 0,
+                "note": getattr(r, "note", "") or "",
+                "created_by_username": created_by_username,
+                "created_at_str": created_at_str,
+            }
+        )
+
+    reservations_list.sort(key=lambda x: (x["check_in"], x["unit"], x["patient_name"]))
 
     audit_logger.info(f"HOSPEDAGEM_PAGE: reservations_found={len(reservations)}")
     if reservations:
@@ -2626,6 +2687,43 @@ def hospedagem_page(
                 "created_at": created_at_str,
             }
         )
+    # ✅ lista para exibir "Reservas do mês" abaixo do quadro
+    reservations_list = []
+    for r in reservations:
+        u = normalize_unit(getattr(r, "unit", None))
+        if u not in ("suite_1", "suite_2", "apto"):
+            continue
+
+        created_by_username = ""
+        cid = getattr(r, "created_by_id", None)
+        if cid is not None and cid in users_by_id:
+            created_by_username = users_by_id[cid].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            # created_at costuma ser datetime
+            try:
+                created_at_str = created_at.strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                created_at_str = str(created_at)
+
+        reservations_list.append(
+            {
+                "id": r.id,
+                "unit": u,
+                "patient_name": r.patient_name or "",
+                "check_in_br": r.check_in.strftime("%d/%m/%Y"),
+                "check_out_br": r.check_out.strftime("%d/%m/%Y"),
+                "is_pre": 1 if r.is_pre_reservation else 0,
+                "note": (getattr(r, "note", "") or ""),
+                "created_by_username": created_by_username,
+                "created_at_str": created_at_str,
+            }
+        )
+
+    reservations_list.sort(key=lambda x: (x["check_in_br"], x["unit"], x["patient_name"]))
+
 
     # ordena barras na linha
     for u in bars_by_unit:
@@ -2641,6 +2739,48 @@ def hospedagem_page(
         "edit_id": edit_id or "",
     }
     
+    # ✅ lista do mês (abaixo do grid)
+    reservations_list = []
+    for r in reservations:
+        # só mostrar as que encostam no mês visível (mesma lógica do grid)
+        start = max(r.check_in, first_day)
+        end = min(r.check_out, next_month_first)
+        if start >= end:
+            continue
+
+        created_by_username = ""
+        cid = getattr(r, "created_by_id", None)
+        if cid in users_by_id:
+            created_by_username = users_by_id[cid].username or ""
+
+        created_at_str = ""
+        created_at = getattr(r, "created_at", None) or getattr(r, "created_at_dt", None)
+        if created_at:
+            try:
+                # se vier datetime
+                if hasattr(created_at, "astimezone"):
+                    created_at_str = created_at.astimezone(TZ).strftime("%d/%m/%Y %H:%M")
+                else:
+                    created_at_str = str(created_at)
+            except Exception:
+                created_at_str = str(created_at)
+
+        reservations_list.append({
+            "id": r.id,
+            "unit": normalize_unit(getattr(r, "unit", None)),
+            "patient_name": (r.patient_name or "").strip(),
+            "check_in_br": r.check_in.strftime("%d/%m/%Y"),
+            "check_out_br": r.check_out.strftime("%d/%m/%Y"),
+            "is_pre": 1 if getattr(r, "is_pre_reservation", False) else 0,
+            "note": getattr(r, "note", None) or "",
+            "created_by_username": created_by_username,
+            "created_at_str": created_at_str,
+        })
+
+    # ordena por data
+    reservations_list.sort(key=lambda x: (x["check_in_br"], x["check_out_br"], x["unit"], x["patient_name"]))
+
+    
     return templates.TemplateResponse(
         "hospedagem.html",
         {
@@ -2652,7 +2792,6 @@ def hospedagem_page(
             "units": units,
             "bars_by_unit": bars_by_unit,
             "reservations_list": reservations_list,
-            "month_reservations": month_reservations,
             "human_unit": human_unit,
             "err": err or "",
             "open": open or "",
@@ -2740,7 +2879,7 @@ def hospedagem_create(
         )
 
     row = LodgingReservation(
-        unit=unit,
+        unit=normalize_unit(unit),
         patient_name=patient_name.strip().upper(),
         check_in=ci,
         check_out=co,
