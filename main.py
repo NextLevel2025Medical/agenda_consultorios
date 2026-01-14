@@ -2466,6 +2466,25 @@ def hospedagem_page(
     )
     reservations = session.exec(q).all()
     
+    reservations_list = []
+    for r in reservations:
+        reservations_list.append(
+            {
+                "id": r.id,
+                "unit": r.unit or "",
+                "patient_name": r.patient_name or "",
+                "check_in_iso": r.check_in.isoformat(),
+                "check_out_iso": r.check_out.isoformat(),
+                "check_in_br": r.check_in.strftime("%d/%m/%Y"),
+                "check_out_br": r.check_out.strftime("%d/%m/%Y"),
+                "is_pre": 1 if r.is_pre_reservation else 0,
+                "note": (r.note or ""),
+                "created_by_id": (r.created_by_id or ""),
+            }
+        )
+
+    reservations_list.sort(key=lambda x: (x["check_in_iso"], x["unit"], x["patient_name"]))
+
     audit_logger.info(f"HOSPEDAGEM_PAGE: reservations_found={len(reservations)}")
     if reservations:
         audit_logger.info(
@@ -2510,6 +2529,8 @@ def hospedagem_page(
                 "start_col": start_col,
                 "end_col": end_col,
                 "is_pre": 1 if r.is_pre_reservation else 0,
+                "note": (r.note or ""),
+                "created_by_id": (r.created_by_id or ""),
             }
         )
 
@@ -2537,6 +2558,7 @@ def hospedagem_page(
             "years": years,
             "units": units,
             "bars_by_unit": bars_by_unit,
+            "reservations_list": reservations_list,
             "human_unit": human_unit,
             "err": err or "",
             "open": open or "",
