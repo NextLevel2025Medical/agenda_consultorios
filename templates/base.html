@@ -23,36 +23,54 @@
 
 <body class="min-h-screen bg-slate-950 text-slate-100">
   <div class="mx-auto max-w-7xl px-6 py-8">
-    <div class="flex items-center justify-between gap-4">
-      <div>
-        <h1 class="brand-title text-4xl text-amber-400">
-            {% block header_title %}CONCEPT SYS - MAPA CIRÚRGICO{% endblock %}
-        </h1>
+    <div class="flex items-center justify-between gap-6">
+      <!-- LEFT: logo + título variável -->
+      <div class="flex items-center gap-4">
+        <img
+          src="/static/logo.png"
+          alt="Concept Clinic"
+          class="h-11 w-11 rounded-full"
+          style="box-shadow: 0 10px 30px rgba(0,0,0,.45);"
+        />
+
+        {% set _header = (self.header_title() | trim) %}
+        {% if _header %}
+          <h1 class="brand-title text-3xl md:text-4xl" style="color: var(--gold-main);">
+            {% block header_title %}{% endblock %}
+          </h1>
+        {% endif %}
       </div>
 
+      <!-- RIGHT: ações padronizadas -->
       {% if current_user %}
-      <div class="flex flex-col gap-2 items-end">
-        {% if current_user and current_user.role in ("admin", "surgery") %}
-          <a class="btn-secondary top-action-btn w-52 text-center" href="/bloqueios">
-            Bloqueios de Agenda
-          </a>
-        {% endif %}
+        <div class="flex flex-col gap-2 items-end">
+          {% if current_user.role in ("admin", "surgery") %}
+            <a
+              href="/bloqueios"
+              class="block w-56 rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
+            >
+              ⛔ Bloqueios de Agenda
+            </a>
+          {% endif %}
 
-        {% if current_user and current_user.username == "johnny.ge" %}
-          <a href="/relatorio_gustavo"
-            class="block w-full rounded-lg px-3 py-2 text-sm font-medium text-slate-100
-                    hover:bg-white/10 transition">
-            📊 Relatório Dr. Gustavo
-          </a>
-        {% endif %}
+          {% if current_user.username == "johnny.ge" %}
+            <a
+              href="/relatorio_gustavo"
+              class="block w-56 rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
+            >
+              📊 Relatório Dr. Gustavo
+            </a>
+          {% endif %}
 
-        <form method="post" action="/logout" class="w-52">
-          <button class="btn-secondary top-action-btn w-full" type="submit">
-            Sair
-          </button>
-        </form>
-      </div>
-
+          <form method="post" action="/logout" class="w-56">
+            <button
+              type="submit"
+              class="block w-full rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
+            >
+              🚪 Sair
+            </button>
+          </form>
+        </div>
       {% endif %}
     </div>
 
