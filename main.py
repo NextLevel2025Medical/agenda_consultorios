@@ -398,9 +398,37 @@ def validate_lodging_conflict(
 
     exists = session.exec(q).first()
     if exists:
+        audit_logger.info(
+            "LODGE_CONFLICT: new_unit=%s new_ci=%s new_co=%s | "
+            "found_id=%s found_unit=%s found_ci=%s found_co=%s found_patient=%s pre=%s surgery_entry_id=%s",
+            unit, check_in, check_out,
+            getattr(exists, "id", None),
+            getattr(exists, "unit", None),
+            getattr(exists, "check_in", None),
+            getattr(exists, "check_out", None),
+            getattr(exists, "patient_name", None),
+            getattr(exists, "is_pre_reservation", None),
+            getattr(exists, "surgery_entry_id", None),
+        )
         return "Hospedagem indisponível: já existe reserva nesse período para esta acomodação."
     return None
 
+def get_lodging_conflict_row(
+    session: Session,
+    unit: str,
+    check_in: date,
+    check_out: date,
+    exclude_id: Optional[int] = None,
+):
+    q = select(LodgingReservation).where(
+        LodgingReservation.unit == unit,
+        LodgingReservation.check_in < check_out,
+        LodgingReservation.check_out > check_in,
+    )
+    if exclude_id is not None:
+        q = q.where(LodgingReservation.id != exclude_id)
+
+    return session.exec(q).first()
 
 def human_unit(unit: str) -> str:
     return {
@@ -2390,12 +2418,33 @@ def hospedagem_page(
     check_out: Optional[str] = None,
     patient_name: Optional[str] = None,
     is_pre_reservation: Optional[str] = None,
+    conflict_id: Optional[str] = None,
+    note: Optional[str] = None,
     edit_id: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
     if not user:
         return redirect("/login")
+    allow_override = (user.username == "johnny.ge")
+
+    conflict_obj = None
+    if allow_override and conflict_id:
+        try:
+            cid = int(conflict_id)
+            row = session.get(LodgingReservation, cid)
+            if row:
+                conflict_obj = {
+                    "id": row.id,
+                    "patient_name": row.patient_name,
+                    "unit": row.unit,
+                    "check_in": row.check_in.strftime("%d/%m/%Y"),
+                    "check_out": row.check_out.strftime("%d/%m/%Y"),
+                    "is_pre": 1 if row.is_pre_reservation else 0,
+                }
+        except Exception:
+            conflict_obj = None
+
     require(user.role in ("admin", "surgery"))
 
     selected_month, first_day, next_month_first, days = safe_selected_month(month)
@@ -2499,6 +2548,12 @@ def hospedagem_page(
             "patient_prefill": patient_name or "",
             "pre_prefill": 1 if (is_pre_reservation == "1") else 0,
             "edit_id": edit_id or "",
+            
+            "allow_override": allow_override,
+
+            "conflict": conflict_obj,
+
+            "prefill_note": note or "",
 
             # ✅ ADICIONE ISTO (para o template não quebrar com prefill.unit)
             "prefill": {
@@ -2542,11 +2597,29 @@ def hospedagem_create(
     e = validate_lodging_conflict(session, unit, ci, co)
     if e:
         month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
+
+        # ✅ somente o johnny.ge pode "ver o conflito" e optar por sobrepor
+        if user.username == "johnny.ge":
+            conflict = get_lodging_conflict_row(session, unit, ci, co)
+            conflict_id = conflict.id if conflict else ""
+
+            return redirect(
+                f"/hospedagem?month={quote(month_param)}&open=1"
+                f"&err={quote(e)}"
+                f"&conflict_id={conflict_id}"
+                f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
+                f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+                f"&note={quote(note or '')}"
+                f"&surgery_entry_id={surgery_entry_id or ''}"
+            )
+
+        # demais usuários: mantém o bloqueio (sem permissão)
         return redirect(
             f"/hospedagem?month={quote(month_param)}&open=1"
             f"&err={quote(e)}"
             f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
             f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+            f"&note={quote(note or '')}"
             f"&surgery_entry_id={surgery_entry_id or ''}"
         )
 
@@ -2579,6 +2652,79 @@ def hospedagem_create(
         f"ci={row.check_in} co={row.check_out} patient={row.patient_name}"
     )
  
+    month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
+    return redirect(f"/hospedagem?month={month_param}")
+
+@app.post("/hospedagem/override")
+def hospedagem_override(
+    request: Request,
+    month: str = Form(""),
+    conflict_id: int = Form(...),
+
+    unit: str = Form(...),
+    patient_name: str = Form(...),
+    check_in: str = Form(...),
+    check_out: str = Form(...),
+    is_pre_reservation: Optional[str] = Form(None),
+    note: Optional[str] = Form(None),
+    surgery_entry_id: Optional[int] = Form(None),
+
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    # ✅ bloqueio TOTAL: só johnny.ge pode sobrepor
+    require(user.username == "johnny.ge")
+
+    # parse datas
+    try:
+        ci = date.fromisoformat(check_in)
+        co = date.fromisoformat(check_out)
+    except Exception:
+        return redirect(f"/hospedagem?err={quote('Datas inválidas')}&open=1")
+
+    # pega a reserva conflitante
+    old = session.get(LodgingReservation, conflict_id)
+    if not old:
+        return redirect(f"/hospedagem?err={quote('Reserva conflitante não encontrada')}&open=1")
+
+    # remove a antiga
+    session.delete(old)
+    session.commit()
+
+    # valida novamente (caso exista outra reserva além da que foi apagada)
+    e = validate_lodging_conflict(session, unit, ci, co)
+    if e:
+        month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
+        return redirect(
+            f"/hospedagem?month={quote(month_param)}&open=1"
+            f"&err={quote(e)}"
+            f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
+            f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+            f"&note={quote(note or '')}"
+            f"&surgery_entry_id={surgery_entry_id or ''}"
+        )
+
+    # cria a nova
+    row = LodgingReservation(
+        unit=unit,
+        patient_name=patient_name,
+        check_in=ci,
+        check_out=co,
+        is_pre_reservation=bool(is_pre_reservation),
+        note=(note or "").strip() or None,
+        surgery_entry_id=surgery_entry_id,
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    audit_logger.info(
+        f"HOSPEDAGEM_OVERRIDE: deleted_id={conflict_id} | new_id={row.id} unit={row.unit} ci={row.check_in} co={row.check_out} patient={row.patient_name}"
+    )
+
     month_param = (month or "").strip() or f"{ci.year:04d}-{ci.month:02d}"
     return redirect(f"/hospedagem?month={month_param}")
 
