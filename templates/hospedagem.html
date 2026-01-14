@@ -8,6 +8,7 @@
 <style>
   .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   .month-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .month-controls select.input { width: 120px;  min-width: 120px; }
   .btn-small { padding: 10px 14px; font-size: 14px; border-radius: 12px; }
   .legend { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
   .legend .swatch { display:inline-block; width:26px; height:10px; border-radius: 999px; background: rgba(255,255,255,0.18); }
@@ -238,6 +239,41 @@
         </div>
       </div>
     </div>
+
+    {% if month_reservations and month_reservations|length > 0 %}
+    <div style="margin-top:22px;">
+        <div style="font-weight:900; margin-bottom:10px;">Reservas do mês</div>
+
+        {% for r in month_reservations %}
+        <div style="display:flex; justify-content:space-between; gap:14px; padding:14px; border:1px solid rgba(255,255,255,0.08); border-radius:16px; margin-bottom:10px; background: rgba(255,255,255,0.03);">
+            <div>
+            <div style="font-weight:900;">{{ r.check_in }} → {{ r.check_out }}</div>
+            <div style="color: rgba(255,255,255,0.85); margin-top:4px;">
+                {{ r.unit_label }} — {{ r.patient_name }}
+                {% if r.is_pre == 1 %}<span style="opacity:.75;">(Pré-reserva)</span>{% endif %}
+            </div>
+
+            <div style="color: rgba(255,255,255,0.65); font-size: 13px; margin-top:6px;">
+                Criado por <b>{{ r.created_by or "—" }}</b>
+                {% if r.created_at %} • em {{ r.created_at }}{% endif %}
+            </div>
+            </div>
+
+            <div style="display:flex; gap:10px; align-items:center;">
+            <button class="btn btn-small" type="button"
+                onclick="openEditModal(document.querySelector('.bar[data-id=\'{{ r.id }}\']'))">
+                Editar
+            </button>
+
+            <form method="post" action="/hospedagem/delete/{{ r.id }}" style="margin:0;">
+                <input type="hidden" name="month" value="{{ selected_month }}">
+                <button class="btn btn-small" type="submit" onclick="return confirm('Excluir esta reserva?')">Excluir</button>
+            </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     {% for u in units %}
     <div class="grid-row">
