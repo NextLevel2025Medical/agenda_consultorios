@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
+from types import SimpleNamespace
 
 from fastapi import FastAPI, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -2348,6 +2349,40 @@ def relatorio_gustavo_page(
             "snapshot_date": snapshot_date or "",
         },
     )
+
+@app.get("/relatorio_gustavo/preview", response_class=HTMLResponse)
+def relatorio_gustavo_preview(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.username == "johnny.ge")
+
+    # ✅ gera na hora (não salva snapshot e não envia WhatsApp)
+    today_sp = datetime.now(TZ).date()
+    msg1, msg2, _payload = build_gustavo_whatsapp_messages(session, today_sp)
+
+    preview_snapshot = SimpleNamespace(message_1=msg1, message_2=msg2)
+
+    # mantém dropdown funcionando (com datas já salvas), mas exibe preview no corpo
+    snaps = session.exec(
+        select(GustavoAgendaSnapshot).order_by(GustavoAgendaSnapshot.snapshot_date.desc())
+    ).all()
+    available_dates = [s.snapshot_date.isoformat() for s in snaps]
+
+    return templates.TemplateResponse(
+        "relatorio_gustavo.html",
+        {
+            "request": request,
+            "current_user": user,
+            "available_dates": available_dates,
+            "snapshot": preview_snapshot,
+            "snapshot_date": "",  # não “seleciona” nenhuma data salva
+        },
+    )    
+
 @app.post("/relatorio_gustavo/run-now")
 def relatorio_gustavo_run_now(
     request: Request,
