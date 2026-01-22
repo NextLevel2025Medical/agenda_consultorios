@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
 from types import SimpleNamespace
 
-from fastapi import FastAPI, Depends, Request, Form
+from fastapi import FastAPI, Depends, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -447,6 +447,55 @@ def _weekday_pt(idx: int) -> str:
 # RELATÓRIO DR. GUSTAVO (snapshot diário às 19h)
 # ============================
 
+GUSTAVO_REPORT_CFG_PATH = (Path(__file__).resolve().parent / "gustavo_report_config.json")
+
+def _default_gustavo_month_keys(snapshot_day_sp: date) -> list[str]:
+    y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
+    y1, m1 = _add_months(y0, m0, 1)
+    y2, m2 = _add_months(y0, m0, 2)
+    return [f"{y0:04d}-{m0:02d}", f"{y1:04d}-{m1:02d}", f"{y2:04d}-{m2:02d}"]
+
+def load_gustavo_selected_month_keys(snapshot_day_sp: date) -> list[str]:
+    try:
+        if not GUSTAVO_REPORT_CFG_PATH.exists():
+            return _default_gustavo_month_keys(snapshot_day_sp)
+        data = json.loads(GUSTAVO_REPORT_CFG_PATH.read_text(encoding="utf-8") or "{}")
+        keys = data.get("selected_months", [])
+        if not isinstance(keys, list) or not keys:
+            return _default_gustavo_month_keys(snapshot_day_sp)
+        # filtra apenas strings tipo YYYY-MM
+        ok = []
+        for k in keys:
+            if isinstance(k, str) and len(k) == 7 and k[4] == "-":
+                ok.append(k)
+        return ok or _default_gustavo_month_keys(snapshot_day_sp)
+    except Exception:
+        return _default_gustavo_month_keys(snapshot_day_sp)
+
+def save_gustavo_selected_month_keys(keys: list[str]) -> None:
+    payload = {"selected_months": keys, "updated_at": datetime.utcnow().isoformat()}
+    GUSTAVO_REPORT_CFG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _keys_to_month_tuples(keys: list[str]) -> list[tuple[int, int]]:
+    months: list[tuple[int, int]] = []
+    for k in keys:
+        try:
+            yy, mm = k.split("-")
+            y = int(yy)
+            m = int(mm)
+            if 1 <= m <= 12:
+                months.append((y, m))
+        except Exception:
+            continue
+    # ordena e remove duplicados mantendo ordem
+    seen = set()
+    out = []
+    for ym in sorted(months):
+        if ym not in seen:
+            seen.add(ym)
+            out.append(ym)
+    return out
+
 PT_MONTHS = [
     "janeiro", "fevereiro", "março", "abril", "maio", "junho",
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
@@ -492,20 +541,26 @@ def _proc_bucket(procedure_type: str | None) -> str:
 
 def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> tuple[str, str, dict]:
     """
-    Gera as duas mensagens (Panorama + Detalhe 3 meses)
+    Gera as duas mensagens (Panorama + Detalhe)
 
     Regras:
-    - meses fechados: mês atual + 2
-    - Seg/Qua sempre aparecem
+    - meses: vêm da configuração (seleção) ou default (mês atual + 2)
+    - aparecem SOMENTE Segunda (0) e Quarta (2)
     - Emojis: ✅ cheio | 🟡 parcial | 🔴 livre | 🔵 bloqueio/recesso
+    - Sem descrições extras (apenas as bolinhas)
+    - Sem linhas em branco entre dias do mesmo mês (apenas entre meses)
     """
 
     gustavo = session.exec(select(User).where(User.username == "drgustavo")).first()
     if not gustavo:
         raise RuntimeError("Usuário drgustavo não encontrado no banco.")
 
-    y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
-    months = [(y0, m0), _add_months(y0, m0, 1), _add_months(y0, m0, 2)]
+    # 1) resolve meses a usar
+    if month_keys is None:
+        month_keys = load_gustavo_selected_month_keys(snapshot_day_sp)
+    months = _keys_to_month_tuples(month_keys)
+    if not months:
+        months = _keys_to_month_tuples(_default_gustavo_month_keys(snapshot_day_sp))
 
     period_start = _month_start(months[0][0], months[0][1])
     period_end = _month_end(months[-1][0], months[-1][1])
@@ -525,7 +580,7 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
 
     pano_lines: list[str] = [
         "AGENDA DR. GUSTAVO AQUINO",
-        f"📅 {PT_MONTHS[months[0][1]-1].title()} • {PT_MONTHS[months[1][1]-1].title()} • {PT_MONTHS[months[2][1]-1].title()}",
+        f"📅 {months_titles}",
         ""
     ]
 
@@ -645,16 +700,18 @@ def save_gustavo_snapshot_and_send(session: Session, snapshot_day_sp: date) -> G
     if existing:
         return existing
 
+    month_keys = load_gustavo_selected_month_keys(snapshot_day_sp)
     msg1, msg2, payload = build_gustavo_whatsapp_messages(session, snapshot_day_sp)
 
-    y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
-    y2, m2 = _add_months(y0, m0, 2)
+    months = _keys_to_month_tuples(month_keys)
+    if not months:
+        months = _keys_to_month_tuples(_default_gustavo_month_keys(snapshot_day_sp))
 
     snap = GustavoAgendaSnapshot(
         snapshot_date=snapshot_day_sp,
         generated_at=datetime.utcnow(),
-        period_start=_month_start(y0, m0),
-        period_end=_month_end(y2, m2),
+        period_start=_month_start(months[0][0], months[0][1]),
+        period_end=_month_end(months[-1][0], months[-1][1]),
         message_1=msg1,
         message_2=msg2,
         payload=payload,
@@ -2335,7 +2392,18 @@ def relatorio_gustavo_page(
             ).first()
         except Exception:
             selected = None
+    today_sp = datetime.now(TZ).date()
+    selected_keys = set(load_gustavo_selected_month_keys(today_sp))
 
+    # opções: Jan..Dez do ano atual
+    yy = today_sp.year
+    pt_abbr = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    month_options = []
+    for i in range(1, 13):
+        key = f"{yy:04d}-{i:02d}"
+        label = f"{pt_abbr[i-1]}/{str(yy)[2:]}"
+        month_options.append({"key": key, "label": label})
+        
     return templates.TemplateResponse(
         "relatorio_gustavo.html",
         {
@@ -2344,12 +2412,35 @@ def relatorio_gustavo_page(
             "available_dates": available_dates,
             "snapshot": selected,
             "snapshot_date": snapshot_date or "",
+            "month_options": month_options,
+            "selected_months": selected_keys,
         },
     )
+
+@app.post("/relatorio_gustavo/config")
+def relatorio_gustavo_save_config(
+    request: Request,
+    selected_months: list[str] = Form(default=[]),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.username == "johnny.ge")
+
+    # salva exatamente o que veio marcado (se vier vazio, cai no default na geração)
+    keys = []
+    for k in selected_months or []:
+        if isinstance(k, str) and len(k) == 7 and k[4] == "-":
+            keys.append(k)
+
+    save_gustavo_selected_month_keys(keys)
+    return redirect("/relatorio_gustavo")
 
 @app.get("/relatorio_gustavo/preview", response_class=HTMLResponse)
 def relatorio_gustavo_preview(
     request: Request,
+    months: list[str] = Query(default=[]),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -2359,7 +2450,8 @@ def relatorio_gustavo_preview(
 
     # ✅ gera na hora (não salva snapshot e não envia WhatsApp)
     today_sp = datetime.now(TZ).date()
-    msg1, msg2, _payload = build_gustavo_whatsapp_messages(session, today_sp)
+    month_keys = months or None  # None => usa config salva (ou default)
+    msg1, msg2, _payload = build_gustavo_whatsapp_messages(session, today_sp,month_keys=month_keys)
 
     preview_snapshot = SimpleNamespace(message_1=msg1, message_2=msg2)
 
@@ -2369,6 +2461,19 @@ def relatorio_gustavo_preview(
     ).all()
     available_dates = [s.snapshot_date.isoformat() for s in snaps]
 
+    today_sp = datetime.now(TZ).date()
+
+    # selecionados do preview: se veio query ?months=... usa ela; senão usa config salva
+    selected_keys = set(months or load_gustavo_selected_month_keys(today_sp))
+
+    yy = today_sp.year
+    pt_abbr = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    month_options = []
+    for i in range(1, 13):
+        key = f"{yy:04d}-{i:02d}"
+        label = f"{pt_abbr[i-1]}/{str(yy)[2:]}"
+        month_options.append({"key": key, "label": label})
+
     return templates.TemplateResponse(
         "relatorio_gustavo.html",
         {
@@ -2377,8 +2482,10 @@ def relatorio_gustavo_preview(
             "available_dates": available_dates,
             "snapshot": preview_snapshot,
             "snapshot_date": "",  # não “seleciona” nenhuma data salva
+            "month_options": month_options,
+            "selected_months": selected_keys,
         },
-    )    
+    )
 
 @app.post("/relatorio_gustavo/run-now")
 def relatorio_gustavo_run_now(
