@@ -47,7 +47,41 @@
         </div>
       </div>
     </form>
+    <!-- Configuração de meses do relatório -->
+    <form method="post" action="/relatorio_gustavo/config" class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-6">
+      <div class="text-sm opacity-80 mb-2">Meses incluídos no relatório</div>
 
+      <div class="flex flex-wrap gap-2">
+        {% for m in month_options %}
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+            <input
+              type="checkbox"
+              name="selected_months"
+              value="{{ m.key }}"
+              class="accent-emerald-500"
+              {% if m.key in selected_months %}checked{% endif %}
+            />
+            <span>{% if m.key in selected_months %}✅{% else %}⬜{% endif %} {{ m.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600">
+          Salvar meses
+        </button>
+
+        <button
+          type="submit"
+          formaction="/relatorio_gustavo/preview"
+          formmethod="get"
+          class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+        >
+          Preview (sem salvar)
+        </button>
+      </div>
+    </form>
+    
     {% if snapshot %}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
