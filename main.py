@@ -539,7 +539,11 @@ def _proc_bucket(procedure_type: str | None) -> str:
         return "simp"
     return "cir"
 
-def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> tuple[str, str, dict]:
+def build_gustavo_whatsapp_messages(
+    session: Session,
+    snapshot_day_sp: date,
+    month_keys: list[str] | None = None,
+) -> tuple[str, str, dict]:
     """
     Gera as duas mensagens (Panorama + Detalhe)
 
@@ -562,22 +566,14 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
     if not months:
         months = _keys_to_month_tuples(_default_gustavo_month_keys(snapshot_day_sp))
 
+    months_titles = " • ".join(
+        f"{PT_MONTHS[mm-1].title()}/{str(yy)[2:]}" for (yy, mm) in months
+    )
+
     period_start = _month_start(months[0][0], months[0][1])
     period_end = _month_end(months[-1][0], months[-1][1])
 
-    # carrega tudo do período (performance)
-    entries = session.exec(
-        select(SurgicalMapEntry).where(
-            SurgicalMapEntry.surgeon_id == gustavo.id,
-            SurgicalMapEntry.day >= period_start,
-            SurgicalMapEntry.day <= period_end,
-        )
-    ).all()
-
-    by_day: dict[date, list[SurgicalMapEntry]] = {}
-    for e in entries:
-        by_day.setdefault(e.day, []).append(e)
-
+    ...
     pano_lines: list[str] = [
         "AGENDA DR. GUSTAVO AQUINO",
         f"📅 {months_titles}",
@@ -700,18 +696,13 @@ def save_gustavo_snapshot_and_send(session: Session, snapshot_day_sp: date) -> G
     if existing:
         return existing
 
-    month_keys = load_gustavo_selected_month_keys(snapshot_day_sp)
-    msg1, msg2, payload = build_gustavo_whatsapp_messages(session, snapshot_day_sp)
-
-    months = _keys_to_month_tuples(month_keys)
-    if not months:
-        months = _keys_to_month_tuples(_default_gustavo_month_keys(snapshot_day_sp))
+    msg1, msg2, payload = build_gustavo_whatsapp_messages(session, snapshot_day_sp, month_keys=None)
 
     snap = GustavoAgendaSnapshot(
         snapshot_date=snapshot_day_sp,
         generated_at=datetime.utcnow(),
-        period_start=_month_start(months[0][0], months[0][1]),
-        period_end=_month_end(months[-1][0], months[-1][1]),
+        period_start=date.fromisoformat(payload["period_start"]),
+        period_end=date.fromisoformat(payload["period_end"]),
         message_1=msg1,
         message_2=msg2,
         payload=payload,
