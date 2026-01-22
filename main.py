@@ -560,16 +560,13 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
             if block_reason:
                 emoji = "🔵"
             else:
-                total = len(day_entries)  # conta reservas também (se está reservado, não dá pra vender)
-                if is_fri:
-                    emoji = "🟡" if total >= 1 else "🔴"
+                total = len(day_entries_real)  # conta reservas também (se está reservado, não dá pra vender)
+                if total >= 2:
+                   emoji = "✅"
+                elif total == 1:
+                    emoji = "🟡"
                 else:
-                    if total >= 2:
-                        emoji = "✅"
-                    elif total == 1:
-                        emoji = "🟡"
-                    else:
-                        emoji = "🔴"
+                    emoji = "🔴"
 
             counts[emoji] += 1
 
