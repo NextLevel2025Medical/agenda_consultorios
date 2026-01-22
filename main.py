@@ -496,10 +496,7 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
     Regras:
     - meses fechados: mês atual + 2
     - Seg/Qua sempre aparecem
-    - Sex só aparece se houver agendamento
     - Emojis: ✅ cheio | 🟡 parcial | 🔴 livre | 🔵 bloqueio/recesso
-    - Descrição (linha 2) só aparece quando há Ref ou Proc. simples
-      (se for só Cirurgia, não mostra detalhamento)
     """
 
     gustavo = session.exec(select(User).where(User.username == "drgustavo")).first()
@@ -546,12 +543,14 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
         while d <= m_end:
             dow = d.weekday()  # 0=Mon
             is_mon_wed = dow in (0, 2)
-            is_fri = dow == 4
 
             day_entries = by_day.get(d, [])
 
+            # ✅ NÃO contar pré-reservas no relatório (bolinhas e detalhamento)
+            day_entries_real = [e for e in day_entries if not getattr(e, "is_pre_reservation", False)]
+
             # sexta só aparece se tiver agendamento
-            if not is_mon_wed and not (is_fri and day_entries):
+            if not is_mon_wed:
                 d += timedelta(days=1)
                 continue
 
@@ -573,33 +572,7 @@ def build_gustavo_whatsapp_messages(session: Session, snapshot_day_sp: date) -> 
 
             counts[emoji] += 1
 
-            # quebra visual entre semanas
-            if prev_day is not None and (d - prev_day).days > 3:
-                lines.append("")
-
             lines.append(f"{DOW_ABBR[dow]} {d.strftime('%d/%m')}  {emoji}")
-
-            # descrição só se houver refino ou procedimento simples (para ficar limpo)
-            if emoji != "🔵" and day_entries:
-                cir = ref = simp = 0
-                for e in day_entries:
-                    b = _proc_bucket(e.procedure_type)
-                    if b == "ref":
-                        ref += 1
-                    elif b == "simp":
-                        simp += 1
-                    else:
-                        cir += 1
-
-                if ref > 0 or simp > 0:
-                    parts = []
-                    if cir:
-                        parts.append(f"{cir} Cir")
-                    if ref:
-                        parts.append(f"{ref} Ref")
-                    if simp:
-                        parts.append(f"{simp} Simp")
-                    lines.append(f"({ ' + '.join(parts) })")
 
             prev_day = d
             d += timedelta(days=1)
