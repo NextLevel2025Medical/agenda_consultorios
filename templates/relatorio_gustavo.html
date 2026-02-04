@@ -37,13 +37,16 @@
         </a>
 
         {% if current_user.username == "johnny.ge" %}
-        <form method="post" action="/relatorio_gustavo/run-now">
-            <button type="submit"
-            class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600">
-            Gerar agora
-            </button>
-        </form>
+        <button
+          type="submit"
+          formaction="/relatorio_gustavo/run-now"
+          formmethod="post"
+          class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600"
+        >
+          Gerar agora
+        </button>
         {% endif %}
+
         </div>
       </div>
     </form>
