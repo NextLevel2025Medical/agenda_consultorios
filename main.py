@@ -726,7 +726,7 @@ def build_gustavo_whatsapp_messages(
                         continue
 
                 # mês inteiro azul se não operou nada
-                if month_all_blue.get(uname, False):
+                if uname == "drgustavo" and month_all_blue.get(uname, False):
                     emojis_line.append("🔵")
                     continue
 
