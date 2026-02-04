@@ -766,35 +766,82 @@ def build_gustavo_whatsapp_messages(
 
                 # RICARDO / ALICE
                 if uname in ("drricardo", "draalice"):
-                    if dow in (0, 2):  # Seg/Qua auxiliam Gustavo => default preto
+
+                    # SEGUNDA E QUARTA → AUXILIAM GUSTAVO
+                    if dow in (0, 2):
+                        # default preto, verde apenas se houver agendamento próprio
                         emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
-                    elif dow in (1, 3, 4, 5):  # Ter/Qui/Sex/Sáb (se apareceu)
-                        # Se tiver cirurgia para Ricardo => Alice vira preto
-                        # Se tiver cirurgia para Alice => Ricardo vira preto
-                        if ric_real > 0:
-                            emojis_line.append("🟢" if uname == "drricardo" else "⚫️")
-                        elif ali_real > 0:
-                            emojis_line.append("🟢" if uname == "draalice" else "⚫️")
-                        else:
-                            emojis_line.append("🔴")
+
+                    # TERÇA, QUINTA E SEXTA → OPERÁVEIS COM EXCLUSIVIDADE
+                    elif dow in (1, 3, 4):
+                        if uname == "drricardo":
+                            if ric_real > 0:
+                                emojis_line.append("🟢")
+                            elif ali_real > 0:
+                                emojis_line.append("⚫️")
+                            else:
+                                emojis_line.append("🔴")
+                        else:  # draalice
+                            if ali_real > 0:
+                                emojis_line.append("🟢")
+                            elif ric_real > 0:
+                                emojis_line.append("⚫️")
+                            else:
+                                emojis_line.append("🔴")
+
+                    # SÁBADO → PRETO, VERDE SE HOUVER AGENDAMENTO
+                    elif dow == 5:
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+
                     else:
                         emojis_line.append("🔴")
+
                     continue
 
                 # THAMILYS
                 if uname == "drathamilys":
-                    if dow in (0, 2):  # Seg/Qua auxilia Gustavo => default preto
+
+                    # SEG / QUA → AUXILIA GUSTAVO
+                    if dow in (0, 2):
                         emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
-                    elif dow == 1:  # Ter não vem => default preto
-                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
-                    elif dow in (3, 4, 5):  # Qui/Sex/Sáb (se apareceu) => aberto
+
+                    # TERÇA → SEMPRE PRETO
+                    elif dow == 1:
+                        emojis_line.append("⚫️")
+
+                    # QUINTA E SEXTA → OPERÁVEL
+                    elif dow in (3, 4):
                         emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+
+                    # SÁBADO
+                    elif dow == 5:
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+
                     else:
                         emojis_line.append("🔴")
+
                     continue
 
-                # MELINA / VANESSA (aberto por padrão)
-                emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+                # MELLINA
+                if uname in ("dramelina","dravanessa"):
+
+                    # SEG / QUA → AUXILIA GUSTAVO
+                    if dow in (0, 2):
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+
+                    # TER / QUI / SEX → OPERÁVEL
+                    elif dow in (1, 3, 4):
+                        emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+
+                    # SÁBADO
+                    elif dow == 5:
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+
+                    else:
+                        emojis_line.append("🔴")
+
+                    continue
+
 
             lines.append(f"{DOW_ABBR[dow]} {d.strftime('%d/%m')}  {''.join(emojis_line)}")
             d += timedelta(days=1)
