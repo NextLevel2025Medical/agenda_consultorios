@@ -449,6 +449,46 @@ def _weekday_pt(idx: int) -> str:
 
 GUSTAVO_REPORT_CFG_PATH = (Path(__file__).resolve().parent / "gustavo_report_config.json")
 
+# OVERRIDES (override vence tudo) - por dia e por médico
+GUSTAVO_REPORT_OVERRIDES_PATH = (Path(__file__).resolve().parent / "gustavo_report_overrides.json")
+
+# Ordem fixa (hierarquia/faturamento) — NÃO MUDAR
+GUSTAVO_REPORT_SURGEONS = [
+    ("drgustavo", "Gustavo"),
+    ("drricardo", "Ricardo"),
+    ("draalice", "Alice"),
+    ("dramelina", "Melina"),
+    ("drathamilys", "Thamilys"),
+    ("dravanessa", "Vanessa"),
+]
+
+# Emojis permitidos (no relatório)
+REPORT_EMOJIS = {"🟢", "🟡", "🔴", "🔵", "⚫️"}
+
+def load_gustavo_overrides() -> dict:
+    """
+    Estrutura:
+    {
+      "YYYY-MM-DD": {
+        "drgustavo": {"emoji": "🟢", "reason": "texto", "by": "johnny.ge", "at": "iso"},
+        ...
+      }
+    }
+    """
+    try:
+        if not GUSTAVO_REPORT_OVERRIDES_PATH.exists():
+            return {}
+        raw = json.loads(GUSTAVO_REPORT_OVERRIDES_PATH.read_text(encoding="utf-8") or "{}")
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+def save_gustavo_overrides(data: dict) -> None:
+    GUSTAVO_REPORT_OVERRIDES_PATH.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
 def _default_gustavo_month_keys(snapshot_day_sp: date) -> list[str]:
     y0, m0 = snapshot_day_sp.year, snapshot_day_sp.month
     y1, m1 = _add_months(y0, m0, 1)
@@ -573,12 +613,58 @@ def build_gustavo_whatsapp_messages(
     period_start = _month_start(months[0][0], months[0][1])
     period_end = _month_end(months[-1][0], months[-1][1])
 
-    ...
+    # --- coleta dados para o relatório (6 médicos) ---
+    # carrega usuários
+    surgeons_map: dict[str, User] = {}
+    for (uname, _lbl) in GUSTAVO_REPORT_SURGEONS:
+        u = session.exec(select(User).where(User.username == uname)).first()
+        if u:
+            surgeons_map[uname] = u
+
+    surgeon_ids = [u.id for u in surgeons_map.values() if u.id is not None]
+
+    # pega todos os agendamentos no período (somente dos 6 médicos)
+    all_entries = []
+    if surgeon_ids:
+        all_entries = session.exec(
+            select(SurgicalMapEntry).where(
+                SurgicalMapEntry.day >= period_start,
+                SurgicalMapEntry.day <= period_end,
+                SurgicalMapEntry.surgeon_id.in_(surgeon_ids),
+            )
+        ).all()
+
+    # organiza por dia e por username (NÃO contar pre-reservation)
+    entries_by_day_user: dict[date, dict[str, list[SurgicalMapEntry]]] = {}
+    month_real_counts: dict[tuple[int, int], dict[str, int]] = {}
+
+    id_to_username = {u.id: uname for (uname, _lbl) in GUSTAVO_REPORT_SURGEONS for u in [surgeons_map.get(uname)] if u}
+
+    for e in all_entries:
+        if getattr(e, "is_pre_reservation", False):
+            continue
+        if not getattr(e, "day", None) or not getattr(e, "surgeon_id", None):
+            continue
+
+        uname = id_to_username.get(e.surgeon_id)
+        if not uname:
+            continue
+
+        entries_by_day_user.setdefault(e.day, {}).setdefault(uname, []).append(e)
+
+        ym = (e.day.year, e.day.month)
+        month_real_counts.setdefault(ym, {})
+        month_real_counts[ym][uname] = month_real_counts[ym].get(uname, 0) + 1
+
+    # overrides (vence tudo)
+    overrides = load_gustavo_overrides()
+
     pano_lines: list[str] = [
-        "AGENDA DR. GUSTAVO AQUINO",
+        "RELATÓRIO – VISÃO GERAL (AGENDA CIRÚRGICA)",
         f"📅 {months_titles}",
         ""
     ]
+
 
     detail_parts: list[str] = []
     months_payload = []
@@ -587,58 +673,137 @@ def build_gustavo_whatsapp_messages(
         m_start = _month_start(yy, mm)
         m_end = _month_end(yy, mm)
 
+        # Cabeçalho do mês
+        detail_parts.append(f"*{_month_label_pt(yy, mm)} – VISÃO GERAL*")
+        detail_parts.append("Legenda: Gustavo-Ricardo-Alice-Melina-Thamilys-Vanessa")
+
+        # mês “todo azul” por médico se não teve NENHUM agendamento real no mês
+        month_counts = month_real_counts.get((yy, mm), {})
+        month_all_blue = {u: (month_counts.get(u, 0) == 0) for (u, _lbl) in GUSTAVO_REPORT_SURGEONS}
+
         lines: list[str] = []
-        prev_day: date | None = None
-        counts = {"✅": 0, "🟡": 0, "🔴": 0, "🔵": 0}
 
         d = m_start
         while d <= m_end:
-            dow = d.weekday()  # 0=Mon
-            is_mon_wed = dow in (0, 2)
+            dow = d.weekday()  # 0=Seg ... 5=Sáb ... 6=Dom
 
-            day_entries = by_day.get(d, [])
+            # mostra Seg-Sex sempre
+            show_day = dow in (0, 1, 2, 3, 4)
 
-            # ✅ NÃO contar pré-reservas no relatório (bolinhas e detalhamento)
-            day_entries_real = [e for e in day_entries if not getattr(e, "is_pre_reservation", False)]
+            # Sábado só aparece se houver agendamento real no sistema (qualquer um dos 6)
+            if dow == 5:
+                any_real_sat = False
+                day_bucket = entries_by_day_user.get(d, {})
+                for (uname, _lbl) in GUSTAVO_REPORT_SURGEONS:
+                    if len(day_bucket.get(uname, [])) > 0:
+                        any_real_sat = True
+                        break
+                show_day = any_real_sat
 
-            # sexta só aparece se tiver agendamento
-            if not is_mon_wed:
+            # Domingo nunca
+            if dow == 6:
+                show_day = False
+
+            if not show_day:
                 d += timedelta(days=1)
                 continue
 
-            # bloqueio? (seg/qua sempre consideram)
-            block_reason = validate_mapa_block_rules(session, d, gustavo.id)
-            if block_reason:
-                emoji = "🔵"
-            else:
-                total = len(day_entries_real)  # conta reservas também (se está reservado, não dá pra vender)
-                if total >= 2:
-                   emoji = "✅"
-                elif total == 1:
-                    emoji = "🟡"
-                else:
-                    emoji = "🔴"
+            day_bucket = entries_by_day_user.get(d, {})
+            day_over = (overrides.get(d.isoformat()) or {})
 
-            counts[emoji] += 1
+            # atalhos p/ Ricardo x Alice
+            ric_real = len(day_bucket.get("drricardo", []))
+            ali_real = len(day_bucket.get("draalice", []))
 
-            lines.append(f"{DOW_ABBR[dow]} {d.strftime('%d/%m')}  {emoji}")
+            emojis_line: list[str] = []
 
-            prev_day = d
+            for (uname, _lbl) in GUSTAVO_REPORT_SURGEONS:
+                # override vence tudo
+                if uname in day_over:
+                    ov_emoji = (day_over[uname] or {}).get("emoji")
+                    if isinstance(ov_emoji, str) and ov_emoji in REPORT_EMOJIS:
+                        emojis_line.append(ov_emoji)
+                        continue
+
+                # mês inteiro azul se não operou nada
+                if month_all_blue.get(uname, False):
+                    emojis_line.append("🔵")
+                    continue
+
+                uobj = surgeons_map.get(uname)
+                if not uobj:
+                    emojis_line.append("🔴")
+                    continue
+
+                # bloqueio por agenda (azul)
+                if validate_mapa_block_rules(session, d, uobj.id):
+                    emojis_line.append("🔵")
+                    continue
+
+                real_cnt = len(day_bucket.get(uname, []))
+
+                # -------------------------
+                # REGRAS POR MÉDICO
+                # -------------------------
+
+                # GUSTAVO
+                if uname == "drgustavo":
+                    if dow in (0, 2):  # Seg/Qua
+                        if real_cnt >= 2:
+                            emojis_line.append("🟢")
+                        elif real_cnt == 1:
+                            emojis_line.append("🟡")
+                        else:
+                            emojis_line.append("🔴")
+                    elif dow in (1, 3):  # Ter/Qui (auxilia) => default preto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+                    elif dow == 4:  # Sex (refino) => default preto; se tiver agendamento => verde
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+                    else:
+                        # Sábado (se apareceu) entra na lógica “sem destaques”: aberto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+                    continue
+
+                # RICARDO / ALICE
+                if uname in ("drricardo", "draalice"):
+                    if dow in (0, 2):  # Seg/Qua auxiliam Gustavo => default preto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+                    elif dow in (1, 3, 4, 5):  # Ter/Qui/Sex/Sáb (se apareceu)
+                        # Se tiver cirurgia para Ricardo => Alice vira preto
+                        # Se tiver cirurgia para Alice => Ricardo vira preto
+                        if ric_real > 0:
+                            emojis_line.append("🟢" if uname == "drricardo" else "⚫️")
+                        elif ali_real > 0:
+                            emojis_line.append("🟢" if uname == "draalice" else "⚫️")
+                        else:
+                            emojis_line.append("🔴")
+                    else:
+                        emojis_line.append("🔴")
+                    continue
+
+                # THAMILYS
+                if uname == "drathamilys":
+                    if dow in (0, 2):  # Seg/Qua auxilia Gustavo => default preto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+                    elif dow == 1:  # Ter não vem => default preto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "⚫️")
+                    elif dow in (3, 4, 5):  # Qui/Sex/Sáb (se apareceu) => aberto
+                        emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+                    else:
+                        emojis_line.append("🔴")
+                    continue
+
+                # MELINA / VANESSA (aberto por padrão)
+                emojis_line.append("🟢" if real_cnt >= 1 else "🔴")
+
+            lines.append(f"{DOW_ABBR[dow]} {d.strftime('%d/%m')}  {''.join(emojis_line)}")
             d += timedelta(days=1)
 
-        # Panorama do mês
-        pano_lines.append(_month_label_pt(yy, mm))
-        pano_lines.append(f"✅ {counts['✅']}")
-        pano_lines.append(f"🟡 {counts['🟡']}")
-        pano_lines.append(f"🔴 {counts['🔴']}")
-        pano_lines.append(f"🔵 {counts['🔵']}")
-        pano_lines.append("")
-
-        # Detalhe do mês
-        detail_parts.append(_month_label_pt(yy, mm))
-        detail_parts.append("")
         detail_parts.extend(lines)
+
+        # separador SOMENTE entre meses (uma linha em branco)
         detail_parts.append("")
+
 
         months_payload.append({
             "year": yy,
@@ -648,8 +813,8 @@ def build_gustavo_whatsapp_messages(
             "lines": lines,
         })
 
-    message_1 = "\n".join(pano_lines).strip()
-    message_2 = "\n".join(detail_parts).strip()
+    message_1 = "\n".join(detail_parts).strip()
+    message_2 = ""
 
     payload = {
         "doctor_username": "drgustavo",
@@ -2395,6 +2560,8 @@ def relatorio_gustavo_page(
         label = f"{pt_abbr[i-1]}/{str(yy)[2:]}"
         month_options.append({"key": key, "label": label})
         
+    overrides = load_gustavo_overrides()
+
     return templates.TemplateResponse(
         "relatorio_gustavo.html",
         {
@@ -2405,6 +2572,8 @@ def relatorio_gustavo_page(
             "snapshot_date": snapshot_date or "",
             "month_options": month_options,
             "selected_months": selected_keys,
+            "surgeons": GUSTAVO_REPORT_SURGEONS,
+            "overrides": overrides,
         },
     )
 
@@ -2426,6 +2595,85 @@ def relatorio_gustavo_save_config(
             keys.append(k)
 
     save_gustavo_selected_month_keys(keys)
+    return redirect("/relatorio_gustavo")
+
+
+@app.post("/relatorio_gustavo/override")
+def relatorio_gustavo_save_override(
+    request: Request,
+    day_iso: str = Form(...),
+    surgeon_username: str = Form(...),
+    emoji: str = Form(...),
+    reason: str = Form(default=""),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.username == "johnny.ge")
+
+    day_iso = (day_iso or "").strip()
+    surgeon_username = (surgeon_username or "").strip()
+    emoji = (emoji or "").strip()
+    reason = (reason or "").strip()
+
+    # valida data
+    try:
+        _ = date.fromisoformat(day_iso)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Data inválida (use YYYY-MM-DD).")
+
+    # valida médico (somente os 6 do relatório)
+    allowed = {u for (u, _lbl) in GUSTAVO_REPORT_SURGEONS}
+    if surgeon_username not in allowed:
+        raise HTTPException(status_code=400, detail="Cirurgião inválido para override.")
+
+    # valida emoji
+    if emoji not in REPORT_EMOJIS:
+        raise HTTPException(status_code=400, detail="Emoji inválido para override.")
+
+    data = load_gustavo_overrides()
+    data.setdefault(day_iso, {})
+    data[day_iso][surgeon_username] = {
+        "emoji": emoji,
+        "reason": reason,
+        "by": user.username,
+        "at": datetime.utcnow().isoformat(),
+    }
+    save_gustavo_overrides(data)
+
+    audit_logger.info(
+        f"GUSTAVO_REPORT_OVERRIDE: day={day_iso} surgeon={surgeon_username} emoji={emoji} by={user.username}"
+    )
+    return redirect("/relatorio_gustavo")
+
+
+@app.post("/relatorio_gustavo/override/delete")
+def relatorio_gustavo_delete_override(
+    request: Request,
+    day_iso: str = Form(...),
+    surgeon_username: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.username == "johnny.ge")
+
+    day_iso = (day_iso or "").strip()
+    surgeon_username = (surgeon_username or "").strip()
+
+    data = load_gustavo_overrides()
+    if day_iso in data and surgeon_username in (data.get(day_iso) or {}):
+        data[day_iso].pop(surgeon_username, None)
+        if not data[day_iso]:
+            data.pop(day_iso, None)
+        save_gustavo_overrides(data)
+
+        audit_logger.info(
+            f"GUSTAVO_REPORT_OVERRIDE_DELETE: day={day_iso} surgeon={surgeon_username} by={user.username}"
+        )
+
     return redirect("/relatorio_gustavo")
 
 @app.get("/relatorio_gustavo/preview", response_class=HTMLResponse)
@@ -2465,6 +2713,8 @@ def relatorio_gustavo_preview(
         label = f"{pt_abbr[i-1]}/{str(yy)[2:]}"
         month_options.append({"key": key, "label": label})
 
+    overrides = load_gustavo_overrides()
+
     return templates.TemplateResponse(
         "relatorio_gustavo.html",
         {
@@ -2475,8 +2725,11 @@ def relatorio_gustavo_preview(
             "snapshot_date": "",  # não “seleciona” nenhuma data salva
             "month_options": month_options,
             "selected_months": selected_keys,
+            "surgeons": GUSTAVO_REPORT_SURGEONS,
+            "overrides": overrides,
         },
     )
+
 
 @app.post("/relatorio_gustavo/run-now")
 def relatorio_gustavo_run_now(
