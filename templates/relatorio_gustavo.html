@@ -81,7 +81,60 @@
         </button>
       </div>
     </form>
-    
+
+    <!-- OVERRIDES (master) -->
+    {% if current_user.username == "johnny.ge" %}
+    <form method="post" action="/relatorio_gustavo/override" class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-6">
+      <div class="text-sm opacity-80 mb-2">Override (vence todas as regras) — por dia e por cirurgião</div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-sm mb-1 opacity-80">Data (YYYY-MM-DD)</label>
+          <input name="day_iso" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800" placeholder="2026-02-04" />
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 opacity-80">Cirurgião</label>
+          <select name="surgeon_username" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800">
+            {% for s in surgeons %}
+              <option value="{{ s[0] }}">{{ s[1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 opacity-80">Bolinhas</label>
+          <select name="emoji" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800">
+            <option value="🟢">🟢</option>
+            <option value="🟡">🟡 (apenas Gustavo Seg/Qua)</option>
+            <option value="🔴">🔴</option>
+            <option value="🔵">🔵</option>
+            <option value="⚫️">⚫️</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm mb-1 opacity-80">Motivo (não vai no WhatsApp)</label>
+          <input name="reason" class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800" placeholder="Exceção combinada com o Dr. Gustavo..." />
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600">
+          Salvar override
+        </button>
+
+        <button
+          type="submit"
+          formaction="/relatorio_gustavo/override/delete"
+          class="px-4 py-2 rounded-lg bg-rose-700 hover:bg-rose-600"
+        >
+          Remover override
+        </button>
+      </div>
+    </form>
+    {% endif %}
+
     {% if snapshot %}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
