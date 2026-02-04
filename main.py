@@ -804,15 +804,6 @@ def build_gustavo_whatsapp_messages(
         # separador SOMENTE entre meses (uma linha em branco)
         detail_parts.append("")
 
-
-        months_payload.append({
-            "year": yy,
-            "month": mm,
-            "label": _month_label_pt(yy, mm),
-            "counts": counts,
-            "lines": lines,
-        })
-
     message_1 = "\n".join(detail_parts).strip()
     message_2 = ""
 
@@ -821,7 +812,6 @@ def build_gustavo_whatsapp_messages(
         "snapshot_day_sp": snapshot_day_sp.isoformat(),
         "period_start": period_start.isoformat(),
         "period_end": period_end.isoformat(),
-        "months": months_payload,
     }
 
     return message_1, message_2, payload
