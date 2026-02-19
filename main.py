@@ -2481,7 +2481,7 @@ def mapa_approve(request: Request, entry_id: int, session: Session = Depends(get
         return redirect(f"/mapa?month={row.day.strftime('%Y-%m')}")
 
     row.status = "approved"
-    row.decided_by_id = user.id
+    row.decide_by_id = user.id
     row.decided_at = datetime.utcnow()
 
     session.add(row)
@@ -3607,3 +3607,4 @@ def hospedagem_delete(
         target_id=res_id,
     )
     return redirect(f"/hospedagem?month={month_param}")
+
