@@ -1062,6 +1062,7 @@ def compute_month_availability(
             select(func.count()).select_from(SurgicalMapEntry).where(
                 SurgicalMapEntry.day == d,
                 SurgicalMapEntry.surgeon_id == surgeon_id,
+                SurgicalMapEntry.status == "approved",
             )
         ).one()
 
@@ -1178,6 +1179,7 @@ def compute_priority_card(session: Session) -> dict:
             SurgicalMapEntry.day >= today,
             SurgicalMapEntry.day <= end,
             SurgicalMapEntry.surgeon_id == gustavo.id,
+            SurgicalMapEntry.status == "approved",
         )
     ).all():
         counts[d] = counts.get(d, 0) + 1
@@ -2375,6 +2377,133 @@ def mapa_create(
             f"&is_pre_reservation={(1 if is_pre else 0)}"
             f"&surgery_entry_id={row.id}"
         )
+
+    return redirect(f"/mapa?month={month}")
+
+@app.post("/mapa/request")
+def mapa_request_authorization(
+    request: Request,
+    day_iso: str = Form(...),
+    mode: str = Form("book"),
+    time_hhmm: Optional[str] = Form(None),
+    patient_name: str = Form(...),
+    surgeon_id: int = Form(...),
+    procedure_type: str = Form(...),
+    location: str = Form(...),
+    uses_hsr: Optional[str] = Form(None),
+    has_lodging: Optional[str] = Form(None),
+    seller_id: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+
+    # ✅ Funcionário não pode “pedir autorização” sendo o Johnny
+    if user.username == "johnny.ge":
+        return redirect("/mapa")
+
+    # ✅ regra do vendedor: sempre grava como o próprio usuário (funcionário)
+    seller_id_final = user.id
+
+    day = date.fromisoformat(day_iso)
+    is_pre = (mode == "reserve")
+    time_hhmm = (time_hhmm or "").strip()
+
+    # Revalida regras SEM override (precisa realmente estar fora da regra)
+    block_err = validate_mapa_block_rules(session, day, surgeon_id)
+    rule_err = validate_mapa_rules(session, day, surgeon_id, procedure_type, uses_hsr=bool(uses_hsr))
+
+    if not block_err and not rule_err:
+        # Se não há erro, não faz sentido pedir autorização
+        return redirect(f"/mapa?month={day.strftime('%Y-%m')}")
+
+    row = SurgicalMapEntry(
+        day=day,
+        time_hhmm=(time_hhmm or None),
+        patient_name=patient_name.strip().upper(),
+        surgeon_id=surgeon_id,
+        procedure_type=procedure_type,
+        location=location,
+        uses_hsr=bool(uses_hsr),
+        is_pre_reservation=is_pre,
+        status="pending",                 # ✅ fica roxo / pendente
+        created_by_id=seller_id_final,    # ✅ fica com o usuário do funcionário
+    )
+
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "surgical_map_auth_requested",
+        target_type="surgical_map",
+        target_id=row.id,
+        success=True,
+        message=(block_err or rule_err),
+        extra={
+            "day": day_iso,
+            "mode": mode,
+            "time_hhmm": time_hhmm,
+            "surgeon_id": surgeon_id,
+            "procedure_type": procedure_type,
+            "location": location,
+            "uses_hsr": bool(uses_hsr),
+        },
+    )
+
+    # Hospedagem: eu recomendo NÃO abrir hospedagem automaticamente quando está pending
+    # porque ainda não é um agendamento válido.
+    return redirect(f"/mapa?month={day.strftime('%Y-%m')}")
+
+@app.post("/mapa/approve/{entry_id}")
+def mapa_approve(request: Request, entry_id: int, session: Session = Depends(get_session)):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+    require(user.username == "johnny.ge")  # ✅ SOMENTE VOCÊ
+
+    row = session.get(SurgicalMapEntry, entry_id)
+    if not row:
+        return redirect("/mapa")
+
+    # Só aprova se estiver pendente
+    if row.status != "pending":
+        return redirect(f"/mapa?month={row.day.strftime('%Y-%m')}")
+
+    row.status = "approved"
+    row.decided_by_id = user.id
+    row.decided_at = datetime.utcnow()
+
+    session.add(row)
+    session.commit()
+
+    audit_event(request, user, "surgical_map_auth_approved", target_type="surgical_map", target_id=row.id)
+
+    return redirect(f"/mapa?month={row.day.strftime('%Y-%m')}")
+
+
+@app.post("/mapa/deny/{entry_id}")
+def mapa_deny(request: Request, entry_id: int, session: Session = Depends(get_session)):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"))
+    require(user.username == "johnny.ge")  # ✅ SOMENTE VOCÊ
+
+    row = session.get(SurgicalMapEntry, entry_id)
+    if not row:
+        return redirect("/mapa")
+
+    month = row.day.strftime("%Y-%m")
+
+    audit_event(request, user, "surgical_map_auth_denied", target_type="surgical_map", target_id=row.id)
+
+    session.delete(row)
+    session.commit()
 
     return redirect(f"/mapa?month={month}")
 

@@ -33,6 +33,11 @@ class SurgicalMapEntry(SQLModel, table=True):
     uses_hsr: bool = False
 
     is_pre_reservation: bool = Field(default=False, index=True)
+    
+    status: str = Field(default="approved", index=True)  # "approved" | "pending"
+
+    decide_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    decided_at: Optional[datetime] = Field(default=None, index=True)
 
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
@@ -111,7 +116,7 @@ class ReservationRequest(SQLModel, table=True):
     message: Optional[str] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    decided_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    decide_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
     decided_at: Optional[datetime] = None
 
 
