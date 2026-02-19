@@ -214,6 +214,11 @@
     border-color: rgba(226,184,87,.28);
   }
 
+  .entry-card.pending-approval{
+    background: rgba(168, 85, 247, .12);      /* roxo claro */
+    border-color: rgba(168, 85, 247, .35);
+  }
+
   .entry-actions{
     display:flex;
     justify-content:flex-end;
@@ -555,6 +560,7 @@
       <div class="alert">
         {{ err }}
 
+        {# (1) Johnny pode ignorar regra como já existe hoje #}
         {% if current_user and current_user.username == "johnny.ge" and request.query_params.get("day_iso") %}
           <form method="post" action="/mapa/create" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
@@ -583,6 +589,34 @@
               (Somente Johnny pode ignorar a regra)
             </span>
           </form>
+
+        {# (2) Demais usuários: botão "Pedir autorização" (NÃO grava se não clicar) #}
+        {% elif current_user and request.query_params.get("day_iso") %}
+          <form method="post" action="/mapa/request-approval" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
+            <input type="hidden" name="mode" value="{{ request.query_params.get('mode', 'book') }}">
+            <input type="hidden" name="time_hhmm" value="{{ request.query_params.get('time_hhmm', '') }}">
+            <input type="hidden" name="patient_name" value="{{ request.query_params.get('patient_name', '') }}">
+            <input type="hidden" name="surgeon_id" value="{{ request.query_params.get('surgeon_id', '') }}">
+            <input type="hidden" name="procedure_type" value="{{ request.query_params.get('procedure_type', '') }}">
+            <input type="hidden" name="location" value="{{ request.query_params.get('location', '') }}">
+
+            {% if request.query_params.get('uses_hsr') == '1' %}
+              <input type="hidden" name="uses_hsr" value="1">
+            {% endif %}
+
+            {% if request.query_params.get('seller_id') %}
+              <input type="hidden" name="seller_id" value="{{ request.query_params.get('seller_id') }}">
+            {% endif %}
+
+            <button type="submit" class="btn-secondary btn-small">
+              Pedir autorização
+            </button>
+
+            <span class="muted" style="font-size:12px;">
+              (Vai ficar roxo aguardando aprovação do Johnny)
+            </span>
+          </form>
         {% endif %}
       </div>
     {% endif %}
@@ -601,9 +635,11 @@
                 <span class="muted">· {{ weekday_map[day.weekday()] }}</span>
             </div>
 
-            {% if items and items|length > 0 %} 
-                <span class="badge-count">{{ items|length }} agendamento{{ "s" if items|length > 1 else "" }}</span>
+            {% set counted_items = items | rejectattr("status", "equalto", "pending_approval") | list %}
+            {% if counted_items and counted_items|length > 0 %}
+              <span class="badge-count">{{ counted_items|length }} agendamento{{ "s" if counted_items|length > 1 else "" }}</span>
             {% endif %}
+
             </div>
 
 
@@ -681,7 +717,10 @@
                 else ("type-refinamento" if e.procedure_type == "Refinamento" else "type-simples")
             %}
 
-            <div class="entry-card {% if e.is_pre_reservation %}pre{% endif %}">
+            <div class="entry-card
+              {% if e.is_pre_reservation %}pre{% endif %}
+              {% if e.status == 'pending_approval' %}pending-approval{% endif %}
+            ">
                 <div class="entry-top">
                 <div>
                     <div class="patient-name">{{ e.patient_name }}</div>
@@ -725,27 +764,47 @@
                 </div>
 
                 <div class="entry-actions">
-                <button
-                    type="button"
-                    class="btn-secondary"
-                    data-edit-mapa="1"
-                    data-entry-id="{{ e.id }}"
-                    data-day="{{ e.day.isoformat() }}"
-                    data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
-                    data-patient="{{ e.patient_name }}"
-                    data-surgeon="{{ e.surgeon_id }}"
-                    data-procedure="{{ e.procedure_type }}"
-                    data-location="{{ e.location }}"
-                    data-hsr="{{ 1 if e.uses_hsr else 0 }}"
-                    data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
-                >
-                    Editar
-                </button>
 
-                <form method="post" action="/mapa/delete/{{ e.id }}">
-                    <button class="btn-secondary" type="submit">Excluir</button>
-                </form>
+                  {% if e.status == 'pending_approval' %}
+                    {% if current_user and current_user.username == "johnny.ge" %}
+                      <form method="post" action="/mapa/approve/{{ e.id }}">
+                        <button class="btn-cta btn-small" type="submit">Aprovar</button>
+                      </form>
+
+                      <form method="post" action="/mapa/reject/{{ e.id }}">
+                        <button class="btn-secondary btn-small" type="submit">Reprovar</button>
+                      </form>
+                    {% else %}
+                      <span class="muted" style="font-size:12px; font-weight:800;">
+                        Aguardando aprovação do Johnny
+                      </span>
+                    {% endif %}
+
+                  {% else %}
+                    <button
+                      type="button"
+                      class="btn-secondary"
+                      data-edit-mapa="1"
+                      data-entry-id="{{ e.id }}"
+                      data-day="{{ e.day.isoformat() }}"
+                      data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+                      data-patient="{{ e.patient_name }}"
+                      data-surgeon="{{ e.surgeon_id }}"
+                      data-procedure="{{ e.procedure_type }}"
+                      data-location="{{ e.location }}"
+                      data-hsr="{{ 1 if e.uses_hsr else 0 }}"
+                      data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
+                    >
+                      Editar
+                    </button>
+
+                    <form method="post" action="/mapa/delete/{{ e.id }}">
+                      <button class="btn-secondary" type="submit">Excluir</button>
+                    </form>
+                  {% endif %}
+
                 </div>
+
 
             </div>
             {% endfor %}
