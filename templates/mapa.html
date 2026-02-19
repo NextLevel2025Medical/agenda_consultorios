@@ -592,7 +592,7 @@
 
         {# (2) Demais usuários: botão "Pedir autorização" (NÃO grava se não clicar) #}
         {% elif current_user and request.query_params.get("day_iso") %}
-          <form method="post" action="/mapa/request-approval" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <form method="post" action="/mapa/request" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
             <input type="hidden" name="mode" value="{{ request.query_params.get('mode', 'book') }}">
             <input type="hidden" name="time_hhmm" value="{{ request.query_params.get('time_hhmm', '') }}">
@@ -635,7 +635,7 @@
                 <span class="muted">· {{ weekday_map[day.weekday()] }}</span>
             </div>
 
-            {% set counted_items = items | rejectattr("status", "equalto", "pending_approval") | list %}
+            {% set counted_items = items | rejectattr("status", "equalto", "pending") | list %}
             {% if counted_items and counted_items|length > 0 %}
               <span class="badge-count">{{ counted_items|length }} agendamento{{ "s" if counted_items|length > 1 else "" }}</span>
             {% endif %}
@@ -719,7 +719,7 @@
 
             <div class="entry-card
               {% if e.is_pre_reservation %}pre{% endif %}
-              {% if e.status == 'pending_approval' %}pending-approval{% endif %}
+              {% if e.status == 'pending' %}pending-approval{% endif %}
             ">
                 <div class="entry-top">
                 <div>
@@ -765,13 +765,13 @@
 
                 <div class="entry-actions">
 
-                  {% if e.status == 'pending_approval' %}
+                  {% if e.status == 'pending' %}
                     {% if current_user and current_user.username == "johnny.ge" %}
                       <form method="post" action="/mapa/approve/{{ e.id }}">
                         <button class="btn-cta btn-small" type="submit">Aprovar</button>
                       </form>
 
-                      <form method="post" action="/mapa/reject/{{ e.id }}">
+                      <form method="post" action="/mapa/deny/{{ e.id }}">
                         <button class="btn-secondary btn-small" type="submit">Reprovar</button>
                       </form>
                     {% else %}
