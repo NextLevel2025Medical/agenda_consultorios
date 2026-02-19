@@ -842,6 +842,7 @@
         <input type="hidden" name="seller_id" value="{{ current_user.id }}">
         <input class="input w-full bg-slate-800 text-slate-400" value="{{ current_user.full_name }}" disabled>
       {% endif %}
+      <input type="date" id="mapaModalDayPicker" class="input w-full" />
       <input type="hidden" name="day_iso" id="mapaModalDayIso" />
       <input class="input" name="patient_name" placeholder="Nome do paciente" required />
 
@@ -891,6 +892,7 @@
   const cancelBtn = document.getElementById("mapaModalCancelBtn");
   const titleEl = document.getElementById("mapaModalTitle");
   const dayIsoEl = document.getElementById("mapaModalDayIso");
+  const dayPickerEl = document.getElementById("mapaModalDayPicker");
   const formEl = document.getElementById("mapaModalForm");
   const openLodgingBtn = document.getElementById("openLodgingBtn");
 
@@ -947,13 +949,24 @@
   function openModalBase(dayIso, dayHuman) {
     formEl.reset();
     dayIsoEl.value = dayIso;
+    if (dayPickerEl){
+      dayPickerEl.value = dayIso; // YYYY-MM-DD
+    }
+
     titleEl.textContent = dayHuman;
     setModalError("");
     backdrop.style.display = "flex";
 
-    // foca no time
     const first = formEl.querySelector('input[name="patient_name"]');
     if (first) first.focus();
+  }
+
+  if (dayPickerEl){
+    dayPickerEl.addEventListener("change", () => {
+      if (dayPickerEl.value){
+        dayIsoEl.value = dayPickerEl.value;
+      }
+    });
   }
 
   // NOVO
