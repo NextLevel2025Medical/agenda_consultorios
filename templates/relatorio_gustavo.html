@@ -36,7 +36,7 @@
           Preview (sem salvar)
         </a>
 
-        {% if current_user.username == "johnny.ge" %}
+        {% if current_user.username in ["johnny.ge", "cris.galdino"] %}
         <button
           type="submit"
           formaction="/relatorio_gustavo/run-now"
@@ -159,3 +159,4 @@
   </div>
 </body>
 </html>
+
