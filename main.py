@@ -631,6 +631,10 @@ def build_gustavo_whatsapp_messages(
                 SurgicalMapEntry.day >= period_start,
                 SurgicalMapEntry.day <= period_end,
                 SurgicalMapEntry.surgeon_id.in_(surgeon_ids),
+                or_(
+                    SurgicalMapEntry.status == None,        # compat com registros antigos
+                    SurgicalMapEntry.status == "approved",  # só conta aprovados
+                )
             )
         ).all()
 
@@ -642,6 +646,8 @@ def build_gustavo_whatsapp_messages(
 
     for e in all_entries:
         if getattr(e, "is_pre_reservation", False):
+            continue
+        if getattr(e, "status", None) == "pending_approval":
             continue
         if not getattr(e, "day", None) or not getattr(e, "surgeon_id", None):
             continue
