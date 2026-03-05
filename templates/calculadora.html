@@ -219,7 +219,7 @@
         border:1px solid rgba(255,255,255,.08);
         background: rgba(255,255,255,.02);
         padding:16px;
-        overflow:hidden;
+        overflow: visible; /* <- em vez de hidden */
       }
       .timeline::before{
         content:"";
@@ -230,10 +230,13 @@
         border-radius:999px;
         opacity:.9;
       }
+      .milestones-wrap{
+        overflow-x:auto;
+        padding-bottom:6px; /* espaço pro scrollbar */
+      }
       .milestones{
-        display:grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap:10px;
+        grid-template-columns: repeat(4, minmax(240px, 1fr));
+        min-width: 980px; /* garante 4 cards sem esmagar */
       }
       @media(max-width:900px){.milestones{grid-template-columns:1fr;}}
       .ms{
@@ -464,57 +467,59 @@
             </div>
 
             <div class="timeline" id="timelineBlock">
-              <div class="milestones">
-                <div class="ms" id="msEntrada">
-                  <div class="date" id="dEntrada">—</div>
-                  <div class="label">ENTRADA</div>
-                  <div class="dot" aria-hidden="true"></div>
-                  <div class="box">
-                    <div class="money" id="mEntrada">—</div>
-                    <div class="pct" id="pEntrada">—</div>
-                    <div class="sub">Pagamento inicial (na data da entrada).</div>
+              <div class="milestones-wrap">
+                <div class="milestones">
+                  <div class="ms" id="msEntrada">
+                    <div class="date" id="dEntrada">—</div>
+                    <div class="label">ENTRADA</div>
+                    <div class="dot" aria-hidden="true"></div>
+                    <div class="box">
+                      <div class="money" id="mEntrada">—</div>
+                      <div class="pct" id="pEntrada">—</div>
+                      <div class="sub">Pagamento inicial (na data da entrada).</div>
+                    </div>
                   </div>
-                </div>
 
-                <div class="ms" id="msEtapa1">
-                  <div class="date" id="dEtapa1">—</div>
-                  <div class="label">ETAPA 1</div>
-                  <div class="dot" aria-hidden="true"></div>
-                  <div class="box">
-                    <div class="money" id="mEtapa1">—</div>
-                    <div class="pct" id="pEtapa1">—</div>
-                    <div class="sub">
-                      Vence <span class="mono">+30 dias</span> da entrada.
-                      <br/>Parcelas: <span class="mono" id="iEtapa1">—</span>
+                  <div class="ms" id="msEtapa1">
+                    <div class="date" id="dEtapa1">—</div>
+                    <div class="label">ETAPA 1</div>
+                    <div class="dot" aria-hidden="true"></div>
+                    <div class="box">
+                      <div class="money" id="mEtapa1">—</div>
+                      <div class="pct" id="pEtapa1">—</div>
+                      <div class="sub">
+                        Vence <span class="mono">+30 dias</span> da entrada.
+                        <br/>Parcelas: <span class="mono" id="iEtapa1">—</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ms" id="msEtapa2">
+                    <div class="date" id="dEtapa2">—</div>
+                    <div class="label">ETAPA 2</div>
+                    <div class="dot" aria-hidden="true"></div>
+                    <div class="box">
+                      <div class="money" id="mEtapa2">—</div>
+                      <div class="pct" id="pEtapa2">—</div>
+                      <div class="sub">
+                        Vence <span class="mono">-30 dias</span> da cirurgia (se houver).
+                        <br/>Parcelas: <span class="mono" id="iEtapa2">—</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ms" id="msCirurgia">
+                    <div class="date" id="dCirurgia">—</div>
+                    <div class="label">CIRURGIA</div>
+                    <div class="dot" aria-hidden="true"></div>
+                    <div class="box">
+                      <div class="money" style="font-size:18px">Data do procedimento</div>
+                      <div class="pct" id="pCirurgia">—</div>
+                      <div class="sub">Referência para o prazo da Etapa 2.</div>
                     </div>
                   </div>
                 </div>
-
-                <div class="ms" id="msEtapa2">
-                  <div class="date" id="dEtapa2">—</div>
-                  <div class="label">ETAPA 2</div>
-                  <div class="dot" aria-hidden="true"></div>
-                  <div class="box">
-                    <div class="money" id="mEtapa2">—</div>
-                    <div class="pct" id="pEtapa2">—</div>
-                    <div class="sub">
-                      Vence <span class="mono">-30 dias</span> da cirurgia (se houver).
-                      <br/>Parcelas: <span class="mono" id="iEtapa2">—</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="ms" id="msCirurgia">
-                  <div class="date" id="dCirurgia">—</div>
-                  <div class="label">CIRURGIA</div>
-                  <div class="dot" aria-hidden="true"></div>
-                  <div class="box">
-                    <div class="money" style="font-size:18px">Data do procedimento</div>
-                    <div class="pct" id="pCirurgia">—</div>
-                    <div class="sub">Referência para o prazo da Etapa 2.</div>
-                  </div>
-                </div>
-              </div>
+              </div>  
             </div>
 
             <div class="table">
