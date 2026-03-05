@@ -55,6 +55,15 @@
 
           {% if current_user.role in ("admin", "surgery") %}
             <a
+              href="/calculadora"
+              class="block w-56 rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
+            >
+                🧮 Calculadora
+            </a>
+          {% endif %}
+
+          {% if current_user.role in ("admin", "surgery") %}
+            <a
               href="/bloqueios"
               class="block w-56 rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
             >
@@ -62,7 +71,7 @@
             </a>
           {% endif %}
 
-          {% if current_user.username == "johnny.ge" %}
+          {% if current_user.role in ("admin", "surgery") %}
             <a
               href="/relatorio_gustavo"
               class="block w-56 rounded-lg px-3 py-2 text-sm font-medium text-slate-100 hover:bg-white/10 transition text-right"
