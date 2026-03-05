@@ -597,6 +597,26 @@
         const B = Date.UTC(yb,mb-1,db);
         return Math.round((B-A)/(1000*60*60*24));
       }
+      function addMonthsISO(iso, months){
+        // iso: YYYY-MM-DD  ->  soma meses preservando o dia quando possível
+        const [y,m,d] = iso.split("-").map(Number);
+        const dt = new Date(Date.UTC(y, m-1, d));
+
+        // joga pro mês desejado
+        dt.setUTCMonth(dt.getUTCMonth() + months);
+
+        // garante que não "estoura" mês (ex.: 31 em mês com 30)
+        const yy = dt.getUTCFullYear();
+        const mm = dt.getUTCMonth(); // 0..11
+        const lastDay = new Date(Date.UTC(yy, mm+1, 0)).getUTCDate();
+        const dd = Math.min(d, lastDay);
+
+        const out = new Date(Date.UTC(yy, mm, dd));
+        const outY = out.getUTCFullYear();
+        const outM = String(out.getUTCMonth()+1).padStart(2,"0");
+        const outD = String(out.getUTCDate()).padStart(2,"0");
+        return `${outY}-${outM}-${outD}`;
+      }
 
       // ---------- Inputs ----------
       const totalValue = $$("totalValue");
@@ -791,7 +811,7 @@
 
         // Etapa 1 parcelas começando em d1
         for(let i=1;i<=n1;i++){
-          const di = addDaysISO(d1, 30*(i-1));
+          const di = addMonthsISO(d1, i-1); // <- mensal
           const val = (i===n1) ? last1 : per1Rounded;
           rows.push({date: di, type:"etapa1", label:`Etapa 1 — Parcela ${i}/${n1}`, value: val});
         }
@@ -807,7 +827,7 @@
 
           // parcelas da Etapa 2 começando em d2
           for(let i=1;i<=n2;i++){
-            const di = addDaysISO(d2, 30*(i-1));
+            const di = addMonthsISO(d2, i-1); // <- mensal
             const val = (i===n2) ? last2 : per2Rounded;
             rows.push({date: di, type:"etapa2", label:`Etapa 2 — Parcela ${i}/${n2}`, value: val});
           }
