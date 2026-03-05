@@ -1,0 +1,941 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - CALCULADORA{% endblock %}
+{% block header_title %}Calculadora{% endblock %}
+
+{% block content %}
+  <!doctype html>
+  <html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Calculadora — Planejamento de Pagamento</title>
+    <style>
+      :root{
+        --bg:#070A12;
+        --panel:#0E1424;
+        --panel2:#0B1020;
+        --text:rgba(255,255,255,.92);
+        --muted:rgba(255,255,255,.68);
+        --line:rgba(255,255,255,.10);
+        --accent:#E2B857;
+        --ok:#22C55E;
+        --warn:#F59E0B;
+        --bad:#EF4444;
+        --shadow: 0 18px 60px rgba(0,0,0,.55);
+        --radius:18px;
+        --radius2:14px;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      }
+      *{box-sizing:border-box}
+      body{
+        margin:0;
+        font-family:var(--sans);
+        color:var(--text);
+        background:
+          radial-gradient(800px 500px at 50% 0%, rgba(226,184,87,.10), transparent 60%),
+          radial-gradient(900px 600px at 10% 20%, rgba(99,102,241,.10), transparent 60%),
+          radial-gradient(900px 600px at 90% 30%, rgba(34,197,94,.08), transparent 60%),
+          var(--bg);
+        min-height:100vh;
+      }
+
+      /* Layout */
+      .wrap{max-width:1100px; margin:0 auto; padding:24px 16px 60px;}
+      .topbar{
+        display:flex; align-items:center; justify-content:space-between; gap:12px;
+        margin-bottom:18px;
+      }
+      .brand{
+        display:flex; align-items:center; gap:12px;
+      }
+      .logo{
+        width:36px;height:36px;border-radius:12px;
+        background: rgba(226,184,87,.16);
+        border:1px solid rgba(226,184,87,.25);
+        display:grid; place-items:center;
+        box-shadow: 0 12px 35px rgba(0,0,0,.35);
+        color:var(--accent);
+        font-weight:900;
+      }
+      .title h1{font-size:18px; margin:0; letter-spacing:.2px}
+      .title p{margin:2px 0 0; color:var(--muted); font-size:12.5px; font-weight:650}
+
+      .grid{
+        display:grid;
+        grid-template-columns: 420px 1fr;
+        gap:14px;
+        align-items:start;
+      }
+      @media (max-width: 980px){
+        .grid{grid-template-columns: 1fr;}
+      }
+
+      .card{
+        background: rgba(255,255,255,.03);
+        border:1px solid rgba(255,255,255,.08);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        overflow:hidden;
+      }
+      .card .head{
+        padding:14px 16px;
+        border-bottom:1px solid rgba(255,255,255,.08);
+        display:flex; align-items:center; justify-content:space-between; gap:10px;
+        background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      }
+      .head .h{
+        font-weight:900;
+        letter-spacing:.2px;
+        font-size:14px;
+        display:flex; align-items:center; gap:10px;
+      }
+      .pill{
+        font-size:12px;
+        font-weight:800;
+        padding:6px 10px;
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.03);
+        color: rgba(255,255,255,.80);
+        white-space:nowrap;
+      }
+      .pill.accent{
+        border-color: rgba(226,184,87,.28);
+        background: rgba(226,184,87,.10);
+        color: var(--accent);
+      }
+      .card .body{padding:14px 16px;}
+
+      /* Form */
+      label{display:block; font-size:12px; color: rgba(255,255,255,.78); font-weight:800; margin:12px 0 6px;}
+      .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px;}
+      @media(max-width:520px){.row{grid-template-columns:1fr;}}
+      .input, select{
+        width:100%;
+        padding:11px 12px;
+        border-radius: 14px;
+        border:1px solid rgba(255,255,255,.10);
+        background: rgba(10,15,30,.92);
+        color: var(--text);
+        outline:none;
+        font-weight:700;
+      }
+      .input:focus, select:focus{
+        border-color: rgba(226,184,87,.35);
+        box-shadow: 0 0 0 4px rgba(226,184,87,.10);
+      }
+      .hint{margin-top:6px; color:var(--muted); font-size:12px; font-weight:650; line-height:1.25;}
+      .divider{height:1px; background: rgba(255,255,255,.08); margin:14px 0;}
+
+      .stepbox{
+        padding:12px;
+        border-radius:16px;
+        border:1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.02);
+      }
+      .stepbox .top{
+        display:flex; align-items:center; justify-content:space-between; gap:10px;
+        margin-bottom:8px;
+      }
+      .stepname{font-weight:900;}
+      .minbadge{
+        font-size:11.5px;
+        font-weight:900;
+        color: rgba(255,255,255,.70);
+        padding:5px 10px;
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.03);
+      }
+      .minirow{
+        display:grid; grid-template-columns: 1fr 120px; gap:10px; align-items:center;
+      }
+      .minirow .input{padding:10px 12px; border-radius:12px;}
+      input[type="range"]{width:100%;}
+      .readonly{
+        opacity:.85;
+        background: rgba(255,255,255,.02);
+      }
+
+      .actions{
+        display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;
+        margin-top:14px;
+      }
+      .btn{
+        border:none; cursor:pointer;
+        padding:11px 14px;
+        border-radius: 14px;
+        font-weight:900;
+        letter-spacing:.2px;
+      }
+      .btn.secondary{
+        background: rgba(255,255,255,.04);
+        border:1px solid rgba(255,255,255,.10);
+        color: rgba(255,255,255,.85);
+      }
+      .btn.primary{
+        background: rgba(226,184,87,.95);
+        color:#101010;
+        box-shadow: 0 14px 40px rgba(0,0,0,.45);
+      }
+      .btn.primary:disabled{
+        opacity:.55; cursor:not-allowed;
+      }
+
+      /* Output */
+      .alert{
+        padding:12px 14px;
+        border-radius: 14px;
+        border:1px solid rgba(239,68,68,.25);
+        background: rgba(239,68,68,.10);
+        color: rgba(255,255,255,.92);
+        font-weight:800;
+        margin:0 0 12px;
+        display:none;
+      }
+
+      .summary{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap:10px;
+        margin-bottom:12px;
+      }
+      @media(max-width:760px){.summary{grid-template-columns:1fr;}}
+      .stat{
+        border-radius:16px;
+        border:1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.02);
+        padding:12px;
+      }
+      .stat .k{color:var(--muted); font-size:12px; font-weight:800}
+      .stat .v{margin-top:6px; font-size:18px; font-weight:950; letter-spacing:.2px}
+      .stat .s{margin-top:4px; color:rgba(255,255,255,.78); font-size:12.5px; font-weight:750}
+
+      /* Timeline */
+      .timeline{
+        position:relative;
+        border-radius: var(--radius);
+        border:1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.02);
+        padding:16px;
+        overflow:hidden;
+      }
+      .timeline::before{
+        content:"";
+        position:absolute;
+        left:16px; right:16px; top:64px;
+        height:3px;
+        background: linear-gradient(90deg, rgba(226,184,87,.55), rgba(226,184,87,.20), rgba(226,184,87,.55));
+        border-radius:999px;
+        opacity:.9;
+      }
+      .milestones{
+        display:grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap:10px;
+      }
+      @media(max-width:900px){.milestones{grid-template-columns:1fr;}}
+      .ms{
+        position:relative;
+        padding:10px 10px 12px;
+        border-radius:16px;
+        border:1px solid rgba(255,255,255,.08);
+        background: rgba(255,255,255,.02);
+        min-height:138px;
+      }
+      .ms .date{font-weight:950; letter-spacing:.5px;}
+      .ms .label{margin-top:4px; color:var(--accent); font-weight:950; letter-spacing:.2px;}
+      .dot{
+        position:absolute;
+        top:52px;
+        left:50%;
+        transform: translateX(-50%);
+        width:18px;height:18px;border-radius:999px;
+        background: rgba(255,255,255,.95);
+        box-shadow: 0 0 0 5px rgba(226,184,87,.22), 0 10px 30px rgba(0,0,0,.45);
+        border:2px solid rgba(226,184,87,.80);
+      }
+      @media(max-width:900px){
+        .timeline::before{display:none;}
+        .dot{display:none;}
+      }
+      .ms .box{
+        margin-top:46px;
+        border-radius:14px;
+        border:1px solid rgba(255,255,255,.08);
+        background: rgba(14,20,36,.60);
+        padding:10px;
+      }
+      .money{font-size:20px; font-weight:950;}
+      .pct{margin-top:4px; color: rgba(255,255,255,.80); font-weight:850;}
+      .sub{
+        margin-top:8px;
+        color: rgba(255,255,255,.78);
+        font-weight:750;
+        font-size:12.5px;
+        line-height:1.25;
+      }
+      .sub .mono{font-family:var(--mono); font-weight:900; color: rgba(255,255,255,.88);}
+
+      /* Table */
+      .table{
+        margin-top:12px;
+        border-radius: var(--radius);
+        border:1px solid rgba(255,255,255,.08);
+        overflow:hidden;
+        background: rgba(255,255,255,.02);
+      }
+      table{width:100%; border-collapse:collapse;}
+      th,td{
+        padding:10px 12px;
+        border-bottom:1px solid rgba(255,255,255,.08);
+        text-align:left;
+        font-size:13px;
+      }
+      th{color: rgba(255,255,255,.75); font-weight:900; background: rgba(255,255,255,.03);}
+      td{color: rgba(255,255,255,.88); font-weight:750;}
+      tr:last-child td{border-bottom:none;}
+      .tag{
+        display:inline-flex; align-items:center; gap:8px;
+        padding:6px 10px;
+        border-radius:999px;
+        border:1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.03);
+        font-weight:900;
+        font-size:12px;
+      }
+      .spot{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.35)}
+      .t-entrada .spot{background:var(--accent);}
+      .t-etapa1 .spot{background:var(--warn);}
+      .t-etapa2 .spot{background:var(--ok);}
+
+      .footer-actions{
+        display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;
+        margin-top:12px;
+      }
+      .ghost{
+        background: transparent;
+        border:1px solid rgba(255,255,255,.12);
+        color: rgba(255,255,255,.85);
+      }
+      .copyok{
+        color: rgba(34,197,94,.95);
+        font-weight:900;
+        font-size:12.5px;
+        display:none;
+        margin-right:auto;
+        align-self:center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="brand">
+          <div class="logo">C</div>
+          <div class="title">
+            <h1>Calculadora — Planejamento de Pagamento</h1>
+            <p>Simule a entrada + etapas + parcelamento e gere uma visão clara para o paciente.</p>
+          </div>
+        </div>
+        <span class="pill accent">Regras mínimas: Entrada ≥ 10% · Etapa 1 ≥ 50% · Etapa 2 = restante</span>
+      </div>
+
+      <div class="grid">
+        <!-- LEFT: INPUTS -->
+        <div class="card">
+          <div class="head">
+            <div class="h">🧮 Parâmetros da Simulação</div>
+            <span class="pill">MVP</span>
+          </div>
+
+          <div class="body">
+            <label>Valor da cirurgia (R$)</label>
+            <input class="input" id="totalValue" type="text" inputmode="decimal" placeholder="Ex: 50000" value="50000"/>
+
+            <div class="row">
+              <div>
+                <label>Data da entrada</label>
+                <input class="input" id="entryDate" type="date" />
+              </div>
+              <div>
+                <label>Data da cirurgia</label>
+                <input class="input" id="surgeryDate" type="date" />
+              </div>
+            </div>
+            <div class="hint">
+              Etapa 1 vence <b>30 dias após</b> a entrada. Etapa 2 vence <b>30 dias antes</b> da cirurgia (se > 0).
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="stepbox">
+              <div class="top">
+                <div class="stepname">Entrada</div>
+                <div class="minbadge">mín. 10%</div>
+              </div>
+              <div class="minirow">
+                <input id="pctEntrada" type="range" min="10" max="100" step="1" value="10" />
+                <input class="input" id="pctEntradaNum" type="number" min="10" max="100" step="1" value="10" />
+              </div>
+              <div class="hint">Aumentar a entrada reduz automaticamente a Etapa 2 (melhor cenário).</div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="stepbox">
+              <div class="top">
+                <div class="stepname">Etapa 1</div>
+                <div class="minbadge">mín. 50% · até 21x</div>
+              </div>
+              <div class="minirow">
+                <input id="pctEtapa1" type="range" min="50" max="100" step="1" value="50" />
+                <input class="input" id="pctEtapa1Num" type="number" min="50" max="100" step="1" value="50" />
+              </div>
+
+              <label style="margin-top:10px;">Parcelas da Etapa 1</label>
+              <div class="row">
+                <select id="installments" class="input">
+                  <!-- JS fill 1..21 -->
+                </select>
+                <select id="installmentMode" class="input" title="Regra de parcelas">
+                  <option value="after">Parcelas podem seguir após a cirurgia</option>
+                  <option value="until">Parcelas somente até a cirurgia</option>
+                </select>
+              </div>
+              <div class="hint">Se “somente até a cirurgia”, o sistema reduz automaticamente o máximo de parcelas possíveis.</div>
+            </div>
+
+            <div style="height:10px"></div>
+
+            <div class="stepbox">
+              <div class="top">
+                <div class="stepname">Etapa 2</div>
+                <div class="minbadge">automática</div>
+              </div>
+              <div class="row">
+                <div>
+                  <label style="margin-top:0;">Percentual</label>
+                  <input class="input readonly" id="pctEtapa2" type="text" disabled />
+                </div>
+                <div>
+                  <label style="margin-top:0;">Valor</label>
+                  <input class="input readonly" id="valEtapa2" type="text" disabled />
+                </div>
+              </div>
+              <div class="hint">Etapa 2 = 100% − Entrada − Etapa 1. Pode ser 0% (cenário melhor).</div>
+            </div>
+
+            <div class="actions">
+              <button class="btn secondary" id="resetBtn" type="button">Reset</button>
+              <button class="btn primary" id="simulateBtn" type="button">Simular</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: OUTPUT -->
+        <div class="card">
+          <div class="head">
+            <div class="h">📅 Planejamento Visual</div>
+            <span class="pill accent" id="scenarioPill">Aguardando simulação</span>
+          </div>
+
+          <div class="body">
+            <div class="alert" id="alertBox"></div>
+
+            <div class="summary">
+              <div class="stat">
+                <div class="k">Valor total</div>
+                <div class="v" id="sumTotal">—</div>
+                <div class="s" id="sumDates">—</div>
+              </div>
+              <div class="stat">
+                <div class="k">Resumo rápido</div>
+                <div class="v" style="font-size:16px" id="sumQuick">—</div>
+                <div class="s" id="sumInstallments">—</div>
+              </div>
+            </div>
+
+            <div class="timeline" id="timelineBlock">
+              <div class="milestones">
+                <div class="ms" id="msEntrada">
+                  <div class="date" id="dEntrada">—</div>
+                  <div class="label">ENTRADA</div>
+                  <div class="dot" aria-hidden="true"></div>
+                  <div class="box">
+                    <div class="money" id="mEntrada">—</div>
+                    <div class="pct" id="pEntrada">—</div>
+                    <div class="sub">Pagamento inicial (na data da entrada).</div>
+                  </div>
+                </div>
+
+                <div class="ms" id="msEtapa1">
+                  <div class="date" id="dEtapa1">—</div>
+                  <div class="label">ETAPA 1</div>
+                  <div class="dot" aria-hidden="true"></div>
+                  <div class="box">
+                    <div class="money" id="mEtapa1">—</div>
+                    <div class="pct" id="pEtapa1">—</div>
+                    <div class="sub">
+                      Vence <span class="mono">+30 dias</span> da entrada.
+                      <br/>Parcelas: <span class="mono" id="iEtapa1">—</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ms" id="msEtapa2">
+                  <div class="date" id="dEtapa2">—</div>
+                  <div class="label">ETAPA 2</div>
+                  <div class="dot" aria-hidden="true"></div>
+                  <div class="box">
+                    <div class="money" id="mEtapa2">—</div>
+                    <div class="pct" id="pEtapa2">—</div>
+                    <div class="sub">Vence <span class="mono">-30 dias</span> da cirurgia (se houver).</div>
+                  </div>
+                </div>
+
+                <div class="ms" id="msCirurgia">
+                  <div class="date" id="dCirurgia">—</div>
+                  <div class="label">CIRURGIA</div>
+                  <div class="dot" aria-hidden="true"></div>
+                  <div class="box">
+                    <div class="money" style="font-size:18px">Data do procedimento</div>
+                    <div class="pct" id="pCirurgia">—</div>
+                    <div class="sub">Referência para o prazo da Etapa 2.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="table">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:120px;">Data</th>
+                    <th>Evento</th>
+                    <th style="width:160px;">Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleBody">
+                  <tr><td colspan="3" style="color:rgba(255,255,255,.70); font-weight:800;">Clique em <b>Simular</b> para gerar o cronograma.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="footer-actions">
+              <span class="copyok" id="copyOk">✅ Copiado!</span>
+              <button class="btn ghost" type="button" id="copyBtn">Copiar resumo p/ WhatsApp</button>
+              <button class="btn secondary" type="button" id="printBtn">Imprimir / Salvar PDF</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------- Helpers ----------
+      const $$ = (id) => document.getElementById(id);
+
+      function toBRL(n){
+        return n.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+      }
+      function parseMoneyBR(v){
+        // accepts "50.000,00" or "50000" etc
+        if (typeof v !== "string") v = String(v ?? "");
+        v = v.trim();
+        if(!v) return NaN;
+        v = v.replace(/[R$\s]/g,"");
+        // if user types 50.000,00 => remove thousands and swap comma
+        if (v.includes(",") && v.includes(".")){
+          v = v.replace(/\./g,"").replace(",",".");
+        } else if (v.includes(",") && !v.includes(".")){
+          v = v.replace(",",".");
+        }
+        const num = Number(v);
+        return Number.isFinite(num) ? num : NaN;
+      }
+      function fmtDateBR(iso){
+        // iso: YYYY-MM-DD
+        if(!iso) return "—";
+        const [y,m,d] = iso.split("-").map(Number);
+        const dt = new Date(Date.UTC(y,m-1,d));
+        const dd = String(dt.getUTCDate()).padStart(2,"0");
+        const mm = String(dt.getUTCMonth()+1).padStart(2,"0");
+        return `${dd}/${mm}/${dt.getUTCFullYear()}`;
+      }
+      function addDaysISO(iso, days){
+        const [y,m,d] = iso.split("-").map(Number);
+        const dt = new Date(Date.UTC(y,m-1,d));
+        dt.setUTCDate(dt.getUTCDate() + days);
+        const yy = dt.getUTCFullYear();
+        const mm = String(dt.getUTCMonth()+1).padStart(2,"0");
+        const dd = String(dt.getUTCDate()).padStart(2,"0");
+        return `${yy}-${mm}-${dd}`;
+      }
+      function diffDaysISO(a,b){
+        // b - a in days
+        const [ya,ma,da] = a.split("-").map(Number);
+        const [yb,mb,db] = b.split("-").map(Number);
+        const A = Date.UTC(ya,ma-1,da);
+        const B = Date.UTC(yb,mb-1,db);
+        return Math.round((B-A)/(1000*60*60*24));
+      }
+
+      // ---------- Inputs ----------
+      const totalValue = $$("totalValue");
+      const entryDate = $$("entryDate");
+      const surgeryDate = $$("surgeryDate");
+
+      const pctEntrada = $$("pctEntrada");
+      const pctEntradaNum = $$("pctEntradaNum");
+      const pctEtapa1 = $$("pctEtapa1");
+      const pctEtapa1Num = $$("pctEtapa1Num");
+
+      const installments = $$("installments");
+      const installmentMode = $$("installmentMode");
+
+      const pctEtapa2 = $$("pctEtapa2");
+      const valEtapa2 = $$("valEtapa2");
+
+      // ---------- Output ----------
+      const alertBox = $$("alertBox");
+      const scenarioPill = $$("scenarioPill");
+
+      const sumTotal = $$("sumTotal");
+      const sumDates = $$("sumDates");
+      const sumQuick = $$("sumQuick");
+      const sumInstallments = $$("sumInstallments");
+
+      const dEntrada = $$("dEntrada");
+      const dEtapa1 = $$("dEtapa1");
+      const dEtapa2 = $$("dEtapa2");
+      const dCirurgia = $$("dCirurgia");
+
+      const mEntrada = $$("mEntrada");
+      const mEtapa1 = $$("mEtapa1");
+      const mEtapa2 = $$("mEtapa2");
+
+      const pEntrada = $$("pEntrada");
+      const pEtapa1 = $$("pEtapa1");
+      const pEtapa2o = $$("pEtapa2");
+      const pCirurgia = $$("pCirurgia");
+
+      const iEtapa1 = $$("iEtapa1");
+      const scheduleBody = $$("scheduleBody");
+
+      const simulateBtn = $$("simulateBtn");
+      const resetBtn = $$("resetBtn");
+      const copyBtn = $$("copyBtn");
+      const printBtn = $$("printBtn");
+      const copyOk = $$("copyOk");
+
+      // ---------- Init ----------
+      (function init(){
+        // default dates: entry today, surgery + 120 days
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth()+1).padStart(2,"0");
+        const d = String(now.getDate()).padStart(2,"0");
+        const today = `${y}-${m}-${d}`;
+        entryDate.value = today;
+        surgeryDate.value = addDaysISO(today, 120);
+
+        // installments 1..21
+        for(let i=1;i<=21;i++){
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = `${i}x`;
+          installments.appendChild(opt);
+        }
+        installments.value = "10"; // default example
+
+        syncPctInputs();
+        recalcEtapa2();
+      })();
+
+      // ---------- Rules / Sync ----------
+      function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+      function maxEntradaGivenEtapa1(et1){
+        // Entrada + Etapa1 <= 100
+        return 100 - et1;
+      }
+      function maxEtapa1GivenEntrada(ent){
+        return 100 - ent;
+      }
+
+      function syncPctInputs(){
+        // keep sliders and numbers in sync + enforce constraints
+        const ent = clamp(Number(pctEntrada.value), 10, 100);
+        const et1 = clamp(Number(pctEtapa1.value), 50, 100);
+
+        // ensure not exceeding 100 together
+        let maxEnt = maxEntradaGivenEtapa1(et1);
+        let ent2 = clamp(ent, 10, maxEnt);
+
+        let maxEt1 = maxEtapa1GivenEntrada(ent2);
+        let et12 = clamp(et1, 50, maxEt1);
+
+        // re-check after potential adjustment
+        maxEnt = maxEntradaGivenEtapa1(et12);
+        ent2 = clamp(ent2, 10, maxEnt);
+
+        pctEntrada.value = String(ent2);
+        pctEntradaNum.value = String(ent2);
+        pctEtapa1.value = String(et12);
+        pctEtapa1Num.value = String(et12);
+
+        recalcEtapa2();
+        adjustInstallmentsIfNeeded();
+      }
+
+      function recalcEtapa2(){
+        const ent = Number(pctEntrada.value);
+        const et1 = Number(pctEtapa1.value);
+        const et2 = Math.max(0, 100 - ent - et1);
+        pctEtapa2.value = `${et2.toFixed(0)}%`;
+
+        const total = parseMoneyBR(totalValue.value);
+        if(Number.isFinite(total)){
+          const v2 = total * (et2/100);
+          valEtapa2.value = toBRL(v2);
+        } else {
+          valEtapa2.value = "—";
+        }
+      }
+
+      function adjustInstallmentsIfNeeded(){
+        if(installmentMode.value !== "until") return;
+
+        const d0 = entryDate.value;
+        const ds = surgeryDate.value;
+        if(!d0 || !ds) return;
+
+        const d1 = addDaysISO(d0, 30);
+        const days = diffDaysISO(d1, ds); // how many days from first installment to surgery
+        // months approx => days/30, inclusive count
+        const maxN = Math.max(1, Math.floor(days/30) + 1);
+        const safeMax = clamp(maxN, 1, 21);
+
+        // disable options above safeMax
+        [...installments.options].forEach(opt => {
+          const n = Number(opt.value);
+          opt.disabled = n > safeMax;
+        });
+
+        // adjust current value if above safeMax
+        const cur = Number(installments.value);
+        if(cur > safeMax) installments.value = String(safeMax);
+      }
+
+      // Events
+      pctEntrada.addEventListener("input", syncPctInputs);
+      pctEntradaNum.addEventListener("input", () => { pctEntrada.value = pctEntradaNum.value; syncPctInputs(); });
+
+      pctEtapa1.addEventListener("input", syncPctInputs);
+      pctEtapa1Num.addEventListener("input", () => { pctEtapa1.value = pctEtapa1Num.value; syncPctInputs(); });
+
+      totalValue.addEventListener("input", () => { recalcEtapa2(); });
+      entryDate.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
+      surgeryDate.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
+      installmentMode.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
+
+      // ---------- Simulation ----------
+      function showAlert(msg){
+        if(msg){
+          alertBox.textContent = msg;
+          alertBox.style.display = "block";
+        } else {
+          alertBox.textContent = "";
+          alertBox.style.display = "none";
+        }
+      }
+
+      function buildSchedule(){
+        const total = parseMoneyBR(totalValue.value);
+        if(!Number.isFinite(total) || total <= 0){
+          showAlert("Informe um valor válido para a cirurgia.");
+          return null;
+        }
+        const d0 = entryDate.value;
+        const ds = surgeryDate.value;
+        if(!d0 || !ds){
+          showAlert("Informe a data da entrada e a data da cirurgia.");
+          return null;
+        }
+        const entPct = Number(pctEntrada.value);
+        const et1Pct = Number(pctEtapa1.value);
+        const et2Pct = Math.max(0, 100 - entPct - et1Pct);
+
+        const d1 = addDaysISO(d0, 30);
+        const d2 = addDaysISO(ds, -30);
+
+        // sanity checks (prazo curto)
+        const warn = [];
+        if(diffDaysISO(d0, ds) < 30) warn.push("A data da cirurgia está muito próxima da entrada.");
+        if(et2Pct > 0 && diffDaysISO(d0, d2) < 0) warn.push("Etapa 2 cairia antes da entrada. Ajuste percentuais ou datas.");
+        if(diffDaysISO(d1, d2) < 0 && et2Pct > 0) warn.push("Etapa 1 (venc. +30) ficou depois da Etapa 2 (-30). Verifique prazos.");
+
+        const entradaV = total*(entPct/100);
+        const etapa1V = total*(et1Pct/100);
+        const etapa2V = total*(et2Pct/100);
+
+        const n = clamp(Number(installments.value), 1, 21);
+        const per = etapa1V / n;
+
+        // distribute rounding diff on last installment
+        const perRounded = Math.floor(per * 100)/100;
+        const last = +(etapa1V - perRounded*(n-1)).toFixed(2);
+
+        const rows = [];
+        rows.push({date:d0, type:"entrada", label:"Entrada", value: entradaV});
+
+        // Etapa 1 installments starting at d1
+        for(let i=1;i<=n;i++){
+          const di = addDaysISO(d1, 30*(i-1));
+          const val = (i===n) ? last : perRounded;
+          rows.push({date: di, type:"etapa1", label:`Etapa 1 — Parcela ${i}/${n}`, value: val});
+        }
+
+        if(et2Pct > 0){
+          rows.push({date:d2, type:"etapa2", label:"Etapa 2 (30 dias antes)", value: etapa2V});
+        }
+
+        rows.sort((a,b)=> a.date.localeCompare(b.date));
+
+        return {
+          total, d0, d1, d2, ds,
+          entPct, et1Pct, et2Pct,
+          entradaV, etapa1V, etapa2V,
+          n,
+          warnings: warn,
+          rows
+        };
+      }
+
+      function render(result){
+        // scenario pill
+        const better = (result.entPct > 10) || (result.et1Pct > 50) || (result.et2Pct < 40);
+        scenarioPill.textContent = better ? "Cenário melhor que o mínimo" : "Cenário mínimo (pior aceito)";
+        scenarioPill.classList.toggle("accent", true);
+
+        // alerts
+        showAlert(result.warnings.length ? ("⚠️ " + result.warnings.join(" · ")) : "");
+
+        // summary
+        sumTotal.textContent = toBRL(result.total);
+        sumDates.textContent = `Entrada: ${fmtDateBR(result.d0)} · Cirurgia: ${fmtDateBR(result.ds)}`;
+
+        const quick = [
+          `Entrada ${result.entPct}%`,
+          `Etapa 1 ${result.et1Pct}%`,
+          `Etapa 2 ${result.et2Pct}%`
+        ].join(" · ");
+        sumQuick.textContent = quick;
+
+        sumInstallments.textContent = `Etapa 1 em ${result.n}x (início: ${fmtDateBR(result.d1)})`;
+
+        // timeline
+        dEntrada.textContent = fmtDateBR(result.d0);
+        dEtapa1.textContent = fmtDateBR(result.d1);
+        dEtapa2.textContent = (result.et2Pct > 0) ? fmtDateBR(result.d2) : "—";
+        dCirurgia.textContent = fmtDateBR(result.ds);
+
+        mEntrada.textContent = toBRL(result.entradaV);
+        mEtapa1.textContent = toBRL(result.etapa1V);
+        mEtapa2.textContent = result.et2Pct > 0 ? toBRL(result.etapa2V) : "R$ 0,00";
+
+        pEntrada.textContent = `${result.entPct}%`;
+        pEtapa1.textContent = `${result.et1Pct}%`;
+        pEtapa2o.textContent = `${result.et2Pct}%`;
+        pCirurgia.textContent = "—";
+
+        iEtapa1.textContent = `${result.n}x`;
+
+        // table
+        scheduleBody.innerHTML = "";
+        for(const r of result.rows){
+          const tr = document.createElement("tr");
+          const td1 = document.createElement("td");
+          const td2 = document.createElement("td");
+          const td3 = document.createElement("td");
+
+          td1.textContent = fmtDateBR(r.date);
+          const tag = document.createElement("span");
+          tag.className = `tag ${r.type==="entrada"?"t-entrada":(r.type==="etapa2"?"t-etapa2":"t-etapa1")}`;
+          const spot = document.createElement("span");
+          spot.className = "spot";
+          tag.appendChild(spot);
+          tag.appendChild(document.createTextNode(r.label));
+          td2.appendChild(tag);
+
+          td3.textContent = toBRL(Number(r.value));
+
+          tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+          scheduleBody.appendChild(tr);
+        }
+      }
+
+      simulateBtn.addEventListener("click", () => {
+        // ensure constraints are applied
+        syncPctInputs();
+        const res = buildSchedule();
+        if(!res) return;
+        render(res);
+      });
+
+      resetBtn.addEventListener("click", () => {
+        totalValue.value = "50000";
+        pctEntrada.value = "10"; pctEntradaNum.value = "10";
+        pctEtapa1.value = "50"; pctEtapa1Num.value = "50";
+        installments.value = "10";
+        installmentMode.value = "after";
+        const today = entryDate.value || "";
+        entryDate.value = today;
+        surgeryDate.value = addDaysISO(today, 120);
+        recalcEtapa2();
+        showAlert("");
+        scenarioPill.textContent = "Aguardando simulação";
+        scheduleBody.innerHTML = `<tr><td colspan="3" style="color:rgba(255,255,255,.70); font-weight:800;">Clique em <b>Simular</b> para gerar o cronograma.</td></tr>`;
+        sumTotal.textContent="—"; sumDates.textContent="—"; sumQuick.textContent="—"; sumInstallments.textContent="—";
+        dEntrada.textContent="—"; dEtapa1.textContent="—"; dEtapa2.textContent="—"; dCirurgia.textContent="—";
+        mEntrada.textContent="—"; mEtapa1.textContent="—"; mEtapa2.textContent="—";
+        pEntrada.textContent="—"; pEtapa1.textContent="—"; pEtapa2o.textContent="—"; iEtapa1.textContent="—";
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        const res = buildSchedule();
+        if(!res) return;
+
+        const lines = [];
+        lines.push("🧾 *PLANEJAMENTO DA CIRURGIA*");
+        lines.push("");
+        lines.push(`💰 *Valor total:* ${toBRL(res.total)}`);
+        lines.push(`📅 *Entrada:* ${fmtDateBR(res.d0)} — ${toBRL(res.entradaV)} (${res.entPct}%)`);
+        lines.push(`📌 *Etapa 1:* ${fmtDateBR(res.d1)} — ${toBRL(res.etapa1V)} (${res.et1Pct}%)`);
+        lines.push(`   • Parcelamento: ${res.n}x (início ${fmtDateBR(res.d1)})`);
+        if(res.et2Pct > 0){
+          lines.push(`✅ *Etapa 2:* ${fmtDateBR(res.d2)} — ${toBRL(res.etapa2V)} (${res.et2Pct}%)`);
+        } else {
+          lines.push(`✅ *Etapa 2:* R$ 0,00 (0%)`);
+        }
+        lines.push(`🩺 *Cirurgia:* ${fmtDateBR(res.ds)}`);
+
+        const text = lines.join("\n");
+        try{
+          await navigator.clipboard.writeText(text);
+          copyOk.style.display = "inline";
+          setTimeout(()=> copyOk.style.display="none", 1200);
+        } catch(e){
+          alert("Não consegui copiar automaticamente. Seu navegador pode bloquear. Tente manualmente.");
+        }
+      });
+
+      printBtn.addEventListener("click", () => window.print());
+    </script>
+  </body>
+  </html>
+{% endblock %}
