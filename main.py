@@ -2694,6 +2694,20 @@ def mapa_delete(
     )
     return redirect("/mapa")
 
+@app.get("/calculadora")
+def calculadora_page(request: Request, session: Session = Depends(get_session)):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    # opcional: só para você testar
+    require(user.username == "johnny.ge", "Acesso restrito.")
+
+    return templates.TemplateResponse(
+        "calculadora.html",
+        {"request": request, "current_user": user},
+    )
+    
 @app.get("/relatorio_gustavo", response_class=HTMLResponse)
 def relatorio_gustavo_page(
     request: Request,
@@ -3607,4 +3621,3 @@ def hospedagem_delete(
         target_id=res_id,
     )
     return redirect(f"/hospedagem?month={month_param}")
-
