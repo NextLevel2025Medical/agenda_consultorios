@@ -400,12 +400,7 @@
                 <select id="installments" class="input">
                   <!-- JS fill 1..21 -->
                 </select>
-                <select id="installmentMode" class="input" title="Regra de parcelas">
-                  <option value="after">Parcelas podem seguir após a cirurgia</option>
-                  <option value="until">Parcelas somente até a cirurgia</option>
-                </select>
               </div>
-              <div class="hint">Se “somente até a cirurgia”, o sistema reduz automaticamente o máximo de parcelas possíveis.</div>
             </div>
 
             <div style="height:10px"></div>
@@ -413,8 +408,9 @@
             <div class="stepbox">
               <div class="top">
                 <div class="stepname">Etapa 2</div>
-                <div class="minbadge">automática</div>
+                <div class="minbadge">automática · até 21x</div>
               </div>
+
               <div class="row">
                 <div>
                   <label style="margin-top:0;">Percentual</label>
@@ -425,7 +421,15 @@
                   <input class="input readonly" id="valEtapa2" type="text" disabled />
                 </div>
               </div>
-              <div class="hint">Etapa 2 = 100% − Entrada − Etapa 1. Pode ser 0% (cenário melhor).</div>
+
+              <label style="margin-top:10px;">Parcelas da Etapa 2</label>
+              <div class="row">
+                <select id="installments2" class="input">
+                  <!-- JS fill 1..21 -->
+                </select>
+              </div>
+
+              <div class="hint">Etapa 2 vence 30 dias antes da cirurgia e pode ser parcelada em até 21x.</div>
             </div>
 
             <div class="actions">
@@ -492,7 +496,10 @@
                   <div class="box">
                     <div class="money" id="mEtapa2">—</div>
                     <div class="pct" id="pEtapa2">—</div>
-                    <div class="sub">Vence <span class="mono">-30 dias</span> da cirurgia (se houver).</div>
+                    <div class="sub">
+                      Vence <span class="mono">-30 dias</span> da cirurgia (se houver).
+                      <br/>Parcelas: <span class="mono" id="iEtapa2">—</span>
+                    </div>
                   </div>
                 </div>
 
@@ -595,7 +602,7 @@
       const pctEtapa1Num = $$("pctEtapa1Num");
 
       const installments = $$("installments");
-      const installmentMode = $$("installmentMode");
+      const installments2 = $$("installments2");
 
       const pctEtapa2 = $$("pctEtapa2");
       const valEtapa2 = $$("valEtapa2");
@@ -624,6 +631,7 @@
       const pCirurgia = $$("pCirurgia");
 
       const iEtapa1 = $$("iEtapa1");
+      const iEtapa2 = $$("iEtapa2");
       const scheduleBody = $$("scheduleBody");
 
       const simulateBtn = $$("simulateBtn");
@@ -643,7 +651,7 @@
         entryDate.value = today;
         surgeryDate.value = addDaysISO(today, 120);
 
-        // installments 1..21
+        // installments 1..21 (Etapa 1)
         for(let i=1;i<=21;i++){
           const opt = document.createElement("option");
           opt.value = String(i);
@@ -651,6 +659,15 @@
           installments.appendChild(opt);
         }
         installments.value = "10"; // default example
+
+        // installments 1..21 (Etapa 2)
+        for(let i=1;i<=21;i++){
+          const opt = document.createElement("option");
+          opt.value = String(i);
+          opt.textContent = `${i}x`;
+          installments2.appendChild(opt);
+        }
+        installments2.value = "1"; // default: à vista na Etapa 2
 
         syncPctInputs();
         recalcEtapa2();
@@ -689,7 +706,6 @@
         pctEtapa1Num.value = String(et12);
 
         recalcEtapa2();
-        adjustInstallmentsIfNeeded();
       }
 
       function recalcEtapa2(){
@@ -707,30 +723,6 @@
         }
       }
 
-      function adjustInstallmentsIfNeeded(){
-        if(installmentMode.value !== "until") return;
-
-        const d0 = entryDate.value;
-        const ds = surgeryDate.value;
-        if(!d0 || !ds) return;
-
-        const d1 = addDaysISO(d0, 30);
-        const days = diffDaysISO(d1, ds); // how many days from first installment to surgery
-        // months approx => days/30, inclusive count
-        const maxN = Math.max(1, Math.floor(days/30) + 1);
-        const safeMax = clamp(maxN, 1, 21);
-
-        // disable options above safeMax
-        [...installments.options].forEach(opt => {
-          const n = Number(opt.value);
-          opt.disabled = n > safeMax;
-        });
-
-        // adjust current value if above safeMax
-        const cur = Number(installments.value);
-        if(cur > safeMax) installments.value = String(safeMax);
-      }
-
       // Events
       pctEntrada.addEventListener("input", syncPctInputs);
       pctEntradaNum.addEventListener("input", () => { pctEntrada.value = pctEntradaNum.value; syncPctInputs(); });
@@ -739,9 +731,6 @@
       pctEtapa1Num.addEventListener("input", () => { pctEtapa1.value = pctEtapa1Num.value; syncPctInputs(); });
 
       totalValue.addEventListener("input", () => { recalcEtapa2(); });
-      entryDate.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
-      surgeryDate.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
-      installmentMode.addEventListener("change", () => { adjustInstallmentsIfNeeded(); });
 
       // ---------- Simulation ----------
       function showAlert(msg){
@@ -783,25 +772,38 @@
         const etapa1V = total*(et1Pct/100);
         const etapa2V = total*(et2Pct/100);
 
-        const n = clamp(Number(installments.value), 1, 21);
-        const per = etapa1V / n;
+        const n1 = clamp(Number(installments.value), 1, 21);
+        const per1 = etapa1V / n1;
 
-        // distribute rounding diff on last installment
-        const perRounded = Math.floor(per * 100)/100;
-        const last = +(etapa1V - perRounded*(n-1)).toFixed(2);
+        // arredondamento Etapa 1
+        const per1Rounded = Math.floor(per1 * 100)/100;
+        const last1 = +(etapa1V - per1Rounded*(n1-1)).toFixed(2);
 
         const rows = [];
         rows.push({date:d0, type:"entrada", label:"Entrada", value: entradaV});
 
-        // Etapa 1 installments starting at d1
-        for(let i=1;i<=n;i++){
+        // Etapa 1 parcelas começando em d1
+        for(let i=1;i<=n1;i++){
           const di = addDaysISO(d1, 30*(i-1));
-          const val = (i===n) ? last : perRounded;
-          rows.push({date: di, type:"etapa1", label:`Etapa 1 — Parcela ${i}/${n}`, value: val});
+          const val = (i===n1) ? last1 : per1Rounded;
+          rows.push({date: di, type:"etapa1", label:`Etapa 1 — Parcela ${i}/${n1}`, value: val});
         }
 
+        // Etapa 2: se existir, pode parcelar
         if(et2Pct > 0){
-          rows.push({date:d2, type:"etapa2", label:"Etapa 2 (30 dias antes)", value: etapa2V});
+          const n2 = clamp(Number(installments2.value), 1, 21);
+          const per2 = etapa2V / n2;
+
+          // arredondamento Etapa 2
+          const per2Rounded = Math.floor(per2 * 100)/100;
+          const last2 = +(etapa2V - per2Rounded*(n2-1)).toFixed(2);
+
+          // parcelas da Etapa 2 começando em d2
+          for(let i=1;i<=n2;i++){
+            const di = addDaysISO(d2, 30*(i-1));
+            const val = (i===n2) ? last2 : per2Rounded;
+            rows.push({date: di, type:"etapa2", label:`Etapa 2 — Parcela ${i}/${n2}`, value: val});
+          }
         }
 
         rows.sort((a,b)=> a.date.localeCompare(b.date));
@@ -810,11 +812,11 @@
           total, d0, d1, d2, ds,
           entPct, et1Pct, et2Pct,
           entradaV, etapa1V, etapa2V,
-          n,
+          n1,
+          n2: (et2Pct > 0 ? clamp(Number(installments2.value), 1, 21) : 0),
           warnings: warn,
           rows
         };
-      }
 
       function render(result){
         // scenario pill
@@ -836,7 +838,13 @@
         ].join(" · ");
         sumQuick.textContent = quick;
 
-        sumInstallments.textContent = `Etapa 1 em ${result.n}x (início: ${fmtDateBR(result.d1)})`;
+        sumInstallments.textContent =
+          (result.et2Pct > 0)
+            ? `Etapa 1 em ${result.n1}x (início: ${fmtDateBR(result.d1)}) · Etapa 2 em ${result.n2}x (início: ${fmtDateBR(result.d2)})`
+            : `Etapa 1 em ${result.n1}x (início: ${fmtDateBR(result.d1)})`;
+
+        iEtapa1.textContent = `${result.n1}x`;
+        iEtapa2.textContent = (result.et2Pct > 0) ? `${result.n2}x` : "—";
 
         // timeline
         dEntrada.textContent = fmtDateBR(result.d0);
@@ -853,7 +861,8 @@
         pEtapa2o.textContent = `${result.et2Pct}%`;
         pCirurgia.textContent = "—";
 
-        iEtapa1.textContent = `${result.n}x`;
+        iEtapa1.textContent = `${result.n1}x`;
+        iEtapa2.textContent = (result.et2Pct > 0) ? `${result.n2}x` : "—";
 
         // table
         scheduleBody.innerHTML = "";
@@ -916,9 +925,11 @@
         lines.push(`💰 *Valor total:* ${toBRL(res.total)}`);
         lines.push(`📅 *Entrada:* ${fmtDateBR(res.d0)} — ${toBRL(res.entradaV)} (${res.entPct}%)`);
         lines.push(`📌 *Etapa 1:* ${fmtDateBR(res.d1)} — ${toBRL(res.etapa1V)} (${res.et1Pct}%)`);
-        lines.push(`   • Parcelamento: ${res.n}x (início ${fmtDateBR(res.d1)})`);
+        lines.push(`   • Parcelamento: ${res.n1}x (início ${fmtDateBR(res.d1)})`);
+
         if(res.et2Pct > 0){
           lines.push(`✅ *Etapa 2:* ${fmtDateBR(res.d2)} — ${toBRL(res.etapa2V)} (${res.et2Pct}%)`);
+          lines.push(`   • Parcelamento: ${res.n2}x (início ${fmtDateBR(res.d2)})`);
         } else {
           lines.push(`✅ *Etapa 2:* R$ 0,00 (0%)`);
         }
