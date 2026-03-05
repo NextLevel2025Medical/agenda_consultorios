@@ -288,7 +288,8 @@
       }
       table{width:100%; border-collapse:collapse;}
       th,td{
-        padding:10px 12px;
+        padding:12px 12px;
+        vertical-align: top;
         border-bottom:1px solid rgba(255,255,255,.08);
         text-align:left;
         font-size:13px;
@@ -564,14 +565,12 @@
         const num = Number(v);
         return Number.isFinite(num) ? num : NaN;
       }
-      function fmtDateBR(iso){
-        // iso: YYYY-MM-DD
+      function fmtMonthBR(iso){
+        // iso: YYYY-MM-DD  ->  MM/AAAA
         if(!iso) return "—";
-        const [y,m,d] = iso.split("-").map(Number);
-        const dt = new Date(Date.UTC(y,m-1,d));
-        const dd = String(dt.getUTCDate()).padStart(2,"0");
-        const mm = String(dt.getUTCMonth()+1).padStart(2,"0");
-        return `${dd}/${mm}/${dt.getUTCFullYear()}`;
+        const [y,m] = iso.split("-").map(Number);
+        const mm = String(m).padStart(2,"0");
+        return `${mm}/${y}`;
       }
       function addDaysISO(iso, days){
         const [y,m,d] = iso.split("-").map(Number);
@@ -784,7 +783,7 @@
 
         // Etapa 1 parcelas começando em d1
         for(let i=1;i<=n1;i++){
-          const di = addDaysISO(d1, 30*(i-1));
+          const di = addDaysISO(d1, i-1);
           const val = (i===n1) ? last1 : per1Rounded;
           rows.push({date: di, type:"etapa1", label:`Etapa 1 — Parcela ${i}/${n1}`, value: val});
         }
@@ -865,24 +864,106 @@
         iEtapa1.textContent = `${result.n1}x`;
         iEtapa2.textContent = (result.et2Pct > 0) ? `${result.n2}x` : "—";
 
-        // table
+        // table (group by month)
         scheduleBody.innerHTML = "";
-        for(const r of result.rows){
+
+        // agrupa por YYYY-MM e soma por tipo
+        const groups = new Map();
+        for (const r of result.rows){
+          const ym = r.date.slice(0,7); // "YYYY-MM"
+          if(!groups.has(ym)){
+            groups.set(ym, {
+              ym,
+              sumEntrada: 0,
+              sumEtapa1: 0,
+              sumEtapa2: 0,
+              total: 0
+            });
+          }
+          const g = groups.get(ym);
+          const v = Number(r.value) || 0;
+
+          g.total += v;
+
+          if (r.type === "entrada") g.sumEntrada += v;
+          else if (r.type === "etapa1") g.sumEtapa1 += v;
+          else if (r.type === "etapa2") g.sumEtapa2 += v;
+        }
+
+        // ordenar meses
+        const months = Array.from(groups.keys()).sort();
+
+        for (const ym of months){
+          const g = groups.get(ym);
+
           const tr = document.createElement("tr");
           const td1 = document.createElement("td");
           const td2 = document.createElement("td");
           const td3 = document.createElement("td");
 
-          td1.textContent = fmtDateBR(r.date);
-          const tag = document.createElement("span");
-          tag.className = `tag ${r.type==="entrada"?"t-entrada":(r.type==="etapa2"?"t-etapa2":"t-etapa1")}`;
-          const spot = document.createElement("span");
-          spot.className = "spot";
-          tag.appendChild(spot);
-          tag.appendChild(document.createTextNode(r.label));
-          td2.appendChild(tag);
+          // Data como MM/AAAA
+          td1.textContent = `${ym.slice(5,7)}/${ym.slice(0,4)}`;
 
-          td3.textContent = toBRL(Number(r.value));
+          // Coluna Evento (multilinha)
+          const box = document.createElement("div");
+          box.style.display = "grid";
+          box.style.gap = "8px";
+
+          // helper: cria uma linha "TAG + valor"
+          function addLine(tagClass, label, value){
+            if(value <= 0) return;
+
+            const line = document.createElement("div");
+            line.style.display = "flex";
+            line.style.alignItems = "center";
+            line.style.justifyContent = "space-between";
+            line.style.gap = "10px";
+
+            const tag = document.createElement("span");
+            tag.className = `tag ${tagClass}`;
+            const spot = document.createElement("span");
+            spot.className = "spot";
+            tag.appendChild(spot);
+            tag.appendChild(document.createTextNode(label));
+
+            const val = document.createElement("span");
+            val.style.fontWeight = "900";
+            val.textContent = toBRL(value);
+
+            line.appendChild(tag);
+            line.appendChild(val);
+            box.appendChild(line);
+          }
+
+          // linhas do mês
+          addLine("t-entrada", "Entrada", g.sumEntrada);
+          addLine("t-etapa1", "Etapa 1", g.sumEtapa1);
+          addLine("t-etapa2", "Etapa 2", g.sumEtapa2);
+
+          const totalLine = document.createElement("div");
+          totalLine.style.display = "flex";
+          totalLine.style.justifyContent = "space-between";
+          totalLine.style.alignItems = "center";
+          totalLine.style.marginTop = "6px";
+          totalLine.style.paddingTop = "8px";
+          totalLine.style.borderTop = "1px solid rgba(255,255,255,.10)";
+          totalLine.style.fontWeight = "950";
+          totalLine.style.color = "rgba(255,255,255,.92)";
+
+          const tLabel = document.createElement("span");
+          tLabel.textContent = "Total do mês";
+
+          const tVal = document.createElement("span");
+          tVal.textContent = toBRL(g.total);
+
+          totalLine.appendChild(tLabel);
+          totalLine.appendChild(tVal);
+          box.appendChild(totalLine);
+
+          td2.appendChild(box);
+
+          // Coluna Valor: em vez de repetir tudo, coloca só o total do mês
+          td3.textContent = toBRL(g.total);
 
           tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
           scheduleBody.appendChild(tr);
