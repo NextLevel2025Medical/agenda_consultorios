@@ -2700,9 +2700,6 @@ def calculadora_page(request: Request, session: Session = Depends(get_session)):
     if not user:
         return redirect("/login")
 
-    # opcional: só para você testar
-    require(user.username == "johnny.ge", "Acesso restrito.")
-
     return templates.TemplateResponse(
         "calculadora.html",
         {"request": request, "current_user": user},
