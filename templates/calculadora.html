@@ -219,8 +219,9 @@
         border:1px solid rgba(255,255,255,.08);
         background: rgba(255,255,255,.02);
         padding:16px;
-        overflow: visible; /* <- em vez de hidden */
+        overflow:hidden; /* pode voltar pro hidden */
       }
+
       .timeline::before{
         content:"";
         position:absolute;
@@ -230,15 +231,33 @@
         border-radius:999px;
         opacity:.9;
       }
+
+      /* wrapper que cria scroll horizontal quando necessário */
       .milestones-wrap{
         overflow-x:auto;
-        padding-bottom:6px; /* espaço pro scrollbar */
+        overflow-y:hidden;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom:10px;
+        margin:0 -6px;        /* dá “respiro” pro scroll */
+        padding-left:6px;
+        padding-right:6px;
       }
+
+      /* AQUI está o principal: display:grid voltou */
       .milestones{
+        display:grid;
         grid-template-columns: repeat(4, minmax(240px, 1fr));
-        min-width: 980px; /* garante 4 cards sem esmagar */
+        gap:10px;
+        align-items:stretch;
+        min-width: 980px;     /* garante 4 cards sem esmagar */
       }
-      @media(max-width:900px){.milestones{grid-template-columns:1fr;}}
+
+      /* IMPORTANTÍSSIMO: não colapsar pra 1 coluna, senão vira esse print feio */
+      @media (max-width:900px){
+        .timeline::before{display:none;}
+        .dot{display:none;}
+        /* mantém grid e scroll, não muda milestones pra 1fr */
+      }
       .ms{
         position:relative;
         padding:10px 10px 12px;
