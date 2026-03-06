@@ -1,7 +1,7 @@
 {
   "name": "Concept Sys - Hospedagens",
   "short_name": "Hospedagens",
-  "start_url": "/hospedagem",
+  "start_url": "/hotel_mobile",
   "display": "standalone",
   "background_color": "#070A12",
   "theme_color": "#070A12",
@@ -18,4 +18,5 @@
       "type": "image/png"
     }
   ]
+
 }
