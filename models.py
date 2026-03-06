@@ -156,6 +156,9 @@ class LodgingReservation(SQLModel, table=True):
     is_pre_reservation: bool = Field(default=False, index=True)
 
     patient_name: str = Field(index=True)
+    patient_cpf: Optional[str] = Field(default=None, index=True)
+    patient_phone: Optional[str] = Field(default=None)
+
     check_in: date = Field(index=True)
     check_out: date = Field(index=True)  # NÃO inclusivo (data de saída)
 
@@ -168,4 +171,3 @@ class LodgingReservation(SQLModel, table=True):
 
     # opcional: vincular à cirurgia (SurgicalMapEntry)
     surgery_entry_id: Optional[int] = Field(default=None, foreign_key="surgicalmapentry.id", index=True)
-

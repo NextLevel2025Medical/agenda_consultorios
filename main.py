@@ -30,6 +30,9 @@ from logging.handlers import RotatingFileHandler
 import threading
 import time as pytime
 
+import smtplib
+from email.message import EmailMessage
+
 TZ = timezone(timedelta(hours=-3))  # Brasil (-03:00)
 SLOT_MINUTES = 30
 START_HOUR = 7
@@ -439,6 +442,76 @@ def human_unit(unit: str) -> str:
         "apto": "Apartamento",
     }.get(unit, unit)
 
+def format_unit_for_email(unit: str) -> str:
+    unit_norm = normalize_unit(unit)
+    return {
+        "suite_1": "RESERVA SUÍTE 1",
+        "suite_2": "RESERVA SUÍTE 2",
+        "apto": "RESERVA APARTAMENTO",
+    }.get(unit_norm, f"RESERVA {unit_norm.upper()}")
+
+
+def format_date_br(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def build_lodging_email_body(
+    *,
+    action_label: str,
+    requested_by_name: str,
+    request_date: datetime,
+    unit: str,
+    patient_name: str,
+    patient_cpf: Optional[str],
+    patient_phone: Optional[str],
+    check_in: date,
+    check_out: date,
+) -> str:
+    return f"""Olá, a pedido do usuario {requested_by_name}, em {request_date.strftime('%d/%m/%Y %H:%M')}, gentileza {action_label} a reserva abaixo:
+
+{format_unit_for_email(unit)}
+
+{patient_name}
+CPF {patient_cpf or '-'}
+TELEFONE {patient_phone or '-'}
+DATA CHECK IN: {format_date_br(check_in)}
+DATA CHECK OUT: {format_date_br(check_out)}
+
+Atenciosamente
+Time Comercial
+Concept Clinic
+"""
+
+
+def send_lodging_email_notification(
+    *,
+    subject: str,
+    body: str,
+):
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_from = os.getenv("SMTP_FROM", "").strip() or smtp_user
+    hotel_to = os.getenv("HOTEL_NOTIFICATION_TO", "").strip()
+
+    if not smtp_host or not smtp_user or not smtp_password or not smtp_from or not hotel_to:
+        audit_logger.warning(
+            "EMAIL_HOTEL_NAO_ENVIADO: variáveis SMTP/HOTEL_NOTIFICATION_TO não configuradas."
+        )
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = smtp_from
+    msg["To"] = hotel_to
+    msg.set_content(body)
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+
 def fmt_date_br(d: date) -> str:
     return d.strftime("%d/%m/%Y")
 
@@ -489,6 +562,8 @@ def hotel_card_from_reservation(r: LodgingReservation) -> dict:
         "unit": unit_norm,
         "unit_label": human_unit(unit_norm),
         "patient_name": (r.patient_name or "").strip(),
+        "patient_cpf": (getattr(r, "patient_cpf", "") or "").strip(),
+        "patient_phone": (getattr(r, "patient_phone", "") or "").strip(),
         "check_in": r.check_in,
         "check_out": r.check_out,
         "check_in_br": fmt_date_br(r.check_in),
@@ -3256,6 +3331,8 @@ def hospedagem_page(
             {
                 "id": r.id,
                 "patient_name": r.patient_name,
+                "patient_cpf": getattr(r, "patient_cpf", "") or "",
+                "patient_phone": getattr(r, "patient_phone", "") or "",
                 "check_in": r.check_in.strftime("%d/%m/%Y"),
                 "check_out": r.check_out.strftime("%d/%m/%Y"),
                 "start_col": start_col,
@@ -3296,6 +3373,8 @@ def hospedagem_page(
                 "unit": u,
                 "unit_label": human_unit(u),
                 "patient_name": r.patient_name or "",
+                "patient_cpf": getattr(r, "patient_cpf", "") or "",
+                "patient_phone": getattr(r, "patient_phone", "") or "",
                 "check_in": r.check_in.strftime("%d/%m/%Y"),
                 "check_out": r.check_out.strftime("%d/%m/%Y"),
                 "is_pre": 1 if r.is_pre_reservation else 0,
@@ -3549,6 +3628,8 @@ def hospedagem_create(
     month: str = Form(""),
     unit: str = Form(...),
     patient_name: str = Form(...),
+    patient_cpf: Optional[str] = Form(None),
+    patient_phone: Optional[str] = Form(None),
     check_in: str = Form(...),
     check_out: str = Form(...),
     is_pre_reservation: Optional[str] = Form(None),
@@ -3585,7 +3666,10 @@ def hospedagem_create(
                 f"&err={quote(e)}"
                 f"&conflict_id={conflict_id}"
                 f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
-                f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+                f"&patient_name={quote(patient_name)}"
+                f"&patient_cpf={quote(patient_cpf or '')}"
+                f"&patient_phone={quote(patient_phone or '')}"
+                f"&is_pre_reservation={(1 if is_pre_reservation else 0)}"
                 f"&note={quote(note or '')}"
                 f"&surgery_entry_id={surgery_entry_id or ''}"
             )
@@ -3595,7 +3679,10 @@ def hospedagem_create(
             f"/hospedagem?month={quote(month_param)}&open=1"
             f"&err={quote(e)}"
             f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
-            f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+            f"&patient_name={quote(patient_name)}"
+            f"&patient_cpf={quote(patient_cpf or '')}"
+            f"&patient_phone={quote(patient_phone or '')}"
+            f"&is_pre_reservation={(1 if is_pre_reservation else 0)}"
             f"&note={quote(note or '')}"
             f"&surgery_entry_id={surgery_entry_id or ''}"
         )
@@ -3603,6 +3690,8 @@ def hospedagem_create(
     row = LodgingReservation(
         unit=normalize_unit(unit),
         patient_name=patient_name.strip().upper(),
+        patient_cpf=(patient_cpf or "").strip() or None,
+        patient_phone=(patient_phone or "").strip() or None,
         check_in=ci,
         check_out=co,
         is_pre_reservation=bool(is_pre_reservation),
@@ -3613,6 +3702,26 @@ def hospedagem_create(
     )
     session.add(row)
     session.commit()
+    session.refresh(row)
+
+    try:
+        body = build_lodging_email_body(
+            action_label="fazer",
+            requested_by_name=user.full_name or user.username,
+            request_date=datetime.now(TZ),
+            unit=row.unit,
+            patient_name=row.patient_name,
+            patient_cpf=row.patient_cpf,
+            patient_phone=row.patient_phone,
+            check_in=row.check_in,
+            check_out=row.check_out,
+        )
+        send_lodging_email_notification(
+            subject=f"[HOTEL] Nova reserva de hospedagem - {row.patient_name}",
+            body=body,
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_CREATE: {e}")
 
     audit_event(
         request,
@@ -3640,6 +3749,8 @@ def hospedagem_override(
 
     unit: str = Form(...),
     patient_name: str = Form(...),
+    patient_cpf: Optional[str] = Form(None),
+    patient_phone: Optional[str] = Form(None),
     check_in: str = Form(...),
     check_out: str = Form(...),
     is_pre_reservation: Optional[str] = Form(None),
@@ -3679,7 +3790,10 @@ def hospedagem_override(
             f"/hospedagem?month={quote(month_param)}&open=1"
             f"&err={quote(e)}"
             f"&unit={quote(unit)}&check_in={quote(check_in)}&check_out={quote(check_out)}"
-            f"&patient_name={quote(patient_name)}&is_pre_reservation={(1 if is_pre_reservation else 0)}"
+            f"&patient_name={quote(patient_name)}"
+            f"&patient_cpf={quote(patient_cpf or '')}"
+            f"&patient_phone={quote(patient_phone or '')}"
+            f"&is_pre_reservation={(1 if is_pre_reservation else 0)}"
             f"&note={quote(note or '')}"
             f"&surgery_entry_id={surgery_entry_id or ''}"
         )
@@ -3691,18 +3805,41 @@ def hospedagem_override(
             
     # cria a nova
     row = LodgingReservation(
-        unit=unit,
-        patient_name=patient_name,
+        unit=normalize_unit(unit),
+        patient_name=patient_name.strip().upper(),
+        patient_cpf=(patient_cpf or "").strip() or None,
+        patient_phone=(patient_phone or "").strip() or None,
         check_in=ci,
         check_out=co,
         is_pre_reservation=bool(is_pre_reservation),
         note=(note or "").strip() or None,
+        created_by_id=user.id,
+        updated_by_id=user.id,
         surgery_entry_id=surgery_entry_id_int,
     )
     session.add(row)
     session.commit()
     session.refresh(row)
 
+    try:
+        body = build_lodging_email_body(
+            action_label="refazer / sobrepor",
+            requested_by_name=user.full_name or user.username,
+            request_date=datetime.now(TZ),
+            unit=row.unit,
+            patient_name=row.patient_name,
+            patient_cpf=row.patient_cpf,
+            patient_phone=row.patient_phone,
+            check_in=row.check_in,
+            check_out=row.check_out,
+        )
+        send_lodging_email_notification(
+            subject=f"[HOTEL] Reserva sobreposta - {row.patient_name}",
+            body=body,
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_OVERRIDE: {e}")
+    
     audit_logger.info(
         f"HOSPEDAGEM_OVERRIDE: deleted_id={conflict_id} | new_id={row.id} unit={row.unit} ci={row.check_in} co={row.check_out} patient={row.patient_name}"
     )
@@ -3716,6 +3853,8 @@ def hospedagem_update(
     res_id: int,
     unit: str = Form(...),
     patient_name: str = Form(...),
+    patient_cpf: Optional[str] = Form(None),
+    patient_phone: Optional[str] = Form(None),
     check_in: str = Form(...),
     check_out: str = Form(...),
     is_pre_reservation: Optional[str] = Form(None),
@@ -3745,8 +3884,10 @@ def hospedagem_update(
     if e:
         return redirect(f"/hospedagem?err={quote(e)}&open=1&edit_id={res_id}")
 
-    row.unit = unit
+    row.unit = normalize_unit(unit)
     row.patient_name = patient_name.strip().upper()
+    row.patient_cpf = (patient_cpf or "").strip() or None
+    row.patient_phone = (patient_phone or "").strip() or None
     row.check_in = ci
     row.check_out = co
     row.is_pre_reservation = bool(is_pre_reservation)
@@ -3756,6 +3897,26 @@ def hospedagem_update(
 
     session.add(row)
     session.commit()
+    session.refresh(row)
+
+    try:
+        body = build_lodging_email_body(
+            action_label="atualizar",
+            requested_by_name=user.full_name or user.username,
+            request_date=datetime.now(TZ),
+            unit=row.unit,
+            patient_name=row.patient_name,
+            patient_cpf=row.patient_cpf,
+            patient_phone=row.patient_phone,
+            check_in=row.check_in,
+            check_out=row.check_out,
+        )
+        send_lodging_email_notification(
+            subject=f"[HOTEL] Reserva atualizada - {row.patient_name}",
+            body=body,
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_UPDATE: {e}")
 
     audit_event(
         request,
@@ -3788,9 +3949,34 @@ def hospedagem_delete(
 
     month_param = f"{row.check_in.year:04d}-{row.check_in.month:02d}"
 
+    deleted_unit = row.unit
+    deleted_name = row.patient_name
+    deleted_cpf = row.patient_cpf
+    deleted_phone = row.patient_phone
+    deleted_check_in = row.check_in
+    deleted_check_out = row.check_out
+
     session.delete(row)
     session.commit()
 
+    try:
+        body = build_lodging_email_body(
+            action_label="cancelar / excluir",
+            requested_by_name=user.full_name or user.username,
+            request_date=datetime.now(TZ),
+            unit=deleted_unit,
+            patient_name=deleted_name,
+            patient_cpf=deleted_cpf,
+            patient_phone=deleted_phone,
+            check_in=deleted_check_in,
+            check_out=deleted_check_out,
+        )
+        send_lodging_email_notification(
+            subject=f"[HOTEL] Reserva excluída - {deleted_name}",
+            body=body,
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_DELETE: {e}")
     audit_event(
         request,
         user,
