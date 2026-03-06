@@ -224,6 +224,8 @@
         <!-- payload novo (vem do prefill do modal) -->
         <input type="hidden" name="unit" value="{{ prefill.unit }}">
         <input type="hidden" name="patient_name" value="{{ prefill.patient_name }}">
+        <input type="hidden" name="patient_cpf" value="{{ prefill.patient_cpf or '' }}">
+        <input type="hidden" name="patient_phone" value="{{ prefill.patient_phone or '' }}"> 
         <input type="hidden" name="check_in" value="{{ prefill.check_in }}">
         <input type="hidden" name="check_out" value="{{ prefill.check_out }}">
         <input type="hidden" name="is_pre_reservation" value="{{ 1 if prefill.is_pre_reservation else '' }}">
@@ -321,8 +323,10 @@
               data-id="{{ r.id }}"
               data-unit="{{ r.unit }}"
               data-patient="{{ r.patient_name }}"
-              data-check-in="{{ r.check_in_br }}"
-              data-check-out="{{ r.check_out_br }}"
+              data-cpf="{{ r.patient_cpf }}"
+              data-phone="{{ r.patient_phone }}"
+              data-check-in="{{ r.check_in }}"
+              data-check-out="{{ r.check_out }}"
               data-is-pre="{{ 1 if r.is_pre else 0 }}"
               data-note="{{ r.note|e }}"
             >
@@ -387,6 +391,16 @@
           <input class="input" type="text" name="patient_name" id="patientEl" required placeholder="NOME DO PACIENTE">
         </div>
 
+        <div>
+          <label class="muted">CPF</label>
+          <input class="input" type="text" name="patient_cpf" id="cpfEl" placeholder="000.000.000-00">
+        </div>
+
+        <div>
+          <label class="muted">Telefone</label>
+          <input class="input" type="text" name="patient_phone" id="phoneEl" placeholder="(31) 99999-9999">
+        </div>
+
         <div class="full">
           <label class="muted">Observação (opcional)</label>
           <textarea class="input" name="note" id="noteEl" rows="2" placeholder="Ex: entrada antes da cirurgia, acompanhante, etc."></textarea>
@@ -415,6 +429,8 @@
   const checkInEl = document.getElementById("checkInEl");
   const checkOutEl = document.getElementById("checkOutEl");
   const patientEl = document.getElementById("patientEl");
+  const cpfEl = document.getElementById("cpfEl");
+  const phoneEl = document.getElementById("phoneEl");
   const noteEl = document.getElementById("noteEl");
 
   const deleteBtn = document.getElementById("deleteBtn");
@@ -456,19 +472,16 @@
     titleEl.textContent = "Editar Reserva";
     deleteBtn.style.display = "inline-flex";
 
-    // preencher
     unitEl.value = d.unit;
     patientEl.value = d.patient || "";
+    cpfEl.value = d.cpf || "";
+    phoneEl.value = d.phone || "";
     preEl.checked = (d.isPre === "1");
     noteEl.value = d.note || "";
 
-    // datas vêm em dd/mm/yyyy -> converter
-    const ci = d.checkIn.split("/");
-    const co = d.checkOut.split("/");
-    checkInEl.value = `${ci[2]}-${ci[1]}-${ci[0]}`;
-    checkOutEl.value = `${co[2]}-${co[1]}-${co[0]}`;
+    checkInEl.value = d.checkIn || "";
+    checkOutEl.value = d.checkOut || "";
 
-    // form delete
     deleteForm.action = "/hospedagem/delete/" + d.id;
 
     backdrop.style.display = "flex";

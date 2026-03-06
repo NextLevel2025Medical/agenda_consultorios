@@ -419,6 +419,11 @@
                 <div>
                   <div class="unit">{{ item.unit_label }}</div>
                   <div class="patient">{{ item.patient_name }}</div>
+                  {% if item.patient_phone %}
+                    <div class="meta" style="margin-top:6px;">
+                      <div>Telefone: {{ item.patient_phone }}</div>
+                    </div>
+                  {% endif %}
                 </div>
                 <div class="right-badge">{{ item.check_in_br }}</div>
               </div>
