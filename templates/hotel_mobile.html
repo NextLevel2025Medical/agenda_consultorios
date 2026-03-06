@@ -7,7 +7,7 @@
 
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#070A12">
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icons/icon-512.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="/static/globals.css">
@@ -492,6 +492,11 @@
                 <div>
                   <div class="unit">{{ item.unit_label }}</div>
                   <div class="patient">{{ item.patient_name }}</div>
+                  {% if item.patient_phone %}
+                    <div class="meta" style="margin-top:6px;">
+                      <div>Telefone: {{ item.patient_phone }}</div>
+                    </div>
+                  {% endif %}
                 </div>
                 <div class="right-badge">{{ item.period_br }}</div>
               </div>
@@ -499,6 +504,9 @@
               <div class="meta">
                 <div>Check-in: {{ item.check_in_br }}</div>
                 <div>Check-out: {{ item.check_out_br }}</div>
+                {% if item.note %}
+                  <div>Obs.: {{ item.note }}</div>
+                {% endif %}
               </div>
 
               {% if item.is_pre %}
@@ -526,12 +534,21 @@
                 <div>
                   <div class="unit">{{ item.unit_label }}</div>
                   <div class="patient">{{ item.patient_name }}</div>
+
+                  {% if item.patient_phone %}
+                    <div class="meta" style="margin-top:6px;">
+                      <div>Telefone: {{ item.patient_phone }}</div>
+                    </div>
+                  {% endif %}
                 </div>
-                <div class="right-badge">{{ item.check_in_br }}</div>
               </div>
 
               <div class="meta">
+                <div>Check-in: {{ item.check_in_br }}</div>
                 <div>Check-out: {{ item.check_out_br }}</div>
+                {% if item.note %}
+                  <div>Obs.: {{ item.note }}</div>
+                {% endif %}
               </div>
 
               {% if item.is_pre %}

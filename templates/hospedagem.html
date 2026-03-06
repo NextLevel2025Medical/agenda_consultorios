@@ -325,8 +325,8 @@
               data-patient="{{ r.patient_name }}"
               data-cpf="{{ r.patient_cpf }}"
               data-phone="{{ r.patient_phone }}"
-              data-check-in="{{ r.check_in }}"
-              data-check-out="{{ r.check_out }}"
+              data-check-in="{{ r.check_in_iso }}"
+              data-check-out="{{ r.check_out_iso }}"
               data-is-pre="{{ 1 if r.is_pre else 0 }}"
               data-note="{{ r.note|e }}"
             >
