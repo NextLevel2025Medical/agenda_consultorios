@@ -494,8 +494,9 @@ def send_lodging_email_notification(
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
     smtp_from = os.getenv("SMTP_FROM", "").strip() or smtp_user
     hotel_to = os.getenv("HOTEL_NOTIFICATION_TO", "").strip()
+    recipients = [email.strip() for email in hotel_to.split(",") if email.strip()]
 
-    if not smtp_host or not smtp_user or not smtp_password or not smtp_from or not hotel_to:
+    if not smtp_host or not smtp_user or not smtp_password or not smtp_from or not recipients:
         audit_logger.warning(
             "EMAIL_HOTEL_NAO_ENVIADO: variáveis SMTP/HOTEL_NOTIFICATION_TO não configuradas."
         )
@@ -504,13 +505,13 @@ def send_lodging_email_notification(
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = smtp_from
-    msg["To"] = hotel_to
+    msg["To"] = ", ".join(recipients)
     msg.set_content(body)
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
         server.starttls()
         server.login(smtp_user, smtp_password)
-        server.send_message(msg)
+        server.send_message(msg, to_addrs=recipients)
 
 def fmt_date_br(d: date) -> str:
     return d.strftime("%d/%m/%Y")
