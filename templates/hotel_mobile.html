@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Concept Hotel</title>
+
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <meta name="theme-color" content="#070A12">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="/static/globals.css">
+
+  <style>
+    :root{
+      --bg:#070A12;
+      --panel:#0F172A;
+      --panel-soft:rgba(255,255,255,0.04);
+      --line:rgba(255,255,255,0.08);
+      --text:rgba(255,255,255,0.96);
+      --muted:rgba(255,255,255,0.70);
+      --yellow:#F4C318;
+      --red:#D92D3A;
+      --green:#1F6B47;
+      --card-radius:22px;
+    }
+
+    *{ box-sizing:border-box; }
+
+    html, body{
+      margin:0;
+      padding:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body{
+      padding-bottom: 110px;
+    }
+
+    a{
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .app{
+      max-width: 760px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #050913 0%, #070A12 100%);
+    }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding: 18px 18px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(7,10,18,0.94);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
+    }
+
+    .brand img{
+      width:44px;
+      height:44px;
+      border-radius:999px;
+      object-fit:cover;
+      box-shadow: 0 8px 22px rgba(0,0,0,.35);
+      background:#000;
+    }
+
+    .brand-text{
+      min-width:0;
+    }
+
+    .brand-title{
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      line-height: 1.1;
+    }
+
+    .brand-sub{
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .logout-btn{
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      border-radius: 14px;
+      padding: 10px 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .section{
+      padding: 16px 18px 0;
+    }
+
+    .hero-title{
+      font-size: 38px;
+      line-height: 0.95;
+      font-weight: 900;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      margin: 6px 0 10px;
+    }
+
+    .hero-sub{
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+
+    .stats{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .stat{
+      border-radius: 18px;
+      padding: 16px 12px;
+      text-align:center;
+      font-weight:900;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .stat .num{
+      display:block;
+      font-size: 32px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat .label{
+      display:block;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .stat-yellow{ background: linear-gradient(180deg, #F6C71B, #E3B112); color:#2E2100; }
+    .stat-red{ background: linear-gradient(180deg, #E23744, #BE2330); color:#fff; }
+    .stat-green{ background: linear-gradient(180deg, #255E44, #1C4A35); color:#fff; }
+
+    .block{
+      margin-top: 18px;
+    }
+
+    .block-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size: 15px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 12px;
+      color: rgba(255,255,255,.92);
+    }
+
+    .block-icon{
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .card-list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .res-card{
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+      border-radius: var(--card-radius);
+      padding: 16px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.16);
+    }
+
+    .res-card.yellow{
+      background: linear-gradient(180deg, rgba(244,195,24,0.16), rgba(244,195,24,0.07));
+      border-color: rgba(244,195,24,0.24);
+    }
+
+    .res-card.red{
+      background: linear-gradient(180deg, rgba(217,45,58,0.18), rgba(217,45,58,0.08));
+      border-color: rgba(217,45,58,0.24);
+    }
+
+    .res-card.green{
+      background: linear-gradient(180deg, rgba(31,107,71,0.20), rgba(31,107,71,0.09));
+      border-color: rgba(31,107,71,0.28);
+    }
+
+    .res-top{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .unit{
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      margin-bottom: 6px;
+    }
+
+    .patient{
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .meta{
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    .right-badge{
+      flex-shrink:0;
+      min-width: 92px;
+      text-align:right;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-top: 10px;
+      border: 1px dashed rgba(255,255,255,0.28);
+      color: #FDE68A;
+      background: rgba(245, 158, 11, 0.10);
+    }
+
+    .empty{
+      border: 1px dashed rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.03);
+      border-radius: 18px;
+      padding: 18px;
+      color: var(--muted);
+      text-align:center;
+      font-weight: 700;
+    }
+
+    .rooms{
+      display:grid;
+      gap:12px;
+    }
+
+    .room-card{
+      border-radius: var(--card-radius);
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+    }
+
+    .room-card.occupied{
+      background: linear-gradient(180deg, rgba(31,107,71,0.20), rgba(31,107,71,0.08));
+      border-color: rgba(31,107,71,0.24);
+    }
+
+    .room-card.free{
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    }
+
+    .room-status{
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .bottom-nav{
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 30;
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      background: rgba(7,10,18,0.96);
+      backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .bottom-nav-inner{
+      max-width: 760px;
+      margin: 0 auto;
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:8px;
+    }
+
+    .nav-item{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      min-height: 58px;
+      border-radius: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid transparent;
+    }
+
+    .nav-item.active{
+      color: #F4C318;
+      border-color: rgba(244,195,24,0.20);
+      background: rgba(244,195,24,0.06);
+    }
+
+    @media (max-width: 430px){
+      .hero-title{
+        font-size: 30px;
+      }
+
+      .stats{
+        grid-template-columns: 1fr;
+      }
+
+      .patient{
+        font-size: 18px;
+      }
+
+      .right-badge{
+        min-width: 78px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <img src="/static/logo.png" alt="Concept Clinic">
+        <div class="brand-text">
+          <div class="brand-title">Concept Hotel</div>
+          <div class="brand-sub">Operação de hospedagens</div>
+        </div>
+      </div>
+
+      <form method="post" action="/logout" style="margin:0;">
+        <button type="submit" class="logout-btn">Sair</button>
+      </form>
+    </div>
+
+    <section class="section" id="hoje">
+      <div class="hero-title">Hoje</div>
+      <div class="hero-sub">{{ today_label }}</div>
+
+      <div class="stats">
+        <div class="stat stat-yellow">
+          <span class="num">{{ count_checkins }}</span>
+          <span class="label">Check-ins</span>
+        </div>
+        <div class="stat stat-red">
+          <span class="num">{{ count_checkouts }}</span>
+          <span class="label">Check-outs</span>
+        </div>
+        <div class="stat stat-green">
+          <span class="num">{{ count_inhouse }}</span>
+          <span class="label">Hóspedes</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section block">
+      <div class="block-title">
+        <span class="block-icon">🟡</span>
+        <span>Chegadas hoje</span>
+      </div>
+
+      {% if checkins_today %}
+        <div class="card-list">
+          {% for item in checkins_today %}
+            <div class="res-card yellow">
+              <div class="res-top">
+                <div>
+                  <div class="unit">{{ item.unit_label }}</div>
+                  <div class="patient">{{ item.patient_name }}</div>
+                </div>
+                <div class="right-badge">{{ item.check_in_br }}</div>
+              </div>
+
+              <div class="meta">
+                <div>Check-in: {{ item.check_in_br }}</div>
+                <div>Check-out: {{ item.check_out_br }}</div>
+              </div>
+
+              {% if item.is_pre %}
+                <div class="pill">Pré-reserva</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Nenhum check-in para hoje.</div>
+      {% endif %}
+    </section>
+
+    <section class="section block" id="saidas">
+      <div class="block-title">
+        <span class="block-icon">🔴</span>
+        <span>Saídas hoje</span>
+      </div>
+
+      {% if checkouts_today %}
+        <div class="card-list">
+          {% for item in checkouts_today %}
+            <div class="res-card red">
+              <div class="res-top">
+                <div>
+                  <div class="unit">{{ item.unit_label }}</div>
+                  <div class="patient">{{ item.patient_name }}</div>
+                </div>
+                <div class="right-badge">{{ item.check_out_br }}</div>
+              </div>
+
+              <div class="meta">
+                <div>Check-in: {{ item.check_in_br }}</div>
+                <div>Check-out: {{ item.check_out_br }}</div>
+              </div>
+
+              {% if item.is_pre %}
+                <div class="pill">Pré-reserva</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Nenhum check-out para hoje.</div>
+      {% endif %}
+    </section>
+
+    <section class="section block" id="hospedes">
+      <div class="block-title">
+        <span class="block-icon">🟢</span>
+        <span>Hóspedes no hotel</span>
+      </div>
+
+      {% if inhouse %}
+        <div class="card-list">
+          {% for item in inhouse %}
+            <div class="res-card green">
+              <div class="res-top">
+                <div>
+                  <div class="unit">{{ item.unit_label }}</div>
+                  <div class="patient">{{ item.patient_name }}</div>
+                </div>
+                <div class="right-badge">{{ item.period_br }}</div>
+              </div>
+
+              <div class="meta">
+                <div>Check-in: {{ item.check_in_br }}</div>
+                <div>Check-out: {{ item.check_out_br }}</div>
+              </div>
+
+              {% if item.is_pre %}
+                <div class="pill">Pré-reserva</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Nenhum hóspede hospedado neste momento.</div>
+      {% endif %}
+    </section>
+
+    <section class="section block" id="chegadas">
+      <div class="block-title">
+        <span class="block-icon">⬇️</span>
+        <span>Próximas chegadas</span>
+      </div>
+
+      {% if upcoming_checkins %}
+        <div class="card-list">
+          {% for item in upcoming_checkins %}
+            <div class="res-card">
+              <div class="res-top">
+                <div>
+                  <div class="unit">{{ item.unit_label }}</div>
+                  <div class="patient">{{ item.patient_name }}</div>
+                </div>
+                <div class="right-badge">{{ item.check_in_br }}</div>
+              </div>
+
+              <div class="meta">
+                <div>Check-out: {{ item.check_out_br }}</div>
+              </div>
+
+              {% if item.is_pre %}
+                <div class="pill">Pré-reserva</div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">Não há próximas chegadas cadastradas.</div>
+      {% endif %}
+    </section>
+
+    <section class="section block" id="quartos">
+      <div class="block-title">
+        <span class="block-icon">🛏️</span>
+        <span>Status dos quartos</span>
+      </div>
+
+      <div class="rooms">
+        {% for room in room_status %}
+          <div class="room-card {{ room.status }}">
+            <div class="unit">{{ room.unit_label }}</div>
+            <div class="room-status">{{ room.status_label }}</div>
+
+            {% if room.status == "occupied" %}
+              <div class="patient" style="margin-top:10px;">{{ room.patient_name }}</div>
+              <div class="meta">
+                <div>{{ room.period_br }}</div>
+              </div>
+              {% if room.is_pre %}
+                <div class="pill">Pré-reserva</div>
+              {% endif %}
+            {% else %}
+              <div class="meta" style="margin-top:10px;">
+                <div>Sem hóspede no momento.</div>
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="bottom-nav-inner">
+      <a class="nav-item active" href="#hoje">
+        <span>📅</span>
+        <span>Hoje</span>
+      </a>
+      <a class="nav-item" href="#chegadas">
+        <span>⬇️</span>
+        <span>Chegadas</span>
+      </a>
+      <a class="nav-item" href="#saidas">
+        <span>⬆️</span>
+        <span>Saídas</span>
+      </a>
+      <a class="nav-item" href="#quartos">
+        <span>🛏️</span>
+        <span>Quartos</span>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("{{ url_for('static', filename='service-worker.js') }}")
+          .then(function (registration) {
+            console.log("Service Worker registrado com sucesso:", registration.scope);
+          })
+          .catch(function (error) {
+            console.log("Erro ao registrar o Service Worker:", error);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
