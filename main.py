@@ -437,8 +437,8 @@ def get_lodging_conflict_row(
 
 def human_unit(unit: str) -> str:
     return {
-        "suite_1": "Suíte 1",
-        "suite_2": "Suíte 2",
+        "suite_1": "Suíte 1303",
+        "suite_2": "Suíte 1304",
         "apto": "Apartamento",
     }.get(unit, unit)
 
@@ -487,13 +487,19 @@ def send_lodging_email_notification(
     *,
     subject: str,
     body: str,
+    unit: str,
 ):
     smtp_host = os.getenv("SMTP_HOST", "").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER", "").strip()
     smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
     smtp_from = os.getenv("SMTP_FROM", "").strip() or smtp_user
-    hotel_to = os.getenv("HOTEL_NOTIFICATION_TO", "").strip()
+
+    if normalize_unit(unit) == "apto":
+        hotel_to = os.getenv("HOTEL_APARTMENT_NOTIFICATION_TO", "").strip()
+    else:
+        hotel_to = os.getenv("HOTEL_NOTIFICATION_TO", "").strip()
+
     recipients = [email.strip() for email in hotel_to.split(",") if email.strip()]
 
     if not smtp_host or not smtp_user or not smtp_password or not smtp_from or not recipients:
@@ -1665,6 +1671,8 @@ def home(request: Request, session: Session = Depends(get_session)):
         return redirect("/doctor")
     if user.role == "surgery":
         return redirect("/mapa")
+    if user.role == "viewer":
+        return redirect("/hotel_mobile")
     if user.role == "comissao":
         # redireciona para o mês atual (você pode manter manual também)
         today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
@@ -3207,7 +3215,7 @@ def hotel_mobile_page(
     if not user:
         return redirect("/login")
 
-    require(user.role in ("admin", "surgery"))
+    require(user.role in ("admin", "surgery", "viewer"))
 
     try:
         ref_day = date.fromisoformat(day) if day else datetime.now(TZ).date()
@@ -3378,6 +3386,8 @@ def hospedagem_page(
                 "patient_phone": getattr(r, "patient_phone", "") or "",
                 "check_in": r.check_in.strftime("%d/%m/%Y"),
                 "check_out": r.check_out.strftime("%d/%m/%Y"),
+                "check_in_iso": r.check_in.strftime("%Y-%m-%d"),
+                "check_out_iso": r.check_out.strftime("%Y-%m-%d"),
                 "is_pre": 1 if r.is_pre_reservation else 0,
                 "note": getattr(r, "note", "") or "",
                 "created_by_username": created_by_username,
@@ -3720,6 +3730,7 @@ def hospedagem_create(
         send_lodging_email_notification(
             subject=f"[HOTEL] Nova reserva de hospedagem - {row.patient_name}",
             body=body,
+            unit=row.unit,
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_CREATE: {e}")
