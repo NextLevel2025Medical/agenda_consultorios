@@ -439,6 +439,162 @@ def human_unit(unit: str) -> str:
         "apto": "Apartamento",
     }.get(unit, unit)
 
+def fmt_date_br(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def fmt_day_month_br(d: date) -> str:
+    return d.strftime("%d/%m")
+
+
+def hotel_weekday_pt(d: date) -> str:
+    nomes = [
+        "segunda-feira",
+        "terça-feira",
+        "quarta-feira",
+        "quinta-feira",
+        "sexta-feira",
+        "sábado",
+        "domingo",
+    ]
+    return nomes[d.weekday()]
+
+
+def normalize_unit(unit: Optional[str]) -> str:
+    raw = (unit or "").strip().lower()
+
+    mapping = {
+        "suite_1": "suite_1",
+        "suíte 1": "suite_1",
+        "suite 1": "suite_1",
+        "suite1": "suite_1",
+
+        "suite_2": "suite_2",
+        "suíte 2": "suite_2",
+        "suite 2": "suite_2",
+        "suite2": "suite_2",
+
+        "apto": "apto",
+        "apartamento": "apto",
+        "apart": "apto",
+    }
+
+    return mapping.get(raw, raw)
+
+
+def hotel_card_from_reservation(r: LodgingReservation) -> dict:
+    unit_norm = normalize_unit(getattr(r, "unit", None))
+    return {
+        "id": r.id,
+        "unit": unit_norm,
+        "unit_label": human_unit(unit_norm),
+        "patient_name": (r.patient_name or "").strip(),
+        "check_in": r.check_in,
+        "check_out": r.check_out,
+        "check_in_br": fmt_date_br(r.check_in),
+        "check_out_br": fmt_date_br(r.check_out),
+        "period_br": f"{fmt_day_month_br(r.check_in)} → {fmt_day_month_br(r.check_out)}",
+        "is_pre": bool(getattr(r, "is_pre_reservation", False)),
+        "note": (getattr(r, "note", "") or "").strip(),
+    }
+
+
+def build_hotel_dashboard_data(session: Session, ref_day: date) -> dict:
+    units = ["suite_1", "suite_2", "apto"]
+
+    # check-in hoje
+    checkins_rows = session.exec(
+        select(LodgingReservation).where(
+            LodgingReservation.check_in == ref_day
+        ).order_by(LodgingReservation.unit, LodgingReservation.patient_name)
+    ).all()
+
+    # check-out hoje
+    checkouts_rows = session.exec(
+        select(LodgingReservation).where(
+            LodgingReservation.check_out == ref_day
+        ).order_by(LodgingReservation.unit, LodgingReservation.patient_name)
+    ).all()
+
+    # hóspedes atualmente no hotel
+    inhouse_rows = session.exec(
+        select(LodgingReservation).where(
+            LodgingReservation.check_in <= ref_day,
+            LodgingReservation.check_out > ref_day,
+        ).order_by(LodgingReservation.unit, LodgingReservation.check_in, LodgingReservation.patient_name)
+    ).all()
+
+    # próximas chegadas
+    upcoming_checkins_rows = session.exec(
+        select(LodgingReservation).where(
+            LodgingReservation.check_in > ref_day
+        ).order_by(LodgingReservation.check_in, LodgingReservation.unit, LodgingReservation.patient_name)
+    ).all()
+
+    # próximas saídas
+    upcoming_checkouts_rows = session.exec(
+        select(LodgingReservation).where(
+            LodgingReservation.check_out > ref_day
+        ).order_by(LodgingReservation.check_out, LodgingReservation.unit, LodgingReservation.patient_name)
+    ).all()
+
+    checkins_today = [hotel_card_from_reservation(r) for r in checkins_rows]
+    checkouts_today = [hotel_card_from_reservation(r) for r in checkouts_rows]
+    inhouse = [hotel_card_from_reservation(r) for r in inhouse_rows]
+    upcoming_checkins = [hotel_card_from_reservation(r) for r in upcoming_checkins_rows[:10]]
+    upcoming_checkouts = [hotel_card_from_reservation(r) for r in upcoming_checkouts_rows[:10]]
+
+    occupied_by_unit = {}
+    for item in inhouse:
+        occupied_by_unit[item["unit"]] = item
+
+    room_status = []
+    for unit in units:
+        current = occupied_by_unit.get(unit)
+        if current:
+            room_status.append(
+                {
+                    "unit": unit,
+                    "unit_label": human_unit(unit),
+                    "status": "occupied",
+                    "status_label": "Ocupado",
+                    "patient_name": current["patient_name"],
+                    "period_br": current["period_br"],
+                    "is_pre": current["is_pre"],
+                }
+            )
+        else:
+            room_status.append(
+                {
+                    "unit": unit,
+                    "unit_label": human_unit(unit),
+                    "status": "free",
+                    "status_label": "Livre",
+                    "patient_name": "",
+                    "period_br": "",
+                    "is_pre": False,
+                }
+            )
+
+    month_label = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ][ref_day.month - 1]
+
+    return {
+        "ref_day": ref_day,
+        "today_label": f"{ref_day.day} de {month_label} - {hotel_weekday_pt(ref_day)}",
+        "checkins_today": checkins_today,
+        "checkouts_today": checkouts_today,
+        "inhouse": inhouse,
+        "upcoming_checkins": upcoming_checkins,
+        "upcoming_checkouts": upcoming_checkouts,
+        "room_status": room_status,
+        "count_checkins": len(checkins_today),
+        "count_checkouts": len(checkouts_today),
+        "count_inhouse": len(inhouse),
+    }
+
 def _weekday_pt(idx: int) -> str:
     names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     return names[idx]
@@ -2965,7 +3121,34 @@ def normalize_unit(raw: Optional[str]) -> str:
         return v
 
     return v
+@app.get("/hotel_mobile", response_class=HTMLResponse)
+def hotel_mobile_page(
+    request: Request,
+    day: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
 
+    require(user.role in ("admin", "surgery"))
+
+    try:
+        ref_day = date.fromisoformat(day) if day else datetime.now(TZ).date()
+    except Exception:
+        ref_day = datetime.now(TZ).date()
+
+    dashboard = build_hotel_dashboard_data(session, ref_day)
+
+    return templates.TemplateResponse(
+        "hotel_mobile.html",
+        {
+            "request": request,
+            "current_user": user,
+            **dashboard,
+        },
+    )
+    
 @app.get("/hospedagem", response_class=HTMLResponse)
 def hospedagem_page(
     request: Request,
