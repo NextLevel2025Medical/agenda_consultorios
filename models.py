@@ -41,6 +41,31 @@ class SurgicalMapEntry(SQLModel, table=True):
 
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+class ProcedureCatalog(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("name"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    nucleus: str = Field(index=True)  # ex: Corporal | Mama | Face
+    is_active: bool = Field(default=True, index=True)
+
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class SurgeryProcedureItem(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    surgery_entry_id: int = Field(foreign_key="surgicalmapentry.id", index=True)
+    procedure_id: int = Field(foreign_key="procedurecatalog.id", index=True)
+
+    procedure_name_snapshot: str
+    nucleus_snapshot: str = Field(index=True)
+
+    amount: float = Field(default=0)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
 class AgendaBlock(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

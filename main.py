@@ -16,7 +16,20 @@ from sqlalchemy.exc import IntegrityError
 from urllib.parse import quote
 
 from db import create_db_and_tables, get_session, engine
-from models import User, Room, Reservation, ReservationRequest, AuditLog, SurgicalMapEntry, AgendaBlock, AgendaBlockSurgeon, GustavoAgendaSnapshot, LodgingReservation
+from models import (
+    User,
+    Room,
+    Reservation,
+    ReservationRequest,
+    AuditLog,
+    SurgicalMapEntry,
+    AgendaBlock,
+    AgendaBlockSurgeon,
+    GustavoAgendaSnapshot,
+    LodgingReservation,
+    ProcedureCatalog,
+    SurgeryProcedureItem,
+)
 from auth import hash_password, verify_password, require
 
 from pathlib import Path
@@ -2356,6 +2369,12 @@ def mapa_page(
     sellers = session.exec(
         select(User).where(User.role == "surgery", User.is_active == True).order_by(User.full_name)
     ).all()
+
+    procedure_catalog = session.exec(
+        select(ProcedureCatalog)
+        .where(ProcedureCatalog.is_active == True)
+        .order_by(ProcedureCatalog.nucleus, ProcedureCatalog.name)
+    ).all()
     
     users_all = session.exec(select(User)).all()
     users_by_id = {u.id: u for u in users_all if u.id is not None}
@@ -2473,6 +2492,7 @@ def mapa_page(
             "priority_mode": priority["mode"],
             "priority_items": priority["items"],
             "sellers": sellers,
+            "procedure_catalog": procedure_catalog,
             "blocked_all_days": blocked_all_days,  # set[str] -> "2026-01-15"
             "blocked_surgeons_by_day": blocked_surgeons_by_day,  # dict[str, list[int]]
             "av_selected_month": av_selected_month,
@@ -2482,9 +2502,128 @@ def mapa_page(
         },
     )
 
+def save_surgery_procedure_items(
+    session: Session,
+    *,
+    surgery_entry_id: int,
+    procedure_ids: list[int] | None,
+    form_data: dict,
+):
+    """
+    Salva os procedimentos selecionados no modal do mapa cirúrgico.
+    - procedure_ids: lista dos IDs marcados
+    - form_data: dados do form (para ler procedure_amount_{id})
+    """
+
+    # remove itens antigos da cirurgia (útil para update também)
+    session.exec(
+        delete(SurgeryProcedureItem).where(
+            SurgeryProcedureItem.surgery_entry_id == surgery_entry_id
+        )
+    )
+
+    if not procedure_ids:
+        session.commit()
+        return
+
+    catalog_rows = session.exec(
+        select(ProcedureCatalog).where(ProcedureCatalog.id.in_(procedure_ids))
+    ).all()
+
+    catalog_by_id = {p.id: p for p in catalog_rows if p.id is not None}
+
+    items_to_add = []
+
+    for pid in procedure_ids:
+        proc = catalog_by_id.get(pid)
+        if not proc:
+            continue
+
+        raw_amount = form_data.get(f"procedure_amount_{pid}", "") or ""
+        raw_amount = str(raw_amount).strip().replace(",", ".")
+
+        try:
+            amount = float(raw_amount) if raw_amount != "" else 0.0
+        except ValueError:
+            amount = 0.0
+
+        items_to_add.append(
+            SurgeryProcedureItem(
+                surgery_entry_id=surgery_entry_id,
+                procedure_id=pid,
+                procedure_name_snapshot=proc.name,
+                nucleus_snapshot=proc.nucleus,
+                amount=amount,
+            )
+        )
+
+    if items_to_add:
+        session.add_all(items_to_add)
+
+    session.commit()
+    
+def save_surgery_procedure_items(
+    session: Session,
+    *,
+    surgery_entry_id: int,
+    procedure_ids: list[int] | None,
+    form_data: dict,
+):
+    """
+    Salva os procedimentos selecionados no modal do mapa cirúrgico.
+    - procedure_ids: lista dos IDs marcados
+    - form_data: dados do form (para ler procedure_amount_{id})
+    """
+
+    # remove itens antigos da cirurgia (útil para update também)
+    session.exec(
+        delete(SurgeryProcedureItem).where(
+            SurgeryProcedureItem.surgery_entry_id == surgery_entry_id
+        )
+    )
+
+    if not procedure_ids:
+        session.commit()
+        return
+
+    catalog_rows = session.exec(
+        select(ProcedureCatalog).where(ProcedureCatalog.id.in_(procedure_ids))
+    ).all()
+
+    catalog_by_id = {p.id: p for p in catalog_rows if p.id is not None}
+
+    items_to_add = []
+
+    for pid in procedure_ids:
+        proc = catalog_by_id.get(pid)
+        if not proc:
+            continue
+
+        raw_amount = form_data.get(f"procedure_amount_{pid}", "") or ""
+        raw_amount = str(raw_amount).strip().replace(",", ".")
+
+        try:
+            amount = float(raw_amount) if raw_amount != "" else 0.0
+        except ValueError:
+            amount = 0.0
+
+        items_to_add.append(
+            SurgeryProcedureItem(
+                surgery_entry_id=surgery_entry_id,
+                procedure_id=pid,
+                procedure_name_snapshot=proc.name,
+                nucleus_snapshot=proc.nucleus,
+                amount=amount,
+            )
+        )
+
+    if items_to_add:
+        session.add_all(items_to_add)
+
+    session.commit()
 
 @app.post("/mapa/create")
-def mapa_create(
+async def mapa_create(
     request: Request,
     day_iso: str = Form(...),
     mode: str = Form("book"),
@@ -2497,6 +2636,7 @@ def mapa_create(
     has_lodging: Optional[str] = Form(None),
     seller_id: Optional[int] = Form(None),
     force_override: Optional[str] = Form(None),
+    procedure_id: Optional[list[int]] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -2594,6 +2734,16 @@ def mapa_create(
     
     session.add(row)
     session.commit()
+    session.refresh(row)
+
+    form = await request.form()
+
+    save_surgery_procedure_items(
+        session,
+        surgery_entry_id=row.id,
+        procedure_ids=procedure_id,
+        form_data=dict(form),
+    )
 
     audit_event(
         request,
@@ -2608,6 +2758,7 @@ def mapa_create(
             "procedure_type": procedure_type,
             "location": location,
             "uses_hsr": bool(uses_hsr),
+            "procedure_ids": procedure_id or [],
         },
     )
 
@@ -2756,7 +2907,7 @@ def mapa_deny(request: Request, entry_id: int, session: Session = Depends(get_se
     return redirect(f"/mapa?month={month}")
 
 @app.post("/mapa/update/{entry_id}")
-def mapa_update(
+async def mapa_update(
     request: Request,
     entry_id: int,
     day_iso: str = Form(...),
@@ -2770,6 +2921,7 @@ def mapa_update(
     has_lodging: Optional[str] = Form(None),  
     seller_id: Optional[int] = Form(None),
     force_override: Optional[str] = Form(None),
+    procedure_id: Optional[list[int]] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -2846,6 +2998,16 @@ def mapa_update(
 
     session.add(row)
     session.commit()
+    session.refresh(row)
+
+    form = await request.form()
+
+    save_surgery_procedure_items(
+        session,
+        surgery_entry_id=row.id,
+        procedure_ids=procedure_id,
+        form_data=dict(form),
+    )
 
     audit_event(
         request,
@@ -2864,6 +3026,7 @@ def mapa_update(
                 "location": row.location,
                 "uses_hsr": row.uses_hsr,
                 "is_pre_reservation": row.is_pre_reservation,
+                "procedure_ids": procedure_id or [],
             },
         },
     )
@@ -3945,7 +4108,6 @@ def hospedagem_update(
     month_param = f"{ci.year:04d}-{ci.month:02d}"
     return redirect(f"/hospedagem?month={month_param}")
 
-
 @app.post("/hospedagem/delete/{res_id}")
 def hospedagem_delete(
     request: Request,
@@ -4002,3 +4164,106 @@ def hospedagem_delete(
         target_id=res_id,
     )
     return redirect(f"/hospedagem?month={month_param}")
+
+@app.get("/procedimentos", response_class=HTMLResponse)
+def procedimentos_page(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    rows = session.exec(
+        select(ProcedureCatalog).order_by(ProcedureCatalog.nucleus, ProcedureCatalog.name)
+    ).all()
+
+    return templates.TemplateResponse(
+        "procedimentos.html",
+        {
+            "request": request,
+            "current_user": user,
+            "rows": rows,
+        },
+    )
+
+@app.post("/procedimentos/create")
+def procedimentos_create(
+    request: Request,
+    name: str = Form(...),
+    nucleus: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    name = (name or "").strip()
+    nucleus = (nucleus or "").strip()
+
+    if not name or not nucleus:
+        return redirect("/procedimentos")
+
+    exists = session.exec(
+        select(ProcedureCatalog).where(func.lower(ProcedureCatalog.name) == name.lower())
+    ).first()
+
+    if exists:
+        return redirect("/procedimentos")
+
+    row = ProcedureCatalog(
+        name=name,
+        nucleus=nucleus,
+        is_active=True,
+        created_by_id=user.id,
+    )
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "procedure_catalog_created",
+        target_type="procedure_catalog",
+        target_id=row.id,
+        extra={
+            "name": row.name,
+            "nucleus": row.nucleus,
+            "is_active": row.is_active,
+        },
+    )
+
+    return redirect("/procedimentos")
+
+@app.post("/procedimentos/toggle/{procedure_id}")
+def procedimentos_toggle(
+    request: Request,
+    procedure_id: int,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    row = session.get(ProcedureCatalog, procedure_id)
+    if not row:
+        return redirect("/procedimentos")
+
+    row.is_active = not row.is_active
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "procedure_catalog_toggled",
+        target_type="procedure_catalog",
+        target_id=row.id,
+        extra={
+            "name": row.name,
+            "nucleus": row.nucleus,
+            "is_active": row.is_active,
+        },
+    )
+
+    return redirect("/procedimentos")
