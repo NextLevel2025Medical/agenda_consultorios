@@ -866,6 +866,92 @@
         <option>Concept Clinic</option>
       </select>
 
+      <!-- ===== PROCEDIMENTOS DA CIRURGIA ===== -->
+
+      <div style="margin-top:18px;">
+        <div style="font-weight:900; margin-bottom:6px;">
+          Procedimentos da cirurgia
+        </div>
+
+        <div style="font-size:12px; color:rgba(255,255,255,.65); margin-bottom:10px;">
+          Selecione os procedimentos realizados e informe o valor
+        </div>
+
+        <!-- campo de busca -->
+
+        <input
+          type="text"
+          id="procedureSearch"
+          placeholder="Buscar procedimento..."
+          class="input"
+          style="margin-bottom:10px;"
+        >
+
+        <!-- lista rolável -->
+
+        <div
+          id="procedureList"
+          style="
+            max-height:260px;
+            overflow-y:auto;
+            border:1px solid rgba(255,255,255,.10);
+            border-radius:12px;
+            padding:10px;
+            background:rgba(255,255,255,.03);
+          "
+        >
+
+        {% for p in procedure_catalog %}
+
+          <div
+            class="procedure-item"
+            data-name="{{ p.name | lower }}"
+            style="
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+              margin-bottom:6px;
+              gap:10px;
+            "
+          >
+
+            <label style="display:flex; align-items:center; gap:8px;">
+
+              <input
+                type="checkbox"
+                name="procedure_id"
+                value="{{ p.id }}"
+                class="procedure-checkbox"
+              >
+
+              {{ p.name }}
+
+            </label>
+
+            <input
+              type="number"
+              step="0.01"
+              name="procedure_amount_{{ p.id }}"
+              placeholder="Valor"
+              disabled
+              style="
+                width:110px;
+                padding:6px;
+                border-radius:8px;
+                border:1px solid rgba(255,255,255,.15);
+                background:rgba(255,255,255,.05);
+                color:white;
+              "
+            >
+
+          </div>
+
+        {% endfor %}
+
+        </div>
+      </div>
+
+
       <label class="chk">
         <input type="checkbox" name="uses_hsr" />
         Usa slot HSR?
@@ -1053,6 +1139,60 @@
     monthSel.addEventListener("change", go);
     yearSel.addEventListener("change", go);
   })();
+</script>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function(){
+
+  const search = document.getElementById("procedureSearch");
+  const items = document.querySelectorAll(".procedure-item");
+
+  if(search){
+
+    search.addEventListener("keyup", function(){
+
+      const term = search.value.toLowerCase();
+
+      items.forEach(item => {
+
+        const name = item.dataset.name;
+
+        if(name.includes(term)){
+          item.style.display = "flex";
+        } else {
+          item.style.display = "none";
+        }
+
+      });
+
+    });
+
+  }
+
+
+  const checkboxes = document.querySelectorAll(".procedure-checkbox");
+
+  checkboxes.forEach(cb => {
+
+    cb.addEventListener("change", function(){
+
+      const row = cb.closest(".procedure-item");
+      const valueInput = row.querySelector("input[type=number]");
+
+      if(cb.checked){
+        valueInput.disabled = false;
+      } else {
+        valueInput.disabled = true;
+        valueInput.value = "";
+      }
+
+    });
+
+  });
+
+});
+
 </script>
 
 {% endblock %}
