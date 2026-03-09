@@ -3988,6 +3988,7 @@ def hospedagem_delete(
         send_lodging_email_notification(
             subject=f"[HOTEL] Reserva excluída - {deleted_name}",
             body=body,
+            unit=deleted_unit,
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_DELETE: {e}")
