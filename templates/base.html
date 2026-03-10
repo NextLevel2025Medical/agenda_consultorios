@@ -24,12 +24,28 @@
       text-transform: uppercase;
     }
 
+    .app-layout{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 290px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .app-main{
+      min-width: 0;
+    }
+
+    .app-sidebar{
+      position: sticky;
+      top: 24px;
+      align-self: start;
+    }
+
     .menu-card{
       width: 290px;
       border-radius: 22px;
       border: 1px solid rgba(255,255,255,.08);
-      background:
-        linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
       box-shadow:
         0 20px 60px rgba(0,0,0,.42),
         inset 0 1px 0 rgba(255,255,255,.03);
@@ -158,9 +174,12 @@
     }
 
     @media (max-width: 980px){
-      .top-shell{
-        flex-direction: column;
-        align-items: flex-start !important;
+      .app-layout{
+        grid-template-columns: 1fr;
+      }
+
+      .app-sidebar{
+        position: static;
       }
 
       .menu-card{
@@ -172,131 +191,136 @@
 {% set current_path = request.url.path if request else "" %}
 <body class="min-h-screen bg-slate-950 text-slate-100">
   <div class="mx-auto max-w-7xl px-6 py-8">
-    <div class="top-shell flex items-start justify-between gap-6">
-      <!-- LEFT: logo + título variável -->
-      <div class="flex items-center gap-4">
-        <img
-          src="/static/icons/icon-512.png"
-          alt="Concept Clinic"
-          class="h-11 w-11 rounded-full"
-          style="box-shadow: 0 10px 30px rgba(0,0,0,.45);"
-        />
+    <div class="app-layout">
 
-        {% set _header = (self.header_title() | trim) %}
-        {% if _header %}
-          <h1 class="brand-title text-3xl md:text-4xl" style="color: var(--gold-main);">
-            {% block header_title %}{% endblock %}
-          </h1>
-        {% endif %}
+      <!-- CONTEÚDO PRINCIPAL -->
+      <div class="app-main">
+        <div class="flex items-center gap-4 mb-8">
+          <img
+            src="/static/icons/icon-512.png"
+            alt="Concept Clinic"
+            class="h-11 w-11 rounded-full"
+            style="box-shadow: 0 10px 30px rgba(0,0,0,.45);"
+          />
+
+          {% set _header = (self.header_title() | trim) %}
+          {% if _header %}
+            <h1 class="brand-title text-3xl md:text-4xl" style="color: var(--gold-main);">
+              {% block header_title %}{% endblock %}
+            </h1>
+          {% endif %}
+        </div>
+
+        {% block content %}{% endblock %}
       </div>
 
-      <!-- RIGHT: menu premium -->
+      <!-- SIDEBAR -->
       {% if current_user %}
-        <div class="menu-card">
-          <div class="menu-top">
-            <div class="menu-brand">
-              <img
-                src="/static/icons/icon-512.png"
-                alt="Concept Sys"
-              />
-              <div class="menu-brand-title">Concept Sys</div>
+        <aside class="app-sidebar">
+          <div class="menu-card">
+            <div class="menu-top">
+              <div class="menu-brand">
+                <img
+                  src="/static/icons/icon-512.png"
+                  alt="Concept Sys"
+                />
+                <div class="menu-brand-title">Concept Sys</div>
+              </div>
+
+              <div style="font-size:22px; color: rgba(255,255,255,.65);">☰</div>
             </div>
 
-            <div style="font-size:22px; color: rgba(255,255,255,.65);">☰</div>
-          </div>
+            <div class="menu-body">
 
-          <div class="menu-body">
+              {% if current_user.role in ("admin", "surgery") %}
+                <div class="menu-section">
+                  <div class="menu-section-title">Operação</div>
 
-            {% if current_user.role in ("admin", "surgery") %}
-              <div class="menu-section">
-                <div class="menu-section-title">Operação</div>
+                  <a href="/mapa" class="menu-link {% if current_path == '/mapa' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">📅</span>
+                      <span>Mapa Cirúrgico</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
 
-                <a href="/mapa" class="menu-link {% if current_path == '/mapa' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">📅</span>
-                    <span>Mapa Cirúrgico</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
+                  <a href="/hospedagem" class="menu-link {% if current_path == '/hospedagem' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">🏨</span>
+                      <span>Hospedagem</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
 
-                <a href="/hospedagem" class="menu-link {% if current_path == '/hospedagem' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">🏨</span>
-                    <span>Hospedagem</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-
-                <a href="/bloqueios" class="menu-link {% if current_path == '/bloqueios' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">🔒</span>
-                    <span>Bloqueios de Agenda</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-              </div>
-
-              <div class="menu-section">
-                <div class="menu-section-title">Gestão</div>
-
-                <a href="/procedimentos" class="menu-link {% if current_path == '/procedimentos' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">🧩</span>
-                    <span>Procedimentos</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-
-                <a href="/calculadora" class="menu-link {% if current_path == '/calculadora' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">🧮</span>
-                    <span>Calculadora</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-              </div>
-
-              <div class="menu-section">
-                <div class="menu-section-title">Relatórios</div>
-
-                <a href="/relatorio_execucao" class="menu-link {% if current_path == '/relatorio_execucao' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">📊</span>
-                    <span>Relatório de Execução</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-
-                <a href="/relatorio_gustavo" class="menu-link {% if current_path == '/relatorio_gustavo' %}active{% endif %}">
-                  <div class="menu-link-left">
-                    <span class="menu-icon">📈</span>
-                    <span>Relatório Dr. Gustavo</span>
-                  </div>
-                  <span class="menu-arrow">›</span>
-                </a>
-              </div>
-            {% endif %}
-
-            <div class="menu-divider"></div>
-
-            <form method="post" action="/logout">
-              <button type="submit" class="menu-logout-btn">
-                <div class="menu-link-left">
-                  <span class="menu-icon">🚪</span>
-                  <span>Sair</span>
+                  <a href="/bloqueios" class="menu-link {% if current_path == '/bloqueios' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">🔒</span>
+                      <span>Bloqueios de Agenda</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
                 </div>
-                <span class="menu-arrow">›</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      {% endif %}
-    </div>
 
-    <div class="mt-8">
-      {% block content %}{% endblock %}
+                <div class="menu-section">
+                  <div class="menu-section-title">Gestão</div>
+
+                  <a href="/procedimentos" class="menu-link {% if current_path == '/procedimentos' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">🧩</span>
+                      <span>Procedimentos</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
+
+                  <a href="/calculadora" class="menu-link {% if current_path == '/calculadora' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">🧮</span>
+                      <span>Calculadora</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
+                </div>
+
+                <div class="menu-section">
+                  <div class="menu-section-title">Relatórios</div>
+
+                  <a href="/relatorio_execucao" class="menu-link {% if current_path == '/relatorio_execucao' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">📊</span>
+                      <span>Relatório de Execução</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
+
+                  <a href="/relatorio_gustavo" class="menu-link {% if current_path == '/relatorio_gustavo' %}active{% endif %}">
+                    <div class="menu-link-left">
+                      <span class="menu-icon">📈</span>
+                      <span>Relatório Dr. Gustavo</span>
+                    </div>
+                    <span class="menu-arrow">›</span>
+                  </a>
+                </div>
+              {% endif %}
+
+              <div class="menu-divider"></div>
+
+              <form method="post" action="/logout">
+                <button type="submit" class="menu-logout-btn">
+                  <div class="menu-link-left">
+                    <span class="menu-icon">🚪</span>
+                    <span>Sair</span>
+                  </div>
+                  <span class="menu-arrow">›</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        </aside>
+      {% endif %}
+
     </div>
   </div>
+
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
