@@ -444,6 +444,12 @@
         <path d="M5 15l4-4 4 3 6-8"></path>
         <path d="M19 6v4h-4"></path>
       </svg>
+    {% elif name == "layers" %}
+      <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l8 4.5-8 4.5-8-4.5L12 3z"></path>
+        <path d="M4 12l8 4.5 8-4.5"></path>
+        <path d="M4 16.5L12 21l8-4.5"></path>
+      </svg>
     {% elif name == "logout" %}
       <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -502,6 +508,14 @@
               <div class="menu-link-left">
                 <span class="menu-icon">{{ icon("lock") }}</span>
                 <span class="menu-text">Bloqueios de Agenda</span>
+              </div>
+              <span class="menu-arrow">›</span>
+            </a>
+
+            <a href="/slot_hsr" class="menu-link {% if current_path == '/slot_hsr' %}active{% endif %}">
+              <div class="menu-link-left">
+                <span class="menu-icon">{{ icon("layers") }}</span>
+                <span class="menu-text">Slots HSR</span>
               </div>
               <span class="menu-arrow">›</span>
             </a>

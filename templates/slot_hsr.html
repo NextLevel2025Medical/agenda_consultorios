@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - SLOTS HSR{% endblock %}
+{% block header_title %}Slots HSR{% endblock %}
+{% block content %}
+
+<style>
+.hsr-wrap{
+  display:grid;
+  gap:18px;
+}
+
+.hsr-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:end;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.hsr-filters{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.hsr-summary{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:16px;
+}
+
+.hsr-card{
+  background: rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  padding:18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+
+.hsr-metric-value{
+  font-size:28px;
+  font-weight:900;
+  color:#f3e7be;
+  margin-bottom:6px;
+}
+
+.hsr-metric-label{
+  color:rgba(255,255,255,.78);
+  font-size:14px;
+}
+
+.hsr-grid{
+  display:grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap:16px;
+}
+
+.month-card{
+  background: rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  padding:18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+
+.month-card.blocked{
+  opacity:.8;
+  border-color: rgba(255,255,255,.08);
+}
+
+.month-card.warn{
+  border-color: rgba(226,184,87,.45);
+}
+
+.month-card.full{
+  border-color: rgba(239,68,68,.45);
+}
+
+.month-title{
+  font-size:18px;
+  font-weight:900;
+  margin-bottom:12px;
+  color:rgba(255,255,255,.95);
+}
+
+.month-sub{
+  font-size:14px;
+  color:rgba(255,255,255,.74);
+  margin-bottom:12px;
+}
+
+.progress-track{
+  width:100%;
+  height:10px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+  margin-bottom:12px;
+}
+
+.progress-fill{
+  height:100%;
+  border-radius:999px;
+  background: linear-gradient(90deg, #E2B857, #f3e7be);
+}
+
+.month-stats{
+  display:grid;
+  gap:8px;
+  margin-bottom:12px;
+}
+
+.month-stat{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  font-size:14px;
+}
+
+.month-types{
+  display:grid;
+  gap:8px;
+  margin-top:12px;
+}
+
+.month-type-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  font-size:14px;
+  padding-top:8px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+
+.hsr-table-card{
+  background: rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  padding:18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+
+.hsr-table-title{
+  font-size:20px;
+  font-weight:900;
+  margin-bottom:14px;
+  color:#f3e7be;
+}
+
+.hsr-table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.hsr-table th,
+.hsr-table td{
+  padding:12px 10px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  text-align:left;
+  vertical-align:top;
+}
+
+.hsr-table th{
+  color:rgba(255,255,255,.68);
+  font-size:13px;
+}
+
+.slot-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(226,184,87,.28);
+  background: rgba(226,184,87,.10);
+  color:#f3e7be;
+  font-weight:700;
+  font-size:12px;
+}
+
+@media (max-width: 1100px){
+  .hsr-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px){
+  .hsr-summary,
+  .hsr-grid{
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<div class="hsr-wrap">
+
+  <div class="hsr-top">
+    <form method="get" action="/slot_hsr" class="hsr-filters">
+      <label class="lbl">Ano</label>
+      <select class="input" name="year">
+        {% for y in range(selected_year - 1, selected_year + 2) %}
+          <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn-cta" type="submit">Filtrar</button>
+    </form>
+  </div>
+
+  <div class="hsr-summary">
+    <div class="hsr-card">
+      <div class="hsr-metric-value">{{ annual_total_slots }}</div>
+      <div class="hsr-metric-label">Slots anuais</div>
+    </div>
+
+    <div class="hsr-card">
+      <div class="hsr-metric-value">{{ annual_used_slots }}</div>
+      <div class="hsr-metric-label">Slots ocupados</div>
+    </div>
+
+    <div class="hsr-card">
+      <div class="hsr-metric-value">{{ annual_available_slots }}</div>
+      <div class="hsr-metric-label">Slots disponíveis</div>
+    </div>
+  </div>
+
+  <div class="hsr-grid">
+    {% for item in months %}
+      <div class="month-card
+        {% if item.blocked %}blocked{% endif %}
+        {% if not item.blocked and item.used_slots >= item.total_slots and item.total_slots > 0 %}full{% endif %}
+        {% if not item.blocked and item.used_slots > 0 and item.used_slots < item.total_slots %}warn{% endif %}
+      ">
+        <div class="month-title">{{ item.name|upper }}</div>
+
+        {% if item.blocked %}
+          <div class="month-sub">Mês bloqueado</div>
+          <div class="month-stats">
+            <div class="month-stat"><span>Total</span><strong>0</strong></div>
+            <div class="month-stat"><span>Ocupados</span><strong>0</strong></div>
+            <div class="month-stat"><span>Disponíveis</span><strong>0</strong></div>
+          </div>
+        {% else %}
+          <div class="month-sub">Slots do mês: {{ item.total_slots }}</div>
+
+          <div class="progress-track">
+            <div class="progress-fill" style="width: {{ item.usage_percent }}%;"></div>
+          </div>
+
+          <div class="month-stats">
+            <div class="month-stat"><span>Ocupados</span><strong>{{ item.used_slots }}</strong></div>
+            <div class="month-stat"><span>Disponíveis</span><strong>{{ item.available_slots }}</strong></div>
+          </div>
+
+          <div class="month-types">
+            {% for row in item.by_type %}
+              <div class="month-type-row">
+                <span>{{ row.label }}</span>
+                <strong>{{ row.used }}/{{ row.total }}</strong>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="hsr-table-card">
+    <div class="hsr-table-title">Cirurgias que consumiram slot HSR</div>
+
+    <table class="hsr-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Paciente</th>
+          <th>Cirurgião</th>
+          <th>Procedimentos</th>
+          <th>Mês</th>
+          <th>Slot</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in details %}
+          <tr>
+            <td>{{ row.date }}</td>
+            <td>{{ row.patient }}</td>
+            <td>{{ row.surgeon }}</td>
+            <td>{{ row.procedure }}</td>
+            <td>{{ row.month_label }}</td>
+            <td><span class="slot-badge">{{ row.slot_type }}</span></td>
+          </tr>
+        {% else %}
+          <tr>
+            <td colspan="6" class="muted">Nenhuma cirurgia consumiu slot HSR neste período.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+{% endblock %}
