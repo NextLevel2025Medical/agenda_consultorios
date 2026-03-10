@@ -865,72 +865,70 @@
                     {% set proc_items = procedures_by_entry.get(e.id, []) %}
 
                     {% if proc_items and proc_items|length > 0 %}
+                      {% set ns = namespace(total=0) %}
+
                       <div style="display:grid; gap:8px;">
-                        {% if proc_items and proc_items|length > 0 %}
-                          {% set ns = namespace(total=0) %}
+                        {% for p in proc_items %}
+                          {% set ns.total = ns.total + (p.amount or 0) %}
 
-                          <div style="display:grid; gap:8px;">
-                            {% for p in proc_items %}
-                              {% set ns.total = ns.total + (p.amount or 0) %}
-
+                          <div
+                            style="
+                              display:grid;
+                              grid-template-columns:minmax(0,1fr) auto;
+                              gap:12px;
+                              align-items:flex-start;
+                              border-bottom:1px solid rgba(255,255,255,.06);
+                              padding-bottom:8px;
+                            "
+                          >
+                            <div style="min-width:0;">
                               <div
                                 style="
-                                  display:grid;
-                                  grid-template-columns:minmax(0,1fr) auto;
-                                  gap:12px;
-                                  align-items:flex-start;
-                                  border-bottom:1px solid rgba(255,255,255,.06);
-                                  padding-bottom:8px;
+                                  font-weight:700;
+                                  color:rgba(255,255,255,.95);
+                                  word-break:break-word;
+                                  overflow-wrap:anywhere;
                                 "
                               >
-                                <div style="min-width:0;">
-                                  <div
-                                    style="
-                                      font-weight:700;
-                                      color:rgba(255,255,255,.95);
-                                      word-break:break-word;
-                                      overflow-wrap:anywhere;
-                                    "
-                                  >
-                                    {{ p.procedure_name }}
-                                  </div>
-                                  <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
-                                </div>
-
-                                <div
-                                  style="
-                                    font-weight:800;
-                                    color:var(--accent);
-                                    white-space:nowrap;
-                                    text-align:right;
-                                    padding-left:8px;
-                                  "
-                                >
-                                  R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
-                                </div>
+                                {{ p.procedure_name }}
                               </div>
-                            {% endfor %}
+                              <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
+                            </div>
 
                             <div
                               style="
-                                display:flex;
-                                justify-content:space-between;
-                                align-items:center;
-                                margin-top:6px;
-                                padding-top:10px;
-                                border-top:1px solid rgba(255,255,255,.10);
                                 font-weight:800;
+                                color:var(--accent);
+                                white-space:nowrap;
+                                text-align:right;
+                                padding-left:8px;
                               "
                             >
-                              <div style="color:rgba(255,255,255,.88);">Total</div>
-                              <div style="color:var(--accent); font-size:16px; white-space:nowrap;">
-                                R$ {{ "{:,.2f}".format(ns.total).replace(",", "X").replace(".", ",").replace("X", ".") }}
-                              </div>
+                              R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
                             </div>
                           </div>
-                        {% else %}
-                          <div class="muted">Nenhum procedimento cadastrado para este agendamento.</div>
-                        {% endif %}
+                        {% endfor %}
+
+                        <div
+                          style="
+                            display:flex;
+                            justify-content:space-between;
+                            align-items:center;
+                            margin-top:6px;
+                            padding-top:10px;
+                            border-top:1px solid rgba(255,255,255,.10);
+                            font-weight:800;
+                          "
+                        >
+                          <div style="color:rgba(255,255,255,.88);">Total</div>
+                          <div style="color:var(--accent); font-size:16px; white-space:nowrap;">
+                            R$ {{ "{:,.2f}".format(ns.total).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                          </div>
+                        </div>
+                      </div>
+                    {% else %}
+                      <div class="muted">Nenhum procedimento cadastrado para este agendamento.</div>
+                    {% endif %}
                   </div>
                 {% endif %}
 
