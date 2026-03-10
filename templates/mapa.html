@@ -866,48 +866,71 @@
 
                     {% if proc_items and proc_items|length > 0 %}
                       <div style="display:grid; gap:8px;">
-                        {% for p in proc_items %}
-                          <div
-                            style="
-                              display:grid;
-                              grid-template-columns:minmax(0,1fr) auto;
-                              gap:12px;
-                              align-items:flex-start;
-                              border-bottom:1px solid rgba(255,255,255,.06);
-                              padding-bottom:8px;
-                            "
-                          >
-                            <div style="min-width:0;">
+                        {% if proc_items and proc_items|length > 0 %}
+                          {% set ns = namespace(total=0) %}
+
+                          <div style="display:grid; gap:8px;">
+                            {% for p in proc_items %}
+                              {% set ns.total = ns.total + (p.amount or 0) %}
+
                               <div
                                 style="
-                                  font-weight:700;
-                                  color:rgba(255,255,255,.95);
-                                  word-break:break-word;
-                                  overflow-wrap:anywhere;
+                                  display:grid;
+                                  grid-template-columns:minmax(0,1fr) auto;
+                                  gap:12px;
+                                  align-items:flex-start;
+                                  border-bottom:1px solid rgba(255,255,255,.06);
+                                  padding-bottom:8px;
                                 "
                               >
-                                {{ p.procedure_name }}
+                                <div style="min-width:0;">
+                                  <div
+                                    style="
+                                      font-weight:700;
+                                      color:rgba(255,255,255,.95);
+                                      word-break:break-word;
+                                      overflow-wrap:anywhere;
+                                    "
+                                  >
+                                    {{ p.procedure_name }}
+                                  </div>
+                                  <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
+                                </div>
+
+                                <div
+                                  style="
+                                    font-weight:800;
+                                    color:var(--accent);
+                                    white-space:nowrap;
+                                    text-align:right;
+                                    padding-left:8px;
+                                  "
+                                >
+                                  R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                                </div>
                               </div>
-                              <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
-                            </div>
+                            {% endfor %}
 
                             <div
                               style="
+                                display:flex;
+                                justify-content:space-between;
+                                align-items:center;
+                                margin-top:6px;
+                                padding-top:10px;
+                                border-top:1px solid rgba(255,255,255,.10);
                                 font-weight:800;
-                                color:var(--accent);
-                                white-space:nowrap;
-                                text-align:right;
-                                padding-left:8px;
                               "
                             >
-                              R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                              <div style="color:rgba(255,255,255,.88);">Total</div>
+                              <div style="color:var(--accent); font-size:16px; white-space:nowrap;">
+                                R$ {{ "{:,.2f}".format(ns.total).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                              </div>
                             </div>
                           </div>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <div class="muted">Nenhum procedimento cadastrado para este agendamento.</div>
-                    {% endif %}
+                        {% else %}
+                          <div class="muted">Nenhum procedimento cadastrado para este agendamento.</div>
+                        {% endif %}
                   </div>
                 {% endif %}
 
@@ -1186,13 +1209,12 @@
     formEl.querySelector('select[name="procedure_type"]').value = d.procedure || "Cirurgia";
     formEl.querySelector('select[name="location"]').value = d.location || "Hospital São Rafael";
 
-    // checkbox HSR
     const hsr = formEl.querySelector('input[name="uses_hsr"]');
     if (hsr) {
       hsr.checked = (d.hsr === "true" || d.hsr === "1");
     }
 
-    // limpa todos os procedimentos antes de repopular
+    // limpa todos os procedimentos
     formEl.querySelectorAll(".procedure-checkbox").forEach(cb => {
       cb.checked = false;
 
@@ -1205,7 +1227,7 @@
       }
     });
 
-    // repopula procedimentos cadastrados
+    // marca os já selecionados
     let procs = [];
     try {
       procs = JSON.parse(d.procs || "[]");
@@ -1214,10 +1236,8 @@
     }
 
     procs.forEach(proc => {
-      const checkbox = formEl.querySelector(`.procedure-checkbox[value="${proc.procedure_id || ''}"]`);
+      let targetCheckbox = formEl.querySelector(`.procedure-checkbox[value="${proc.procedure_id || ''}"]`);
 
-      // fallback: tenta localizar pelo nome se não vier id
-      let targetCheckbox = checkbox;
       if (!targetCheckbox && proc.procedure_name) {
         targetCheckbox = Array.from(formEl.querySelectorAll(".procedure-checkbox")).find(cb => {
           const row = cb.closest(".procedure-item");
@@ -1237,6 +1257,28 @@
         valueInput.value = proc.amount ?? "";
       }
     });
+
+    // reordena: selecionados primeiro, depois restantes em ordem alfabética
+    const procedureList = document.getElementById("procedureList");
+    if (procedureList) {
+      const items = Array.from(procedureList.querySelectorAll(".procedure-item"));
+
+      items.sort((a, b) => {
+        const aChecked = !!a.querySelector(".procedure-checkbox")?.checked;
+        const bChecked = !!b.querySelector(".procedure-checkbox")?.checked;
+
+        if (aChecked !== bChecked) {
+          return aChecked ? -1 : 1;
+        }
+
+        const aName = (a.dataset.name || a.innerText || "").trim().toLowerCase();
+        const bName = (b.dataset.name || b.innerText || "").trim().toLowerCase();
+
+        return aName.localeCompare(bName, "pt-BR");
+      });
+
+      items.forEach(item => procedureList.appendChild(item));
+    }
   }
 
   function closeModal() {
