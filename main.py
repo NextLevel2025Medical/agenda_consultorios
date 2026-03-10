@@ -1563,7 +1563,30 @@ def get_commercial_period(month_year: str) -> tuple[datetime, datetime]:
     end_utc_naive = end_sp.astimezone(timezone.utc).replace(tzinfo=None)
 
     return start_utc_naive, end_utc_naive
+@app.get("/slot_hsr", response_class=HTMLResponse)
+def slot_hsr_page(
+    request: Request,
+    year: Optional[int] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
 
+    if not year:
+        year = date.today().year
+
+    payload = build_slot_hsr_data(session, year)
+
+    return templates.TemplateResponse(
+        "slot_hsr.html",
+        {
+            "request": request,
+            "current_user": user,
+            **payload,
+        },
+    )
+    
 @app.get("/comissoes")
 def comissoes_page(
     request: Request,
@@ -3217,6 +3240,166 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
         "nucleus_chart": nucleus_chart,
         "surgeon_chart": surgeon_chart,
         "top_procedures": top_procedures,
+    }
+
+def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | None:
+    """
+    Regras:
+    - ignora 'Hospedagem' como núcleo
+    - se houver mais de 1 núcleo cirúrgico => não usa slot
+    - Corporal + 'abdominoplastia' => Abdominoplastia
+    - Corporal sem 'abdominoplastia' => Lipo
+    - Mama + 'mastopexia' => Mastopexia
+    - Mama sem 'mastopexia' => Mama
+    """
+    if not items:
+        return None
+
+    nuclei = set()
+    names = []
+
+    for item in items:
+        nucleus = (item.nucleus_snapshot or "").strip().lower()
+        name = (item.procedure_name_snapshot or "").strip().lower()
+
+        if name:
+            names.append(name)
+
+        if nucleus and nucleus != "hospedagem":
+            nuclei.add(nucleus)
+
+    if len(nuclei) != 1:
+        return None
+
+    only_nucleus = next(iter(nuclei))
+    names_join = " ".join(names)
+
+    if only_nucleus == "corporal":
+        if "abdominoplastia" in names_join:
+            return "Abdominoplastia"
+        return "Lipo"
+
+    if only_nucleus == "mama":
+        if "mastopexia" in names_join:
+            return "Mastopexia"
+        return "Mama"
+
+    return None
+
+
+def build_slot_hsr_data(session: Session, year: int) -> dict:
+    blocked_months = {1, 6, 7, 12}
+    slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama"]
+
+    start_day = date(year, 1, 1)
+    end_day = date(year + 1, 1, 1)
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= start_day,
+            SurgicalMapEntry.day < end_day,
+            SurgicalMapEntry.uses_hsr == True,
+        )
+        .order_by(SurgicalMapEntry.day)
+    ).all()
+
+    surgeons = session.exec(select(User).where(User.role == "doctor")).all()
+    surgeons_map = {s.id: s.full_name for s in surgeons if s.id is not None}
+
+    entry_ids = [e.id for e in entries if e.id is not None]
+
+    items = []
+    if entry_ids:
+        items = session.exec(
+            select(SurgeryProcedureItem)
+            .where(SurgeryProcedureItem.surgery_entry_id.in_(entry_ids))
+            .order_by(SurgeryProcedureItem.surgery_entry_id)
+        ).all()
+
+    items_by_entry: dict[int, list[SurgeryProcedureItem]] = defaultdict(list)
+    for item in items:
+        items_by_entry[item.surgery_entry_id].append(item)
+
+    month_names = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ]
+
+    months = []
+    details = []
+
+    annual_total_slots = 0
+    annual_used_slots = 0
+
+    for month in range(1, 13):
+        month_capacity_by_type = {slot: 0 for slot in slot_types}
+        month_used_by_type = {slot: 0 for slot in slot_types}
+
+        if month not in blocked_months:
+            for slot in slot_types:
+                month_capacity_by_type[slot] = 4
+
+        month_entries = [e for e in entries if e.day.month == month]
+
+        for entry in month_entries:
+            entry_items = items_by_entry.get(entry.id or 0, [])
+            slot_type = classify_hsr_slot_from_items(entry_items)
+
+            if not slot_type:
+                continue
+
+            if month in blocked_months:
+                continue
+
+            if slot_type in month_used_by_type:
+                month_used_by_type[slot_type] += 1
+
+                details.append({
+                    "date": entry.day.strftime("%d/%m/%Y"),
+                    "patient": entry.patient_name,
+                    "surgeon": surgeons_map.get(entry.surgeon_id, "—"),
+                    "procedure": ", ".join(
+                        [x.procedure_name_snapshot for x in entry_items if x.procedure_name_snapshot]
+                    ),
+                    "slot_type": slot_type,
+                    "month_label": month_names[month - 1],
+                })
+
+        total_slots = sum(month_capacity_by_type.values())
+        used_slots = sum(month_used_by_type.values())
+        available_slots = max(total_slots - used_slots, 0)
+
+        annual_total_slots += total_slots
+        annual_used_slots += used_slots
+
+        months.append({
+            "month": month,
+            "name": month_names[month - 1],
+            "blocked": month in blocked_months,
+            "total_slots": total_slots,
+            "used_slots": used_slots,
+            "available_slots": available_slots,
+            "usage_percent": (used_slots / total_slots * 100) if total_slots else 0,
+            "by_type": [
+                {
+                    "label": slot,
+                    "used": month_used_by_type[slot],
+                    "total": month_capacity_by_type[slot],
+                }
+                for slot in slot_types
+            ],
+        })
+
+    annual_available_slots = max(annual_total_slots - annual_used_slots, 0)
+
+    return {
+        "selected_year": year,
+        "months": months,
+        "details": details,
+        "annual_total_slots": annual_total_slots,
+        "annual_used_slots": annual_used_slots,
+        "annual_available_slots": annual_available_slots,
     }
     
 @app.get("/relatorio_execucao", response_class=HTMLResponse)
