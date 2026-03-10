@@ -641,9 +641,22 @@
               <input type="hidden" name="uses_hsr" value="1">
             {% endif %}
 
+            {% if request.query_params.get('has_lodging') == '1' %}
+              <input type="hidden" name="has_lodging" value="1">
+            {% endif %}
+
             {% if request.query_params.get('seller_id') %}
               <input type="hidden" name="seller_id" value="{{ request.query_params.get('seller_id') }}">
             {% endif %}
+
+            {# Reenvia todos os procedimentos selecionados #}
+            {% for pid in request.query_params.getlist('procedure_id') %}
+              <input type="hidden" name="procedure_id" value="{{ pid }}">
+
+              {# Reenvia o valor digitado para esse procedimento #}
+              {% set amount_key = 'procedure_amount_' ~ pid %}
+              <input type="hidden" name="{{ amount_key }}" value="{{ request.query_params.get(amount_key, '') }}">
+            {% endfor %}
 
             <button type="submit" class="btn-secondary btn-small">
               Pedir autorização
