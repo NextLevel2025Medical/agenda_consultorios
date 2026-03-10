@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from types import SimpleNamespace
 
 from fastapi import FastAPI, Depends, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -14,6 +14,10 @@ from sqlmodel import Session, select, delete
 from sqlalchemy import or_, text, func
 from sqlalchemy.exc import IntegrityError
 from urllib.parse import quote
+
+from collections import defaultdict
+from io import BytesIO
+from openpyxl import Workbook
 
 from db import create_db_and_tables, get_session, engine
 from models import (
@@ -3110,16 +3114,7 @@ def calculadora_page(request: Request, session: Session = Depends(get_session)):
         {"request": request, "current_user": user},
     )
 
-@app.get("/relatorio_execucao", response_class=HTMLResponse)
-def relatorio_execucao(
-    request: Request,
-    month: Optional[str] = None,
-    session: Session = Depends(get_session),
-):
-    user = get_current_user(request, session)
-    if not user:
-        return redirect("/login")
-
+def build_relatorio_execucao_data(session: Session, month: Optional[str] = None) -> dict:
     today = date.today()
 
     if not month:
@@ -3153,37 +3148,139 @@ def relatorio_execucao(
             SurgicalMapEntry.day >= first_day,
             SurgicalMapEntry.day < next_month,
         )
-        .order_by(SurgicalMapEntry.day)
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.patient_name)
     ).all()
 
     surgeons = session.exec(
         select(User).where(User.role == "doctor")
     ).all()
-
     surgeons_map = {s.id: s.full_name for s in surgeons}
 
     data = []
+    totals_by_nucleus = defaultdict(float)
+    totals_by_surgeon = defaultdict(float)
+    procedure_counter = defaultdict(int)
+
+    total_amount = 0.0
 
     for r in rows:
-        data.append(
-            {
-                "date": r.day.strftime("%d/%m/%Y"),
-                "patient": r.patient_name,
-                "surgeon": surgeons_map.get(r.surgeon_id, "—"),
-                "procedure": r.procedure_name_snapshot,
-                "nucleus": r.nucleus_snapshot,
-                "amount": r.amount,
-            }
-        )
+        amount = float(r.amount or 0)
+
+        row = {
+            "date": r.day.strftime("%d/%m/%Y"),
+            "patient": r.patient_name,
+            "surgeon": surgeons_map.get(r.surgeon_id, "—"),
+            "procedure": r.procedure_name_snapshot,
+            "nucleus": r.nucleus_snapshot,
+            "amount": amount,
+        }
+        data.append(row)
+
+        total_amount += amount
+        totals_by_nucleus[r.nucleus_snapshot] += amount
+        totals_by_surgeon[surgeons_map.get(r.surgeon_id, "—")] += amount
+        procedure_counter[r.procedure_name_snapshot] += 1
+
+    procedure_count = len(data)
+    ticket_avg = (total_amount / procedure_count) if procedure_count else 0.0
+
+    nucleus_chart = [
+        {"label": k, "value": v}
+        for k, v in sorted(totals_by_nucleus.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    surgeon_chart = [
+        {"label": k, "value": v}
+        for k, v in sorted(totals_by_surgeon.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    top_procedures = [
+        {"label": k, "count": v}
+        for k, v in sorted(procedure_counter.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    max_nucleus = max([x["value"] for x in nucleus_chart], default=0)
+    max_surgeon = max([x["value"] for x in surgeon_chart], default=0)
+
+    for item in nucleus_chart:
+        item["percent"] = (item["value"] / max_nucleus * 100) if max_nucleus else 0
+
+    for item in surgeon_chart:
+        item["percent"] = (item["value"] / max_surgeon * 100) if max_surgeon else 0
+
+    return {
+        "selected_month": month,
+        "data": data,
+        "total_amount": total_amount,
+        "procedure_count": procedure_count,
+        "ticket_avg": ticket_avg,
+        "nucleus_chart": nucleus_chart,
+        "surgeon_chart": surgeon_chart,
+        "top_procedures": top_procedures,
+    }
+    
+@app.get("/relatorio_execucao", response_class=HTMLResponse)
+def relatorio_execucao(
+    request: Request,
+    month: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    report = build_relatorio_execucao_data(session, month)
 
     return templates.TemplateResponse(
         "relatorio_execucao.html",
         {
             "request": request,
             "current_user": user,
-            "data": data,
-            "selected_month": month,
+            **report,
         },
+    )
+
+@app.get("/relatorio_execucao/export")
+def relatorio_execucao_export(
+    request: Request,
+    month: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    report = build_relatorio_execucao_data(session, month)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Relatório Execução"
+
+    ws.append(["Data", "Paciente", "Cirurgião", "Procedimento", "Núcleo", "Valor"])
+
+    for row in report["data"]:
+        ws.append([
+            row["date"],
+            row["patient"],
+            row["surgeon"],
+            row["procedure"],
+            row["nucleus"],
+            row["amount"],
+        ])
+
+    ws.append([])
+    ws.append(["TOTAL DO PERÍODO", "", "", "", "", report["total_amount"]])
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"relatorio_execucao_{report['selected_month'].replace('-', '_')}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
     
 @app.get("/relatorio_gustavo", response_class=HTMLResponse)
