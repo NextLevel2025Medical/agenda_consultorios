@@ -2411,6 +2411,25 @@ def mapa_page(
         .where(SurgicalMapEntry.day >= first_day, SurgicalMapEntry.day < next_first)
         .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
     ).all()
+    
+    entry_ids = [e.id for e in entries if e.id is not None]
+
+    procedure_items = []
+    if entry_ids:
+        procedure_items = session.exec(
+            select(SurgeryProcedureItem)
+            .where(SurgeryProcedureItem.surgery_entry_id.in_(entry_ids))
+            .order_by(SurgeryProcedureItem.surgery_entry_id, SurgeryProcedureItem.id)
+        ).all()
+
+    procedures_by_entry: dict[int, list[dict]] = defaultdict(list)
+
+    for item in procedure_items:
+        procedures_by_entry[item.surgery_entry_id].append({
+            "procedure_name": item.procedure_name_snapshot,
+            "amount": item.amount,
+            "nucleus": item.nucleus_snapshot,
+        })
 
     entries_by_day: dict[str, list[SurgicalMapEntry]] = {}
     for e in entries:
@@ -2520,6 +2539,7 @@ def mapa_page(
             "priority_items": priority["items"],
             "sellers": sellers,
             "procedure_catalog": procedure_catalog,
+            "procedures_by_entry": procedures_by_entry,
             "blocked_all_days": blocked_all_days,  # set[str] -> "2026-01-15"
             "blocked_surgeons_by_day": blocked_surgeons_by_day,  # dict[str, list[int]]
             "av_selected_month": av_selected_month,
