@@ -2426,6 +2426,7 @@ def mapa_page(
 
     for item in procedure_items:
         procedures_by_entry[item.surgery_entry_id].append({
+            "procedure_id": item.procedure_id,
             "procedure_name": item.procedure_name_snapshot,
             "amount": item.amount,
             "nucleus": item.nucleus_snapshot,
