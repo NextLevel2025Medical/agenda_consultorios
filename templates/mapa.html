@@ -828,7 +828,7 @@
                           Ver procedimentos
                         </button>
                       </div>
-
+                      {% set proc_items = procedures_by_entry.get(e.id, []) %}
                       <div style="display:flex; gap:10px; margin-left:auto;">
                         <button
                           type="button"
@@ -841,8 +841,9 @@
                           data-surgeon="{{ e.surgeon_id }}"
                           data-procedure="{{ e.procedure_type }}"
                           data-location="{{ e.location }}"
-                          data-hsr="{{ 1 if e.uses_hsr else 0 }}"
+                          data-hsr="{{ 'true' if e.uses_hsr else 'false' }}"
                           data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
+                          data-procs='{{ proc_items | tojson | forceescape }}'
                         >
                           Editar
                         </button>
@@ -866,12 +867,39 @@
                     {% if proc_items and proc_items|length > 0 %}
                       <div style="display:grid; gap:8px;">
                         {% for p in proc_items %}
-                          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,.06); padding-bottom:8px;">
-                            <div>
-                              <div style="font-weight:700; color:rgba(255,255,255,.95);">{{ p.procedure_name }}</div>
+                          <div
+                            style="
+                              display:grid;
+                              grid-template-columns:minmax(0,1fr) auto;
+                              gap:12px;
+                              align-items:flex-start;
+                              border-bottom:1px solid rgba(255,255,255,.06);
+                              padding-bottom:8px;
+                            "
+                          >
+                            <div style="min-width:0;">
+                              <div
+                                style="
+                                  font-weight:700;
+                                  color:rgba(255,255,255,.95);
+                                  word-break:break-word;
+                                  overflow-wrap:anywhere;
+                                "
+                              >
+                                {{ p.procedure_name }}
+                              </div>
                               <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
                             </div>
-                            <div style="font-weight:800; color:var(--accent); white-space:nowrap;">
+
+                            <div
+                              style="
+                                font-weight:800;
+                                color:var(--accent);
+                                white-space:nowrap;
+                                text-align:right;
+                                padding-left:8px;
+                              "
+                            >
                               R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
                             </div>
                           </div>
@@ -1154,17 +1182,61 @@
     openModalBase(d.day, d.human);
 
     formEl.querySelector('input[name="patient_name"]').value = d.patient || "";
-
     formEl.querySelector('select[name="surgeon_id"]').value = d.surgeon || "";
     formEl.querySelector('select[name="procedure_type"]').value = d.procedure || "Cirurgia";
     formEl.querySelector('select[name="location"]').value = d.location || "Hospital São Rafael";
 
     // checkbox HSR
     const hsr = formEl.querySelector('input[name="uses_hsr"]');
-    if (hsr) hsr.checked = (d.hsr === "1");
+    if (hsr) {
+      hsr.checked = (d.hsr === "true" || d.hsr === "1");
+    }
 
-    // (opcional) você pode deixar o estado pré-reserva/agenda pro clique do botão (Reservar/Agendar)
-    // pois quem define é o botão submit (mode=reserve ou mode=book).
+    // limpa todos os procedimentos antes de repopular
+    formEl.querySelectorAll(".procedure-checkbox").forEach(cb => {
+      cb.checked = false;
+
+      const row = cb.closest(".procedure-item");
+      const valueInput = row ? row.querySelector('input[type="number"]') : null;
+
+      if (valueInput) {
+        valueInput.disabled = true;
+        valueInput.value = "";
+      }
+    });
+
+    // repopula procedimentos cadastrados
+    let procs = [];
+    try {
+      procs = JSON.parse(d.procs || "[]");
+    } catch (err) {
+      procs = [];
+    }
+
+    procs.forEach(proc => {
+      const checkbox = formEl.querySelector(`.procedure-checkbox[value="${proc.procedure_id || ''}"]`);
+
+      // fallback: tenta localizar pelo nome se não vier id
+      let targetCheckbox = checkbox;
+      if (!targetCheckbox && proc.procedure_name) {
+        targetCheckbox = Array.from(formEl.querySelectorAll(".procedure-checkbox")).find(cb => {
+          const row = cb.closest(".procedure-item");
+          return row && row.innerText.toLowerCase().includes(String(proc.procedure_name).toLowerCase());
+        });
+      }
+
+      if (!targetCheckbox) return;
+
+      targetCheckbox.checked = true;
+
+      const row = targetCheckbox.closest(".procedure-item");
+      const valueInput = row ? row.querySelector('input[type="number"]') : null;
+
+      if (valueInput) {
+        valueInput.disabled = false;
+        valueInput.value = proc.amount ?? "";
+      }
+    });
   }
 
   function closeModal() {
