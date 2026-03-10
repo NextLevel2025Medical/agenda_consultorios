@@ -2711,6 +2711,13 @@ async def mapa_create(
         from urllib.parse import quote
         audit_event(request, user, "surgical_map_blocked_by_agenda_block", success=False, message=block_err)
 
+        form = await request.form()
+
+        proc_qs = ""
+        for pid in (procedure_id or []):
+            proc_qs += f"&procedure_id={pid}"
+            proc_qs += f"&procedure_amount_{pid}={quote(str(form.get(f'procedure_amount_{pid}', '') or ''))}"
+
         return redirect(
             f"/mapa?month={month}&open=1"
             f"&err={quote(block_err)}"
@@ -2722,8 +2729,9 @@ async def mapa_create(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
-            f"&has_lodging={1 if has_lodging else 0}" 
+            f"&has_lodging={1 if has_lodging else 0}"
             f"&seller_id={seller_id_final}"
+            f"{proc_qs}"
         )
 
     # se passou com override, registra auditoria
@@ -2751,6 +2759,14 @@ async def mapa_create(
             },
         )
         from urllib.parse import quote
+
+        form = await request.form()
+
+        proc_qs = ""
+        for pid in (procedure_id or []):
+            proc_qs += f"&procedure_id={pid}"
+            proc_qs += f"&procedure_amount_{pid}={quote(str(form.get(f'procedure_amount_{pid}', '') or ''))}"
+
         return redirect(
             f"/mapa?month={month}&open=1"
             f"&err={quote(err)}"
@@ -2762,8 +2778,9 @@ async def mapa_create(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
-            f"&has_lodging={1 if has_lodging else 0}" 
+            f"&has_lodging={1 if has_lodging else 0}"
             f"&seller_id={seller_id_final}"
+            f"{proc_qs}"
         )
     
     time_hhmm = (time_hhmm or "").strip()  # normaliza
@@ -3013,9 +3030,18 @@ async def mapa_update(
         uses_hsr=bool(uses_hsr),
         exclude_entry_id=entry_id,
     )
+    
     if err:
         month = day.strftime("%Y-%m")
         from urllib.parse import quote
+
+        form = await request.form()
+
+        proc_qs = ""
+        for pid in (procedure_id or []):
+            proc_qs += f"&procedure_id={pid}"
+            proc_qs += f"&procedure_amount_{pid}={quote(str(form.get(f'procedure_amount_{pid}', '') or ''))}"
+
         return redirect(
             f"/mapa?month={month}&open=1&edit_id={entry_id}"
             f"&err={quote(err)}"
@@ -3027,7 +3053,9 @@ async def mapa_update(
             f"&procedure_type={quote(procedure_type)}"
             f"&location={quote(location)}"
             f"&uses_hsr={1 if uses_hsr else 0}"
-            f"&has_lodging={1 if has_lodging else 0}" 
+            f"&has_lodging={1 if has_lodging else 0}"
+            f"&seller_id={seller_id_final}"
+            f"{proc_qs}"
         )
 
     # snapshot (opcional) pra auditoria
