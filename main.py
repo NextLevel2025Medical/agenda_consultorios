@@ -3109,6 +3109,82 @@ def calculadora_page(request: Request, session: Session = Depends(get_session)):
         "calculadora.html",
         {"request": request, "current_user": user},
     )
+
+@app.get("/relatorio_execucao", response_class=HTMLResponse)
+def relatorio_execucao(
+    request: Request,
+    month: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    today = date.today()
+
+    if not month:
+        month = today.strftime("%Y-%m")
+
+    year, m = month.split("-")
+    year = int(year)
+    m = int(m)
+
+    first_day = date(year, m, 1)
+
+    if m == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, m + 1, 1)
+
+    rows = session.exec(
+        select(
+            SurgicalMapEntry.day,
+            SurgicalMapEntry.patient_name,
+            SurgicalMapEntry.surgeon_id,
+            SurgeryProcedureItem.procedure_name_snapshot,
+            SurgeryProcedureItem.nucleus_snapshot,
+            SurgeryProcedureItem.amount,
+        )
+        .join(
+            SurgeryProcedureItem,
+            SurgeryProcedureItem.surgery_entry_id == SurgicalMapEntry.id,
+        )
+        .where(
+            SurgicalMapEntry.day >= first_day,
+            SurgicalMapEntry.day < next_month,
+        )
+        .order_by(SurgicalMapEntry.day)
+    ).all()
+
+    surgeons = session.exec(
+        select(User).where(User.role == "doctor")
+    ).all()
+
+    surgeons_map = {s.id: s.full_name for s in surgeons}
+
+    data = []
+
+    for r in rows:
+        data.append(
+            {
+                "date": r.day.strftime("%d/%m/%Y"),
+                "patient": r.patient_name,
+                "surgeon": surgeons_map.get(r.surgeon_id, "—"),
+                "procedure": r.procedure_name_snapshot,
+                "nucleus": r.nucleus_snapshot,
+                "amount": r.amount,
+            }
+        )
+
+    return templates.TemplateResponse(
+        "relatorio_execucao.html",
+        {
+            "request": request,
+            "current_user": user,
+            "data": data,
+            "selected_month": month,
+        },
+    )
     
 @app.get("/relatorio_gustavo", response_class=HTMLResponse)
 def relatorio_gustavo_page(
