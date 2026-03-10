@@ -5,36 +5,116 @@
 
 <style>
 .report-wrap{
-  max-width:1200px;
+  max-width:1280px;
   margin:0 auto;
 }
 
-.report-card{
+.cards-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:16px;
+  margin-bottom:18px;
+}
+
+.card-metric{
+  background: rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:18px;
+  padding:22px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+
+.metric-value{
+  font-size:28px;
+  font-weight:900;
+  color:#f3e7be;
+  margin-bottom:8px;
+}
+
+.metric-label{
+  font-size:14px;
+  color:rgba(255,255,255,.82);
+}
+
+.filters-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  margin-bottom:18px;
+  flex-wrap:wrap;
+}
+
+.filters-left{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.panel-box{
   background: rgba(255,255,255,.03);
   border:1px solid rgba(255,255,255,.10);
   border-radius:18px;
   padding:18px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
 }
 
-.report-table{
+.charts-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:18px;
+  margin-bottom:18px;
+}
+
+.chart-title{
+  font-size:18px;
+  font-weight:900;
+  margin-bottom:16px;
+  color:rgba(255,255,255,.92);
+}
+
+.bar-list{
+  display:grid;
+  gap:12px;
+}
+
+.bar-row{
+  display:grid;
+  grid-template-columns: 140px 1fr 120px;
+  gap:12px;
+  align-items:center;
+}
+
+.bar-label{
+  font-weight:700;
+  color:rgba(255,255,255,.88);
+}
+
+.bar-track{
   width:100%;
-  border-collapse:collapse;
+  height:18px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
 }
 
-.report-table th,
-.report-table td{
-  padding:10px;
-  border-bottom:1px solid rgba(255,255,255,.08);
+.bar-fill{
+  height:100%;
+  border-radius:999px;
+  background: linear-gradient(90deg, #5ecad6, #9ed3c1);
 }
 
-.report-table th{
-  color:rgba(255,255,255,.70);
-  font-size:13px;
-}
-
-.amount{
-  font-weight:800;
+.bar-value{
   text-align:right;
+  font-weight:800;
+  color:#f3e7be;
+}
+
+.bottom-grid{
+  display:grid;
+  grid-template-columns: 1.8fr .6fr;
+  gap:18px;
 }
 
 .tab-bar{
@@ -55,102 +135,243 @@
   color:#000;
   font-weight:800;
 }
+
+.report-table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.report-table th,
+.report-table td{
+  padding:12px 10px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+  vertical-align:top;
+}
+
+.report-table th{
+  color:rgba(255,255,255,.70);
+  font-size:13px;
+  text-align:left;
+}
+
+.amount{
+  text-align:right;
+  font-weight:800;
+  color:#f3e7be;
+  white-space:nowrap;
+}
+
+.total-line{
+  margin-top:14px;
+  text-align:right;
+  font-size:18px;
+  font-weight:900;
+  color:#f3e7be;
+}
+
+.rank-list{
+  display:grid;
+  gap:14px;
+}
+
+.rank-item{
+  display:grid;
+  grid-template-columns: 24px 1fr auto;
+  gap:10px;
+  align-items:center;
+  font-size:16px;
+}
+
+.rank-pos{
+  font-weight:900;
+  color:#f3e7be;
+}
+
+.rank-count{
+  font-weight:800;
+  color:rgba(255,255,255,.78);
+}
+
+@media (max-width: 1024px){
+  .cards-grid,
+  .charts-grid,
+  .bottom-grid{
+    grid-template-columns:1fr;
+  }
+}
 </style>
 
 <div class="report-wrap">
 
-<div class="report-card">
+  <div class="cards-grid">
+    <div class="card-metric">
+      <div class="metric-value">R$ {{ "{:,.2f}".format(total_amount).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+      <div class="metric-label">Faturamento do período</div>
+    </div>
 
-<div class="tab-bar">
-<div class="tab active" data-tab="procedure">Por Procedimento</div>
-<div class="tab" data-tab="nucleus">Por Núcleo</div>
-</div>
+    <div class="card-metric">
+      <div class="metric-value">{{ procedure_count }}</div>
+      <div class="metric-label">Procedimentos realizados</div>
+    </div>
 
-<div id="tab-procedure">
+    <div class="card-metric">
+      <div class="metric-value">R$ {{ "{:,.2f}".format(ticket_avg).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+      <div class="metric-label">Ticket médio</div>
+    </div>
+  </div>
 
-<table class="report-table">
-<thead>
-<tr>
-<th>Data</th>
-<th>Paciente</th>
-<th>Cirurgião</th>
-<th>Procedimento</th>
-<th>Núcleo</th>
-<th style="text-align:right">Valor</th>
-</tr>
-</thead>
-<tbody>
+  <div class="filters-row">
+    <form method="get" action="/relatorio_execucao" class="filters-left">
+      <input class="input" type="month" name="month" value="{{ selected_month }}">
+      <button class="btn-cta" type="submit">Filtrar</button>
+    </form>
 
-{% for r in data %}
-<tr>
-<td>{{ r.date }}</td>
-<td>{{ r.patient }}</td>
-<td>{{ r.surgeon }}</td>
-<td>{{ r.procedure }}</td>
-<td>{{ r.nucleus }}</td>
-<td class="amount">{{ "%.2f"|format(r.amount) }}</td>
-</tr>
-{% endfor %}
+    <a class="btn-secondary" href="/relatorio_execucao/export?month={{ selected_month }}">
+      Exportar Excel
+    </a>
+  </div>
 
-</tbody>
-</table>
+  <div class="charts-grid">
+    <div class="panel-box">
+      <div class="chart-title">Receita por Núcleo</div>
+      <div class="bar-list">
+        {% for item in nucleus_chart %}
+          <div class="bar-row">
+            <div class="bar-label">{{ item.label }}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: {{ item.percent }}%;"></div>
+            </div>
+            <div class="bar-value">R$ {{ "{:,.2f}".format(item.value).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          </div>
+        {% else %}
+          <div class="muted">Sem dados no período.</div>
+        {% endfor %}
+      </div>
+    </div>
 
-</div>
+    <div class="panel-box">
+      <div class="chart-title">Produção por Cirurgião</div>
+      <div class="bar-list">
+        {% for item in surgeon_chart %}
+          <div class="bar-row">
+            <div class="bar-label">{{ item.label }}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: {{ item.percent }}%;"></div>
+            </div>
+            <div class="bar-value">R$ {{ "{:,.2f}".format(item.value).replace(",", "X").replace(".", ",").replace("X", ".") }}</div>
+          </div>
+        {% else %}
+          <div class="muted">Sem dados no período.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 
-<div id="tab-nucleus" style="display:none;">
+  <div class="bottom-grid">
+    <div class="panel-box">
+      <div class="tab-bar">
+        <div class="tab active" data-tab="procedure">Por Procedimento</div>
+        <div class="tab" data-tab="nucleus">Por Núcleo</div>
+      </div>
 
-<table class="report-table">
-<thead>
-<tr>
-<th>Núcleo</th>
-<th style="text-align:right">Total</th>
-</tr>
-</thead>
-<tbody>
+      <div id="tab-procedure">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Paciente</th>
+              <th>Cirurgião</th>
+              <th>Procedimento</th>
+              <th>Núcleo</th>
+              <th style="text-align:right;">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in data %}
+              <tr>
+                <td>{{ r.date }}</td>
+                <td>{{ r.patient }}</td>
+                <td>{{ r.surgeon }}</td>
+                <td>{{ r.procedure }}</td>
+                <td>{{ r.nucleus }}</td>
+                <td class="amount">R$ {{ "{:,.2f}".format(r.amount).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="6" class="muted">Sem dados no período.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
 
-{% set totals = {} %}
+        <div class="total-line">
+          TOTAL DO MÊS: R$ {{ "{:,.2f}".format(total_amount).replace(",", "X").replace(".", ",").replace("X", ".") }}
+        </div>
+      </div>
 
-{% for r in data %}
-{% set _ = totals.update({ r.nucleus: totals.get(r.nucleus,0) + r.amount }) %}
-{% endfor %}
+      <div id="tab-nucleus" style="display:none;">
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th>Núcleo</th>
+              <th style="text-align:right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in nucleus_chart %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td class="amount">R$ {{ "{:,.2f}".format(item.value).replace(",", "X").replace(".", ",").replace("X", ".") }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="2" class="muted">Sem dados no período.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
 
-{% for k,v in totals.items() %}
-<tr>
-<td>{{ k }}</td>
-<td class="amount">{{ "%.2f"|format(v) }}</td>
-</tr>
-{% endfor %}
+        <div class="total-line">
+          TOTAL DO MÊS: R$ {{ "{:,.2f}".format(total_amount).replace(",", "X").replace(".", ",").replace("X", ".") }}
+        </div>
+      </div>
+    </div>
 
-</tbody>
-</table>
-
-</div>
-
-</div>
+    <div class="panel-box">
+      <div class="chart-title">Top Procedimentos</div>
+      <div class="rank-list">
+        {% for item in top_procedures %}
+          <div class="rank-item">
+            <div class="rank-pos">{{ loop.index }}</div>
+            <div>{{ item.label }}</div>
+            <div class="rank-count">{{ item.count }}</div>
+          </div>
+        {% else %}
+          <div class="muted">Sem dados no período.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 
 </div>
 
 <script>
+const tabs = document.querySelectorAll(".tab");
 
-const tabs=document.querySelectorAll(".tab")
+tabs.forEach(t => {
+  t.onclick = () => {
+    tabs.forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
 
-tabs.forEach(t=>{
-t.onclick=()=>{
+    const target = t.dataset.tab;
 
-tabs.forEach(x=>x.classList.remove("active"))
-t.classList.add("active")
+    document.getElementById("tab-procedure").style.display =
+      target === "procedure" ? "block" : "none";
 
-const target=t.dataset.tab
-
-document.getElementById("tab-procedure").style.display =
-target==="procedure" ? "block":"none"
-
-document.getElementById("tab-nucleus").style.display =
-target==="nucleus" ? "block":"none"
-
-}
-})
-
+    document.getElementById("tab-nucleus").style.display =
+      target === "nucleus" ? "block" : "none";
+  };
+});
 </script>
 
 {% endblock %}
