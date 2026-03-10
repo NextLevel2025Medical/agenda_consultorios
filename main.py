@@ -3246,14 +3246,16 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
     """
     Regras:
     - ignora 'Hospedagem' como núcleo
+    - sem itens => Slot não identificado
     - se houver mais de 1 núcleo cirúrgico => não usa slot
     - Corporal + 'abdominoplastia' => Abdominoplastia
     - Corporal sem 'abdominoplastia' => Lipo
     - Mama + 'mastopexia' => Mastopexia
     - Mama sem 'mastopexia' => Mama
+    - se não for possível classificar, mas uses_hsr existir => Slot não identificado
     """
     if not items:
-        return None
+        return "Slot não identificado"
 
     nuclei = set()
     names = []
@@ -3268,8 +3270,13 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
         if nucleus and nucleus != "hospedagem":
             nuclei.add(nucleus)
 
-    if len(nuclei) != 1:
+    # cirurgia combinada continua SEM slot
+    if len(nuclei) > 1:
         return None
+
+    # não conseguiu identificar núcleo cirúrgico
+    if len(nuclei) == 0:
+        return "Slot não identificado"
 
     only_nucleus = next(iter(nuclei))
     names_join = " ".join(names)
@@ -3284,12 +3291,12 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
             return "Mastopexia"
         return "Mama"
 
-    return None
+    return "Slot não identificado"
 
 
 def build_slot_hsr_data(session: Session, year: int) -> dict:
     blocked_months = {1, 6, 7, 12}
-    slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama"]
+    slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama", "Slot não identificado"]
 
     start_day = date(year, 1, 1)
     end_day = date(year + 1, 1, 1)
@@ -3355,13 +3362,18 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
             if slot_type in month_used_by_type:
                 month_used_by_type[slot_type] += 1
 
+                procedure_label = ", ".join(
+                    [x.procedure_name_snapshot for x in entry_items if x.procedure_name_snapshot]
+                ).strip()
+
+                if not procedure_label:
+                    procedure_label = "Sem procedimento cadastrado"
+
                 details.append({
                     "date": entry.day.strftime("%d/%m/%Y"),
                     "patient": entry.patient_name,
                     "surgeon": surgeons_map.get(entry.surgeon_id, "—"),
-                    "procedure": ", ".join(
-                        [x.procedure_name_snapshot for x in entry_items if x.procedure_name_snapshot]
-                    ),
+                    "procedure": procedure_label,
                     "slot_type": slot_type,
                     "month_label": month_names[month - 1],
                 })
