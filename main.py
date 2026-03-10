@@ -2828,7 +2828,7 @@ async def mapa_create(
     return redirect(f"/mapa?month={month}")
 
 @app.post("/mapa/request")
-def mapa_request_authorization(
+async def mapa_request_authorization(
     request: Request,
     day_iso: str = Form(...),
     mode: str = Form("book"),
@@ -2840,6 +2840,7 @@ def mapa_request_authorization(
     uses_hsr: Optional[str] = Form(None),
     has_lodging: Optional[str] = Form(None),
     seller_id: Optional[int] = Form(None),
+    procedure_id: Optional[list[int]] = Form(None),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -2881,6 +2882,16 @@ def mapa_request_authorization(
 
     session.add(row)
     session.commit()
+    session.refresh(row)
+
+    form = await request.form()
+
+    save_surgery_procedure_items(
+        session,
+        surgery_entry_id=row.id,
+        procedure_ids=procedure_id,
+        form_data=dict(form),
+    )
 
     audit_event(
         request,
