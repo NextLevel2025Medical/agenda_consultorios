@@ -35,16 +35,52 @@
     padding: 16px;
     z-index: 9999;
   }
+  
   #mapaModal {
     width: min(720px, 96vw);
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
     background: var(--panel);
     border: 1px solid rgba(255,255,255,.08);
     border-radius: 18px;
     padding: 16px;
     box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    overflow: hidden;
   }
-  .modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap: 12px; margin-bottom: 10px; }
-  .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
+
+  .modal-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex: 0 0 auto;
+  }
+
+  .modal-actions {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,.08);
+    flex-wrap: wrap;
+  }
+
+  .modal-left-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .modal-right-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-left:auto;
+  }
 
   /* ====== Mapa: cards por agendamento ====== */
   .day-meta {
@@ -781,29 +817,71 @@
                     {% endif %}
 
                   {% else %}
-                    <button
-                      type="button"
-                      class="btn-secondary"
-                      data-edit-mapa="1"
-                      data-entry-id="{{ e.id }}"
-                      data-day="{{ e.day.isoformat() }}"
-                      data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
-                      data-patient="{{ e.patient_name }}"
-                      data-surgeon="{{ e.surgeon_id }}"
-                      data-procedure="{{ e.procedure_type }}"
-                      data-location="{{ e.location }}"
-                      data-hsr="{{ 1 if e.uses_hsr else 0 }}"
-                      data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
-                    >
-                      Editar
-                    </button>
+                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; gap:12px; flex-wrap:wrap;">
 
-                    <form method="post" action="/mapa/delete/{{ e.id }}">
-                      <button class="btn-secondary" type="submit">Excluir</button>
-                    </form>
+                      <div>
+                        <button
+                          type="button"
+                          class="btn-secondary btn-small"
+                          data-toggle-procs="{{ e.id }}"
+                        >
+                          Ver procedimentos
+                        </button>
+                      </div>
+
+                      <div style="display:flex; gap:10px; margin-left:auto;">
+                        <button
+                          type="button"
+                          class="btn-secondary"
+                          data-edit-mapa="1"
+                          data-entry-id="{{ e.id }}"
+                          data-day="{{ e.day.isoformat() }}"
+                          data-human="{{ day.strftime('%d/%m/%Y') }} · {{ weekday_map[day.weekday()] }}"
+                          data-patient="{{ e.patient_name }}"
+                          data-surgeon="{{ e.surgeon_id }}"
+                          data-procedure="{{ e.procedure_type }}"
+                          data-location="{{ e.location }}"
+                          data-hsr="{{ 1 if e.uses_hsr else 0 }}"
+                          data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
+                        >
+                          Editar
+                        </button>
+
+                        <form method="post" action="/mapa/delete/{{ e.id }}">
+                          <button class="btn-secondary" type="submit">Excluir</button>
+                        </form>
+                      </div>
+                    </div>
                   {% endif %}
 
                 </div>
+
+                {% if e.status != 'pending' %}
+                  <div
+                    id="proc-box-{{ e.id }}"
+                    style="display:none; margin-top:12px; padding:12px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(255,255,255,.03);"
+                  >
+                    {% set proc_items = procedures_by_entry.get(e.id, []) %}
+
+                    {% if proc_items and proc_items|length > 0 %}
+                      <div style="display:grid; gap:8px;">
+                        {% for p in proc_items %}
+                          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; border-bottom:1px solid rgba(255,255,255,.06); padding-bottom:8px;">
+                            <div>
+                              <div style="font-weight:700; color:rgba(255,255,255,.95);">{{ p.procedure_name }}</div>
+                              <div class="muted" style="font-size:12px;">{{ p.nucleus }}</div>
+                            </div>
+                            <div style="font-weight:800; color:var(--accent); white-space:nowrap;">
+                              R$ {{ "{:,.2f}".format(p.amount or 0).replace(",", "X").replace(".", ",").replace("X", ".") }}
+                            </div>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <div class="muted">Nenhum procedimento cadastrado para este agendamento.</div>
+                    {% endif %}
+                  </div>
+                {% endif %}
 
 
             </div>
@@ -828,7 +906,13 @@
       <button type="button" class="btn-secondary" id="mapaModalCloseBtn">Fechar</button>
     </div>
 
-    <form id="mapaModalForm" class="day-form space-y-4" method="post" action="/mapa/create">
+    <form
+      id="mapaModalForm"
+      class="day-form space-y-4"
+      method="post"
+      action="/mapa/create"
+      style="overflow-y:auto; min-height:0; padding-right:6px;"
+    >
       <div id="mapaModalErr" class="alert" style="display:none;"></div>
       <label class="block text-sm text-slate-300 mb-1">Vendedor</label>
 
@@ -1193,6 +1277,20 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 
+</script>
+
+<script>
+document.querySelectorAll("[data-toggle-procs]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const id = btn.getAttribute("data-toggle-procs");
+    const box = document.getElementById(`proc-box-${id}`);
+    if (!box) return;
+
+    const isHidden = box.style.display === "none" || box.style.display === "";
+    box.style.display = isHidden ? "block" : "none";
+    btn.textContent = isHidden ? "Ocultar procedimentos" : "Ver procedimentos";
+  });
+});
 </script>
 
 {% endblock %}
