@@ -3191,6 +3191,7 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
             SurgicalMapEntry.day,
             SurgicalMapEntry.patient_name,
             SurgicalMapEntry.surgeon_id,
+            SurgicalMapEntry.created_by_id,
             SurgeryProcedureItem.procedure_name_snapshot,
             SurgeryProcedureItem.nucleus_snapshot,
             SurgeryProcedureItem.amount,
@@ -3211,6 +3212,9 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
     ).all()
     surgeons_map = {s.id: s.full_name for s in surgeons}
 
+    users = session.exec(select(User)).all()
+    users_map = {u.id: u.full_name for u in users}
+
     data = []
     totals_by_nucleus = defaultdict(float)
     totals_by_surgeon = defaultdict(float)
@@ -3225,6 +3229,7 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
             "date": r.day.strftime("%d/%m/%Y"),
             "patient": r.patient_name,
             "surgeon": surgeons_map.get(r.surgeon_id, "—"),
+            "creator_full_name": users_map.get(r.created_by_id, "—"),
             "procedure": r.procedure_name_snapshot,
             "nucleus": r.nucleus_snapshot,
             "amount": amount,
@@ -3483,20 +3488,21 @@ def relatorio_execucao_export(
     ws = wb.active
     ws.title = "Relatório Execução"
 
-    ws.append(["Data", "Paciente", "Cirurgião", "Procedimento", "Núcleo", "Valor"])
+    ws.append(["Data", "Paciente", "Cirurgião", "Vendedor", "Procedimento", "Núcleo", "Valor"])
 
     for row in report["data"]:
         ws.append([
             row["date"],
             row["patient"],
             row["surgeon"],
+            row["creator_full_name"],
             row["procedure"],
             row["nucleus"],
             row["amount"],
         ])
 
     ws.append([])
-    ws.append(["TOTAL DO PERÍODO", "", "", "", "", report["total_amount"]])
+    ws.append(["TOTAL DO PERÍODO", "", "", "", "", "", report["total_amount"]])
 
     output = BytesIO()
     wb.save(output)
