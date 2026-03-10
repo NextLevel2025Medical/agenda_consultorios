@@ -611,9 +611,19 @@
               <input type="hidden" name="uses_hsr" value="1">
             {% endif %}
 
+            {% if request.query_params.get('has_lodging') == '1' %}
+              <input type="hidden" name="has_lodging" value="1">
+            {% endif %}
+
             {% if request.query_params.get('seller_id') %}
               <input type="hidden" name="seller_id" value="{{ request.query_params.get('seller_id') }}">
             {% endif %}
+
+            {# Reenvia todos os procedimentos selecionados #}
+            {% for pid in request.query_params.getlist('procedure_id') %}
+              <input type="hidden" name="procedure_id" value="{{ pid }}">
+              <input type="hidden" name="procedure_amount_{{ pid }}" value="{{ request.query_params.get('procedure_amount_' ~ pid, '') }}">
+            {% endfor %}
 
             <input type="hidden" name="force_override" value="1">
 
@@ -625,8 +635,6 @@
               (Somente Johnny pode ignorar a regra)
             </span>
           </form>
-
-        {# (2) Demais usuários: botão "Pedir autorização" (NÃO grava se não clicar) #}
         {% elif current_user and request.query_params.get("day_iso") %}
           <form method="post" action="/mapa/request" style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <input type="hidden" name="day_iso" value="{{ request.query_params.get('day_iso') }}">
