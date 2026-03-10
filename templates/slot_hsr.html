@@ -133,6 +133,29 @@
   border-top:1px solid rgba(255,255,255,.06);
 }
 
+.month-type-label{
+  color:rgba(255,255,255,.82);
+}
+
+.month-type-value{
+  font-weight:900;
+}
+
+.month-type-value.available,
+.month-type-label.available{
+  color:#22C55E;
+}
+
+.month-type-value.full,
+.month-type-label.full{
+  color:#EF4444;
+}
+
+.month-type-value.no-limit,
+.month-type-label.no-limit{
+  color:#22C55E;
+}
+
 .hsr-table-card{
   background: rgba(255,255,255,.03);
   border:1px solid rgba(255,255,255,.10);
@@ -253,9 +276,12 @@
 
           <div class="month-types">
             {% for row in item.by_type %}
+              {% set is_unidentified = 'não identificado' in (row.label|lower) %}
+              {% set row_class = 'no-limit' if is_unidentified else ('full' if row.total > 0 and row.used >= row.total else 'available') %}
+
               <div class="month-type-row">
-                <span>{{ row.label }}</span>
-                <strong>{{ row.used }}/{{ row.total }}</strong>
+                <span class="month-type-label {{ row_class }}">{{ row.label }}</span>
+                <strong class="month-type-value {{ row_class }}">{{ row.used }}</strong>
               </div>
             {% endfor %}
           </div>
