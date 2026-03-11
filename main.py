@@ -3347,8 +3347,18 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
     names_join = " ".join(names)
 
     if only_nucleus == "corporal":
-        if "abdominoplastia" in names_join:
-            return "Abdominoplastia"
+
+        abd_keywords = [
+            "abdominoplastia",
+            "abdomen total",
+            "miniabdomen",
+            "miniabdomem",
+        ]
+
+        for k in abd_keywords:
+            if k in names_join:
+                return "Abdominoplastia"
+
         return "Lipo"
 
     if only_nucleus == "mama":
