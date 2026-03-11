@@ -3351,6 +3351,7 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
         abd_keywords = [
             "abdominoplastia",
             "abdomen total",
+            "abdomem total",
             "miniabdomen",
             "miniabdomem",
         ]
