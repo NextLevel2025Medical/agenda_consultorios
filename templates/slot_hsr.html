@@ -281,7 +281,13 @@
 
               <div class="month-type-row">
                 <span class="month-type-label {{ row_class }}">{{ row.label }}</span>
-                <strong class="month-type-value {{ row_class }}">{{ row.used }}</strong>
+                <strong class="month-type-value {{ row_class }}">
+                  {% if is_unidentified %}
+                    {{ row.used }}
+                  {% else %}
+                    {{ row.used }}/{{ row.total }}
+                  {% endif %}
+                </strong>
               </div>
             {% endfor %}
           </div>

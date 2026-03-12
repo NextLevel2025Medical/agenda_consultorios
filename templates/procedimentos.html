@@ -5,7 +5,7 @@
 
 <style>
   .page-wrap{
-    max-width: 1100px;
+    max-width: 1250px;
     margin: 0 auto;
   }
 
@@ -19,7 +19,7 @@
 
   .form-grid{
     display:grid;
-    grid-template-columns: 1.3fr 0.8fr auto;
+    grid-template-columns: 1.2fr 0.8fr 1.5fr auto;
     gap: 10px;
     align-items:end;
     margin-bottom: 20px;
@@ -35,6 +35,7 @@
     padding: 12px 10px;
     border-bottom: 1px solid rgba(255,255,255,.08);
     text-align:left;
+    vertical-align: top;
   }
 
   .tbl th{
@@ -55,6 +56,33 @@
   .actions-inline{
     display:flex;
     gap:10px;
+    flex-wrap: wrap;
+  }
+
+  .nuclei-checks{
+    display:grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    margin-top: 6px;
+  }
+
+  .nuclei-checks label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size: 13px;
+    color: rgba(255,255,255,.86);
+  }
+
+  .help-text{
+    font-size:12px;
+    color: rgba(255,255,255,.60);
+    margin-top:6px;
+  }
+
+  .cell-stack{
+    display:grid;
+    gap:8px;
   }
 </style>
 
@@ -68,17 +96,26 @@
       </div>
 
       <div>
-        <label class="lbl">Núcleo</label>
+        <label class="lbl">Núcleo principal</label>
         <select class="input" name="nucleus" required>
           <option value="">Selecione</option>
-          <option value="Corporal">Corporal</option>
-          <option value="Mama">Mama</option>
-          <option value="Face">Face</option>
-          <option value="Íntima">Íntima</option>
-          <option value="Hospedagem">Hospedagem</option>
-          <option value="Dermato">Dermato</option>
-          <option value="Nutrologia">Nutrologia</option>
+          {% for nucleus in nuclei_options %}
+            <option value="{{ nucleus }}">{{ nucleus }}</option>
+          {% endfor %}
         </select>
+      </div>
+
+      <div>
+        <label class="lbl">Núcleos permitidos</label>
+        <div class="nuclei-checks">
+          {% for nucleus in nuclei_options %}
+            <label>
+              <input type="checkbox" name="allowed_nuclei" value="{{ nucleus }}">
+              {{ nucleus }}
+            </label>
+          {% endfor %}
+        </div>
+        <div class="help-text">O núcleo principal será incluído automaticamente.</div>
       </div>
 
       <div>
@@ -90,30 +127,56 @@
       <thead>
         <tr>
           <th>Procedimento</th>
-          <th>Núcleo</th>
+          <th>Núcleo principal</th>
+          <th>Núcleos permitidos</th>
           <th>Status</th>
-          <th style="width:160px;">Ações</th>
+          <th style="width:220px;">Ações</th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
           <tr>
             <td>
-              <form method="post" action="/procedimentos/update/{{ row.id }}">
-                <input class="input" type="text" name="name" value="{{ row.name }}" required>
+              <input
+                class="input"
+                type="text"
+                name="name"
+                value="{{ row.name }}"
+                form="edit-form-{{ row.id }}"
+                required
+              >
             </td>
+
             <td>
-                <select class="input" name="nucleus" required>
-                  <option value="">Selecione</option>
-                  <option value="Corporal" {% if row.nucleus == "Corporal" %}selected{% endif %}>Corporal</option>
-                  <option value="Mama" {% if row.nucleus == "Mama" %}selected{% endif %}>Mama</option>
-                  <option value="Face" {% if row.nucleus == "Face" %}selected{% endif %}>Face</option>
-                  <option value="Íntima" {% if row.nucleus == "Íntima" %}selected{% endif %}>Íntima</option>
-                  <option value="Hospedagem" {% if row.nucleus == "Hospedagem" %}selected{% endif %}>Hospedagem</option>
-                  <option value="Dermato" {% if row.nucleus == "Dermato" %}selected{% endif %}>Dermato</option>
-                  <option value="Nutrologia" {% if row.nucleus == "Nutrologia" %}selected{% endif %}>Nutrologia</option>
-                </select>
+              <select class="input" name="nucleus" form="edit-form-{{ row.id }}" required>
+                <option value="">Selecione</option>
+                {% for nucleus in nuclei_options %}
+                  <option value="{{ nucleus }}" {% if row.nucleus == nucleus %}selected{% endif %}>
+                    {{ nucleus }}
+                  </option>
+                {% endfor %}
+              </select>
             </td>
+
+            <td>
+              <div class="cell-stack">
+                <div class="nuclei-checks">
+                  {% for nucleus in nuclei_options %}
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="allowed_nuclei"
+                        value="{{ nucleus }}"
+                        form="edit-form-{{ row.id }}"
+                        {% if nucleus in row.allowed_nuclei_list %}checked{% endif %}
+                      >
+                      {{ nucleus }}
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+            </td>
+
             <td>
               {% if row.is_active %}
                 <span class="status-on">Ativo</span>
@@ -121,10 +184,14 @@
                 <span class="status-off">Inativo</span>
               {% endif %}
             </td>
+
             <td>
               <div class="actions-inline">
-                <button class="btn-secondary" type="submit">Salvar</button>
-              </form>
+                <form id="edit-form-{{ row.id }}" method="post" action="/procedimentos/update/{{ row.id }}"></form>
+
+                <button class="btn-secondary" type="submit" form="edit-form-{{ row.id }}">
+                  Salvar
+                </button>
 
                 <form method="post" action="/procedimentos/toggle/{{ row.id }}">
                   <button class="btn-secondary" type="submit">
@@ -136,7 +203,7 @@
           </tr>
         {% else %}
           <tr>
-            <td colspan="4" class="muted">Nenhum procedimento cadastrado ainda.</td>
+            <td colspan="5" class="muted">Nenhum procedimento cadastrado ainda.</td>
           </tr>
         {% endfor %}
       </tbody>
