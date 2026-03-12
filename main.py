@@ -4680,6 +4680,121 @@ def procedimentos_create(
 
     return redirect("/procedimentos")
 
+@app.post("/procedimentos/update/{procedure_id}")
+def procedimentos_update(
+    request: Request,
+    procedure_id: int,
+    name: str = Form(...),
+    nucleus: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    row = session.get(ProcedureCatalog, procedure_id)
+    if not row:
+        return redirect("/procedimentos")
+
+    name = (name or "").strip()
+    nucleus = (nucleus or "").strip()
+
+    if not name or not nucleus:
+        return redirect("/procedimentos")
+
+    exists = session.exec(
+        select(ProcedureCatalog).where(
+            func.lower(ProcedureCatalog.name) == name.lower(),
+            ProcedureCatalog.id != procedure_id,
+        )
+    ).first()
+
+    if exists:
+        return redirect("/procedimentos")
+
+    old_name = row.name
+    old_nucleus = row.nucleus
+
+    row.name = name
+    row.nucleus = nucleus
+
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "procedure_catalog_updated",
+        target_type="procedure_catalog",
+        target_id=row.id,
+        extra={
+            "old_name": old_name,
+            "old_nucleus": old_nucleus,
+            "new_name": row.name,
+            "new_nucleus": row.nucleus,
+            "is_active": row.is_active,
+        },
+    )
+
+    return redirect("/procedimentos")
+
+@app.post("/procedimentos/update/{procedure_id}")
+def procedimentos_update(
+    request: Request,
+    procedure_id: int,
+    name: str = Form(...),
+    nucleus: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    row = session.get(ProcedureCatalog, procedure_id)
+    if not row:
+        return redirect("/procedimentos")
+
+    name = (name or "").strip()
+    nucleus = (nucleus or "").strip()
+
+    if not name or not nucleus:
+        return redirect("/procedimentos")
+
+    exists = session.exec(
+        select(ProcedureCatalog).where(
+            func.lower(ProcedureCatalog.name) == name.lower(),
+            ProcedureCatalog.id != procedure_id,
+        )
+    ).first()
+
+    if exists:
+        return redirect("/procedimentos")
+
+    old_name = row.name
+    old_nucleus = row.nucleus
+
+    row.name = name
+    row.nucleus = nucleus
+    session.add(row)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "procedure_catalog_updated",
+        target_type="procedure_catalog",
+        target_id=row.id,
+        extra={
+            "old_name": old_name,
+            "old_nucleus": old_nucleus,
+            "new_name": row.name,
+            "new_nucleus": row.nucleus,
+            "is_active": row.is_active,
+        },
+    )
+
+    return redirect("/procedimentos")
+
 @app.post("/procedimentos/toggle/{procedure_id}")
 def procedimentos_toggle(
     request: Request,
