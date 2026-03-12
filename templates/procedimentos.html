@@ -98,8 +98,22 @@
       <tbody>
         {% for row in rows %}
           <tr>
-            <td>{{ row.name }}</td>
-            <td>{{ row.nucleus }}</td>
+            <td>
+              <form method="post" action="/procedimentos/update/{{ row.id }}">
+                <input class="input" type="text" name="name" value="{{ row.name }}" required>
+            </td>
+            <td>
+                <select class="input" name="nucleus" required>
+                  <option value="">Selecione</option>
+                  <option value="Corporal" {% if row.nucleus == "Corporal" %}selected{% endif %}>Corporal</option>
+                  <option value="Mama" {% if row.nucleus == "Mama" %}selected{% endif %}>Mama</option>
+                  <option value="Face" {% if row.nucleus == "Face" %}selected{% endif %}>Face</option>
+                  <option value="Íntima" {% if row.nucleus == "Íntima" %}selected{% endif %}>Íntima</option>
+                  <option value="Hospedagem" {% if row.nucleus == "Hospedagem" %}selected{% endif %}>Hospedagem</option>
+                  <option value="Dermato" {% if row.nucleus == "Dermato" %}selected{% endif %}>Dermato</option>
+                  <option value="Nutrologia" {% if row.nucleus == "Nutrologia" %}selected{% endif %}>Nutrologia</option>
+                </select>
+            </td>
             <td>
               {% if row.is_active %}
                 <span class="status-on">Ativo</span>
@@ -109,6 +123,9 @@
             </td>
             <td>
               <div class="actions-inline">
+                <button class="btn-cta" type="submit">Salvar</button>
+              </form>
+
                 <form method="post" action="/procedimentos/toggle/{{ row.id }}">
                   <button class="btn-secondary" type="submit">
                     {% if row.is_active %}Inativar{% else %}Ativar{% endif %}
