@@ -108,15 +108,20 @@ def normalize_nucleus(value: str | None) -> str:
     return (value or "").strip()
 
 def get_allowed_nuclei(proc: ProcedureCatalog) -> list[str]:
-    raw = (getattr(proc, "allowed_nuclei_json", "") or "").strip()
+    raw = getattr(proc, "allowed_nuclei_json", None)
     primary = normalize_nucleus(getattr(proc, "nucleus", ""))
 
-    if not raw:
+    if raw is None or raw == "":
         return [primary] if primary else []
 
-    try:
-        data = json.loads(raw)
-    except Exception:
+    if isinstance(raw, list):
+        data = raw
+    elif isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = []
+    else:
         data = []
 
     cleaned = []
@@ -133,7 +138,7 @@ def get_allowed_nuclei(proc: ProcedureCatalog) -> list[str]:
 
     return cleaned
 
-def build_allowed_nuclei_json(primary_nucleus: str, allowed_nuclei: list[str] | None) -> str:
+def build_allowed_nuclei_json(primary_nucleus: str, allowed_nuclei: list[str] | None) -> list[str]:
     cleaned = []
 
     primary = normalize_nucleus(primary_nucleus)
@@ -145,7 +150,7 @@ def build_allowed_nuclei_json(primary_nucleus: str, allowed_nuclei: list[str] | 
         if val and val not in cleaned:
             cleaned.append(val)
 
-    return json.dumps(cleaned, ensure_ascii=False)
+    return cleaned
 
 def get_surgeon_allowed_nuclei(surgeon: User | None) -> list[str]:
     if not surgeon:
@@ -3556,7 +3561,7 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
 
 def build_slot_hsr_data(session: Session, year: int) -> dict:
     blocked_months = {1, 6, 7, 12}
-    slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama", "Slot não identificado"]
+    limited_slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama"]
     slot_types = limited_slot_types + ["Slot não identificado"]
 
     start_day = date(year, 1, 1)
@@ -4866,7 +4871,7 @@ def procedimentos_create(
         extra={
             "name": row.name,
             "nucleus": row.nucleus,
-            "allowed_nuclei": json.loads(row.allowed_nuclei_json or "[]"),
+            "allowed_nuclei": row.allowed_nuclei_json or [],
             "is_active": row.is_active,
         },
     )
@@ -4984,7 +4989,7 @@ def procedimentos_update(
         extra={
             "old_name": old_name,
             "old_nucleus": old_nucleus,
-            "old_allowed_nuclei": json.loads(old_allowed or "[]"),
+            "old_allowed_nuclei": old_allowed or [],
             "new_name": row.name,
             "new_nucleus": row.nucleus,
             "new_allowed_nuclei": json.loads(row.allowed_nuclei_json or "[]"),
