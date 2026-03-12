@@ -4809,12 +4809,19 @@ def procedimentos_page(
     if not user:
         return redirect("/login")
 
-    rows = session.exec(
+    db_rows = session.exec(
         select(ProcedureCatalog).order_by(ProcedureCatalog.nucleus, ProcedureCatalog.name)
     ).all()
 
-    for row in rows:
-        row.allowed_nuclei_list = get_allowed_nuclei(row)
+    rows = []
+    for row in db_rows:
+        rows.append({
+            "id": row.id,
+            "name": row.name,
+            "nucleus": row.nucleus,
+            "allowed_nuclei_list": get_allowed_nuclei(row),
+            "is_active": row.is_active,
+        })
 
     return templates.TemplateResponse(
         "procedimentos.html",
@@ -4824,7 +4831,7 @@ def procedimentos_page(
             "rows": rows,
             "nuclei_options": NUCLEI_OPTIONS,
         },
-    )
+    )   
 
 @app.post("/procedimentos/create")
 def procedimentos_create(
