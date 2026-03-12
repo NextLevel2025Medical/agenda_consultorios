@@ -76,6 +76,182 @@ if not audit_logger.handlers:
     fh.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
     audit_logger.addHandler(fh)
 
+NUCLEI_OPTIONS = [
+    "Corporal",
+    "Mama",
+    "Face",
+    "Íntima",
+    "Hospedagem",
+    "Dermato",
+    "Nutrologia",
+]
+
+# Mapeie aqui os médicos e os núcleos que eles podem executar.
+# Os dois casos especiais são Ricardo e Alice.
+SURGEON_ALLOWED_NUCLEI = {
+    "Dr. Gustavo Aquino": ["Corporal"],
+    "Dr. Ricardo Vilela": ["Corporal", "Mama"],
+    "Dra. Alice Osório": ["Corporal", "Mama"],
+    "Dra. Mellina Tanure": ["Face"],
+    "Dra. Vanessa Santos": ["Dermato"],
+    "Dra. Sophia Mourão": ["Dermato"],
+    "Dra. Thamilys Benfica": ["Íntima"],
+    "Dra. Stella Temponi": ["Nutrologia"],
+}
+
+SPECIAL_MAJORITY_SURGEONS = {
+    "Dr. Ricardo Vilela",
+    "Dra. Alice Osório",
+}
+
+def normalize_nucleus(value: str | None) -> str:
+    return (value or "").strip()
+
+def get_allowed_nuclei(proc: ProcedureCatalog) -> list[str]:
+    raw = (getattr(proc, "allowed_nuclei_json", "") or "").strip()
+    primary = normalize_nucleus(getattr(proc, "nucleus", ""))
+
+    if not raw:
+        return [primary] if primary else []
+
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = []
+
+    cleaned = []
+    for item in data:
+        val = normalize_nucleus(str(item))
+        if val and val not in cleaned:
+            cleaned.append(val)
+
+    if primary and primary not in cleaned:
+        cleaned.insert(0, primary)
+
+    if not cleaned and primary:
+        cleaned = [primary]
+
+    return cleaned
+
+def build_allowed_nuclei_json(primary_nucleus: str, allowed_nuclei: list[str] | None) -> str:
+    cleaned = []
+
+    primary = normalize_nucleus(primary_nucleus)
+    if primary:
+        cleaned.append(primary)
+
+    for item in (allowed_nuclei or []):
+        val = normalize_nucleus(item)
+        if val and val not in cleaned:
+            cleaned.append(val)
+
+    return json.dumps(cleaned, ensure_ascii=False)
+
+def get_surgeon_allowed_nuclei(surgeon: User | None) -> list[str]:
+    if not surgeon:
+        return []
+
+    full_name = (surgeon.full_name or "").strip()
+    nuclei = SURGEON_ALLOWED_NUCLEI.get(full_name, [])
+
+    cleaned = []
+    for item in nuclei:
+        val = normalize_nucleus(item)
+        if val and val not in cleaned:
+            cleaned.append(val)
+
+    return cleaned
+
+def resolve_procedure_nuclei_for_entry(
+    procedures: list[ProcedureCatalog],
+    surgeon: User | None,
+) -> dict[int, str]:
+    resolved: dict[int, str] = {}
+    surgeon_nuclei = get_surgeon_allowed_nuclei(surgeon)
+    surgeon_name = (surgeon.full_name or "").strip() if surgeon else ""
+
+    def filtered_allowed(proc: ProcedureCatalog) -> list[str]:
+        allowed = get_allowed_nuclei(proc)
+
+        if surgeon_nuclei:
+            intersection = [n for n in allowed if n in surgeon_nuclei]
+            if intersection:
+                return intersection
+
+        return allowed
+
+    # Caso simples: cirurgião com núcleo único
+    if len(surgeon_nuclei) == 1:
+        forced_nucleus = surgeon_nuclei[0]
+
+        for proc in procedures:
+            if proc.id is None:
+                continue
+
+            allowed = filtered_allowed(proc)
+            primary = normalize_nucleus(proc.nucleus)
+
+            if forced_nucleus in allowed:
+                resolved[proc.id] = forced_nucleus
+            elif primary and primary in allowed:
+                resolved[proc.id] = primary
+            elif allowed:
+                resolved[proc.id] = allowed[0]
+            else:
+                resolved[proc.id] = primary or forced_nucleus
+
+        return resolved
+
+    # Caso especial: Ricardo / Alice
+    exclusive_counts = defaultdict(int)
+    primary_counts = defaultdict(int)
+
+    for proc in procedures:
+        allowed = filtered_allowed(proc)
+        primary = normalize_nucleus(proc.nucleus)
+
+        if primary:
+            primary_counts[primary] += 1
+
+        if len(allowed) == 1:
+            exclusive_counts[allowed[0]] += 1
+
+    dominant_nucleus = None
+
+    if surgeon_name in SPECIAL_MAJORITY_SURGEONS:
+        if exclusive_counts:
+            dominant_nucleus = sorted(
+                exclusive_counts.items(),
+                key=lambda x: (-x[1], x[0])
+            )[0][0]
+        elif primary_counts:
+            dominant_nucleus = sorted(
+                primary_counts.items(),
+                key=lambda x: (-x[1], x[0])
+            )[0][0]
+        elif surgeon_nuclei:
+            dominant_nucleus = surgeon_nuclei[0]
+
+    for proc in procedures:
+        if proc.id is None:
+            continue
+
+        allowed = filtered_allowed(proc)
+        primary = normalize_nucleus(proc.nucleus)
+
+        if len(allowed) == 1:
+            resolved[proc.id] = allowed[0]
+        elif dominant_nucleus and dominant_nucleus in allowed:
+            resolved[proc.id] = dominant_nucleus
+        elif primary and primary in allowed:
+            resolved[proc.id] = primary
+        elif allowed:
+            resolved[proc.id] = allowed[0]
+        else:
+            resolved[proc.id] = primary or dominant_nucleus or ""
+
+    return resolved
+
 def to_db_dt(dt: datetime) -> datetime:
     """Converte qualquer datetime para horário local (-03) e remove tz/segundos p/ persistir no SQLite."""
     if dt.tzinfo is not None:
@@ -256,8 +432,9 @@ def seed_if_empty(session: Session):
         ("draalice", "Dra. Alice Osório"),
         ("dramelina", "Dra. Mellina Tanure"),
         ("dravanessa", "Dra. Vanessa Santos"),
+        ("drasophia", "Dra. Sophia Mourão"),        
         ("drathamilys", "Dra. Thamilys Benfica"),
-        ("drastela", "Dra. Stela Temponi"),
+        ("drastela", "Dra. Stella Temponi"),
         ("draglesiane", "Dra. Glesiane Teixeira"),
     ]
     for username, name in doctors:
@@ -2563,7 +2740,6 @@ def save_surgery_procedure_items(
     - form_data: dados do form (para ler procedure_amount_{id})
     """
 
-    # remove itens antigos da cirurgia (útil para update também)
     session.exec(
         delete(SurgeryProcedureItem).where(
             SurgeryProcedureItem.surgery_entry_id == surgery_entry_id
@@ -2574,11 +2750,17 @@ def save_surgery_procedure_items(
         session.commit()
         return
 
+    entry = session.get(SurgicalMapEntry, surgery_entry_id)
+    surgeon = None
+    if entry and entry.surgeon_id:
+        surgeon = session.get(User, entry.surgeon_id)
+
     catalog_rows = session.exec(
         select(ProcedureCatalog).where(ProcedureCatalog.id.in_(procedure_ids))
     ).all()
 
     catalog_by_id = {p.id: p for p in catalog_rows if p.id is not None}
+    resolved_nuclei = resolve_procedure_nuclei_for_entry(catalog_rows, surgeon)
 
     items_to_add = []
 
@@ -2595,12 +2777,14 @@ def save_surgery_procedure_items(
         except ValueError:
             amount = 0.0
 
+        resolved_nucleus = resolved_nuclei.get(pid, proc.nucleus)
+
         items_to_add.append(
             SurgeryProcedureItem(
                 surgery_entry_id=surgery_entry_id,
                 procedure_id=pid,
                 procedure_name_snapshot=proc.name,
-                nucleus_snapshot=proc.nucleus,
+                nucleus_snapshot=resolved_nucleus,
                 amount=amount,
             )
         )
@@ -3373,6 +3557,7 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
 def build_slot_hsr_data(session: Session, year: int) -> dict:
     blocked_months = {1, 6, 7, 12}
     slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama", "Slot não identificado"]
+    slot_types = limited_slot_types + ["Slot não identificado"]
 
     start_day = date(year, 1, 1)
     end_day = date(year + 1, 1, 1)
@@ -3420,7 +3605,7 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
         month_used_by_type = {slot: 0 for slot in slot_types}
 
         if month not in blocked_months:
-            for slot in slot_types:
+            for slot in limited_slot_types:
                 month_capacity_by_type[slot] = 4
 
         month_entries = [e for e in entries if e.day.month == month]
@@ -3454,8 +3639,8 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
                     "month_label": month_names[month - 1],
                 })
 
-        total_slots = sum(month_capacity_by_type.values())
-        used_slots = sum(month_used_by_type.values())
+        total_slots = sum(month_capacity_by_type[slot] for slot in limited_slot_types)
+        used_slots = sum(month_used_by_type[slot] for slot in limited_slot_types)
         available_slots = max(total_slots - used_slots, 0)
 
         annual_total_slots += total_slots
@@ -4623,12 +4808,16 @@ def procedimentos_page(
         select(ProcedureCatalog).order_by(ProcedureCatalog.nucleus, ProcedureCatalog.name)
     ).all()
 
+    for row in rows:
+        row.allowed_nuclei_list = get_allowed_nuclei(row)
+
     return templates.TemplateResponse(
         "procedimentos.html",
         {
             "request": request,
             "current_user": user,
             "rows": rows,
+            "nuclei_options": NUCLEI_OPTIONS,
         },
     )
 
@@ -4637,6 +4826,7 @@ def procedimentos_create(
     request: Request,
     name: str = Form(...),
     nucleus: str = Form(...),
+    allowed_nuclei: list[str] = Form([]),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -4645,6 +4835,7 @@ def procedimentos_create(
 
     name = (name or "").strip()
     nucleus = (nucleus or "").strip()
+    allowed_nuclei_json = build_allowed_nuclei_json(nucleus, allowed_nuclei)
 
     if not name or not nucleus:
         return redirect("/procedimentos")
@@ -4659,6 +4850,7 @@ def procedimentos_create(
     row = ProcedureCatalog(
         name=name,
         nucleus=nucleus,
+        allowed_nuclei_json=allowed_nuclei_json,
         is_active=True,
         created_by_id=user.id,
     )
@@ -4674,6 +4866,7 @@ def procedimentos_create(
         extra={
             "name": row.name,
             "nucleus": row.nucleus,
+            "allowed_nuclei": json.loads(row.allowed_nuclei_json or "[]"),
             "is_active": row.is_active,
         },
     )
@@ -4744,6 +4937,7 @@ def procedimentos_update(
     procedure_id: int,
     name: str = Form(...),
     nucleus: str = Form(...),
+    allowed_nuclei: list[str] = Form([]),
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
@@ -4772,9 +4966,12 @@ def procedimentos_update(
 
     old_name = row.name
     old_nucleus = row.nucleus
+    old_allowed = row.allowed_nuclei_json
 
     row.name = name
     row.nucleus = nucleus
+    row.allowed_nuclei_json = build_allowed_nuclei_json(nucleus, allowed_nuclei)
+
     session.add(row)
     session.commit()
 
@@ -4787,8 +4984,10 @@ def procedimentos_update(
         extra={
             "old_name": old_name,
             "old_nucleus": old_nucleus,
+            "old_allowed_nuclei": json.loads(old_allowed or "[]"),
             "new_name": row.name,
             "new_nucleus": row.nucleus,
+            "new_allowed_nuclei": json.loads(row.allowed_nuclei_json or "[]"),
             "is_active": row.is_active,
         },
     )

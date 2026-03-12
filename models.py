@@ -47,12 +47,12 @@ class ProcedureCatalog(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    nucleus: str = Field(index=True)  # ex: Corporal | Mama | Face
+    nucleus: str = Field(index=True)  # núcleo principal
+    allowed_nuclei_json: Optional[dict] = Field(default=None, sa_column=Column(SQLiteJSON))
     is_active: bool = Field(default=True, index=True)
 
     created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-
 
 class SurgeryProcedureItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
