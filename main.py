@@ -4,7 +4,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
 from types import SimpleNamespace
-
+from fastapi.responses import FileResponse
 from fastapi import FastAPI, Depends, Request, Form, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -62,6 +62,14 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key="CHANGE_ME_SUPER_SECRET_KEY")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/service-worker.js")
+def service_worker():
+    return FileResponse(
+        "static/service-worker.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"},
+    )
 
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "audit.log")
 
