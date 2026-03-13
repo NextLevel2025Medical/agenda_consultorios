@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
 from types import SimpleNamespace
 
-from fastapi import FastAPI, Depends, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi import FastAPI, Depends, Request, Form, Query, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -18,6 +18,7 @@ from urllib.parse import quote
 from collections import defaultdict
 from io import BytesIO
 from openpyxl import Workbook
+from pywebpush import webpush, WebPushException
 
 from db import create_db_and_tables, get_session, engine
 from models import (
@@ -33,6 +34,8 @@ from models import (
     LodgingReservation,
     ProcedureCatalog,
     SurgeryProcedureItem,
+    PushSubscription,
+    PushNotificationLog,
 )
 from auth import hash_password, verify_password, require
 
@@ -881,6 +884,232 @@ def build_hotel_dashboard_data(session: Session, ref_day: date) -> dict:
 def _weekday_pt(idx: int) -> str:
     names = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     return names[idx]
+
+
+WEBPUSH_VAPID_PUBLIC_KEY = os.getenv("WEBPUSH_VAPID_PUBLIC_KEY", "").strip()
+WEBPUSH_VAPID_PRIVATE_KEY = os.getenv("WEBPUSH_VAPID_PRIVATE_KEY", "").strip()
+WEBPUSH_VAPID_SUBJECT = os.getenv("WEBPUSH_VAPID_SUBJECT", "mailto:suporte@conceptclinic.com.br").strip()
+
+
+def webpush_is_configured() -> bool:
+    return bool(
+        WEBPUSH_VAPID_PUBLIC_KEY
+        and WEBPUSH_VAPID_PRIVATE_KEY
+        and WEBPUSH_VAPID_SUBJECT
+    )
+
+
+def build_lodging_push_payload(event_type: str, row) -> dict:
+    unit_label = human_unit(normalize_unit(getattr(row, "unit", "")))
+    patient_name = (getattr(row, "patient_name", "") or "").strip()
+    check_in = getattr(row, "check_in", None)
+    check_out = getattr(row, "check_out", None)
+
+    check_in_br = fmt_date_br(check_in) if check_in else "-"
+    check_out_br = fmt_date_br(check_out) if check_out else "-"
+
+    titles = {
+        "create": "Nova reserva de hospedagem",
+        "update": "Hospedagem atualizada",
+        "delete": "Hospedagem excluída",
+        "override": "Reserva sobreposta",
+        "checkin_today": "Check-in de hoje",
+        "checkout_today": "Check-out de hoje",
+        "arrival_3d": "Chegada em 3 dias",
+    }
+
+    bodies = {
+        "create": f"{patient_name} • {unit_label} • {check_in_br} → {check_out_br}",
+        "update": f"{patient_name} • {unit_label} • {check_in_br} → {check_out_br}",
+        "delete": f"{patient_name} • {unit_label} • {check_in_br} → {check_out_br}",
+        "override": f"{patient_name} • {unit_label} • {check_in_br} → {check_out_br}",
+        "checkin_today": f"{patient_name} entra hoje em {unit_label}",
+        "checkout_today": f"{patient_name} sai hoje de {unit_label}",
+        "arrival_3d": f"{patient_name} chega em 3 dias em {unit_label}",
+    }
+
+    return {
+        "title": titles.get(event_type, "Hospedagens Concept"),
+        "body": bodies.get(event_type, patient_name or "Atualização de hospedagem"),
+        "icon": "/static/icons/icon-512.png",
+        "badge": "/static/icons/icon-512.png",
+        "tag": f"lodging-{event_type}-{getattr(row, 'id', 'na')}",
+        "url": "/hotel_mobile",
+        "data": {
+            "url": "/hotel_mobile",
+            "reservation_id": getattr(row, "id", None),
+            "event_type": event_type,
+        },
+    }
+
+
+def register_push_dispatch_once(
+    session: Session,
+    *,
+    event_key: str,
+    event_type: str,
+    reservation_id: Optional[int] = None,
+    scheduled_for: Optional[date] = None,
+) -> bool:
+    row = PushNotificationLog(
+        event_key=event_key,
+        event_type=event_type,
+        reservation_id=reservation_id,
+        scheduled_for=scheduled_for,
+    )
+    session.add(row)
+    try:
+        session.commit()
+        return True
+    except IntegrityError:
+        session.rollback()
+        return False
+
+
+def send_push_payload_to_all_active_subscriptions(session: Session, payload: dict) -> None:
+    if not webpush_is_configured():
+        audit_logger.info("WEBPUSH: ignorado (VAPID não configurado).")
+        return
+
+    subs = session.exec(
+        select(PushSubscription).where(PushSubscription.is_active == True)
+    ).all()
+
+    if not subs:
+        audit_logger.info("WEBPUSH: nenhuma inscrição ativa.")
+        return
+
+    changed = False
+
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {
+                        "p256dh": sub.p256dh,
+                        "auth": sub.auth,
+                    },
+                },
+                data=json.dumps(payload, ensure_ascii=False),
+                vapid_private_key=WEBPUSH_VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
+                ttl=60,
+            )
+        except WebPushException as e:
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            audit_logger.exception(
+                f"WEBPUSH_SEND_ERROR: endpoint={sub.endpoint[:80]} status={status_code} err={e}"
+            )
+
+            if status_code in (404, 410):
+                sub.is_active = False
+                sub.updated_at = datetime.utcnow()
+                session.add(sub)
+                changed = True
+
+    if changed:
+        session.commit()
+
+def send_lodging_push_event(
+    session: Session,
+    *,
+    event_type: str,
+    row,
+    event_key: Optional[str] = None,
+    scheduled_for: Optional[date] = None,
+) -> None:
+    if event_key:
+        ok = register_push_dispatch_once(
+            session,
+            event_key=event_key,
+            event_type=event_type,
+            reservation_id=getattr(row, "id", None),
+            scheduled_for=scheduled_for,
+        )
+        if not ok:
+            audit_logger.info(f"WEBPUSH_SKIP_DUPLICATE: {event_key}")
+            return
+
+    payload = build_lodging_push_payload(event_type, row)
+    send_push_payload_to_all_active_subscriptions(session, payload)
+
+
+def dispatch_daily_lodging_pushes(session: Session, ref_day: date) -> None:
+    checkins = session.exec(
+        select(LodgingReservation).where(LodgingReservation.check_in == ref_day)
+    ).all()
+
+    checkouts = session.exec(
+        select(LodgingReservation).where(LodgingReservation.check_out == ref_day)
+    ).all()
+
+    arrivals_3d = session.exec(
+        select(LodgingReservation).where(LodgingReservation.check_in == (ref_day + timedelta(days=3)))
+    ).all()
+
+    for row in checkins:
+        send_lodging_push_event(
+            session,
+            event_type="checkin_today",
+            row=row,
+            event_key=f"lodging:checkin_today:{ref_day.isoformat()}:{row.id}",
+            scheduled_for=ref_day,
+        )
+
+    for row in checkouts:
+        send_lodging_push_event(
+            session,
+            event_type="checkout_today",
+            row=row,
+            event_key=f"lodging:checkout_today:{ref_day.isoformat()}:{row.id}",
+            scheduled_for=ref_day,
+        )
+
+    for row in arrivals_3d:
+        send_lodging_push_event(
+            session,
+            event_type="arrival_3d",
+            row=row,
+            event_key=f"lodging:arrival_3d:{ref_day.isoformat()}:{row.id}",
+            scheduled_for=ref_day,
+        )
+
+
+def _next_run_lodging_push_sp(now_sp: datetime) -> datetime:
+    run_today = now_sp.replace(hour=8, minute=0, second=0, microsecond=0)
+    if now_sp < run_today:
+        return run_today
+    return run_today + timedelta(days=1)
+
+
+def start_lodging_push_scheduler() -> None:
+    def runner():
+        while True:
+            now_sp = datetime.now(TZ)
+            today_sp = now_sp.date()
+
+            if now_sp.hour >= 8:
+                with Session(engine) as session:
+                    try:
+                        dispatch_daily_lodging_pushes(session, today_sp)
+                    except Exception as e:
+                        audit_logger.exception(f"WEBPUSH_DAILY_FALLBACK_ERROR: {e}")
+
+            nxt = _next_run_lodging_push_sp(datetime.now(TZ))
+            seconds = max(5, int((nxt - datetime.now(TZ)).total_seconds()))
+            audit_logger.info(f"WEBPUSH_DAILY: próximo disparo em {nxt.isoformat()} (sleep {seconds}s).")
+            pytime.sleep(seconds)
+
+            run_day = datetime.now(TZ).date()
+            with Session(engine) as session:
+                try:
+                    dispatch_daily_lodging_pushes(session, run_day)
+                except Exception as e:
+                    audit_logger.exception(f"WEBPUSH_DAILY_ERROR: {e}")
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
 
 # ============================
 # RELATÓRIO DR. GUSTAVO (snapshot diário às 19h)
@@ -1882,6 +2111,9 @@ def on_startup():
 
     # ✅ Snapshot diário (19h) - Relatório Dr. Gustavo
     start_gustavo_snapshot_scheduler()
+    
+    # ✅ Push diário de hospedagem
+    start_lodging_push_scheduler()
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, session: Session = Depends(get_session)):
@@ -4029,9 +4261,94 @@ def hotel_mobile_page(
         {
             "request": request,
             "current_user": user,
+            "push_public_key": WEBPUSH_VAPID_PUBLIC_KEY,
+            "push_configured": webpush_is_configured(),
             **dashboard,
         },
     )
+
+
+@app.post("/api/push/subscribe")
+async def push_subscribe(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+
+    require(user.role in ("admin", "surgery", "viewer"))
+
+    if not webpush_is_configured():
+        return JSONResponse(
+            {"ok": False, "message": "Push não configurado no servidor."},
+            status_code=503,
+        )
+
+    payload = await request.json()
+
+    endpoint = ((payload or {}).get("endpoint") or "").strip()
+    keys = (payload or {}).get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth = (keys.get("auth") or "").strip()
+
+    if not endpoint or not p256dh or not auth:
+        raise HTTPException(status_code=400, detail="Subscription inválida")
+
+    row = session.exec(
+        select(PushSubscription).where(PushSubscription.endpoint == endpoint)
+    ).first()
+
+    if row:
+        row.user_id = user.id
+        row.p256dh = p256dh
+        row.auth = auth
+        row.is_active = True
+        row.user_agent = request.headers.get("user-agent")
+        row.updated_at = datetime.utcnow()
+    else:
+        row = PushSubscription(
+            user_id=user.id,
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+            is_active=True,
+            user_agent=request.headers.get("user-agent"),
+        )
+        session.add(row)
+
+    session.commit()
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe")
+async def push_unsubscribe(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+
+    require(user.role in ("admin", "surgery", "viewer"))
+
+    payload = await request.json()
+    endpoint = ((payload or {}).get("endpoint") or "").strip()
+
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Endpoint não informado")
+
+    row = session.exec(
+        select(PushSubscription).where(PushSubscription.endpoint == endpoint)
+    ).first()
+
+    if row:
+        row.is_active = False
+        row.updated_at = datetime.utcnow()
+        session.add(row)
+        session.commit()
+
+    return {"ok": True}
     
 @app.get("/hospedagem", response_class=HTMLResponse)
 def hospedagem_page(
@@ -4534,6 +4851,16 @@ def hospedagem_create(
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_CREATE: {e}")
+    
+    try:
+        send_lodging_push_event(
+            session,
+            event_type="create",
+            row=row,
+            event_key=f"lodging:create:{row.id}:{row.created_at.isoformat()}",
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_CREATE: {e}")
 
     audit_event(
         request,
@@ -4651,6 +4978,16 @@ def hospedagem_override(
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_OVERRIDE: {e}")
+
+    try:
+        send_lodging_push_event(
+            session,
+            event_type="override",
+            row=row,
+            event_key=f"lodging:override:{row.id}:{row.created_at.isoformat()}",
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_OVERRIDE: {e}")
     
     audit_logger.info(
         f"HOSPEDAGEM_OVERRIDE: deleted_id={conflict_id} | new_id={row.id} unit={row.unit} ci={row.check_in} co={row.check_out} patient={row.patient_name}"
@@ -4730,6 +5067,16 @@ def hospedagem_update(
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_UPDATE: {e}")
 
+    try:
+        send_lodging_push_event(
+            session,
+            event_type="update",
+            row=row,
+            event_key=f"lodging:update:{row.id}:{row.updated_at.isoformat()}",
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_UPDATE: {e}")
+
     audit_event(
         request,
         user,
@@ -4767,6 +5114,18 @@ def hospedagem_delete(
     deleted_check_in = row.check_in
     deleted_check_out = row.check_out
 
+    deleted_snapshot = SimpleNamespace(
+        id=row.id,
+        unit=row.unit,
+        patient_name=row.patient_name,
+        patient_cpf=row.patient_cpf,
+        patient_phone=row.patient_phone,
+        check_in=row.check_in,
+        check_out=row.check_out,
+        note=row.note,
+        is_pre_reservation=row.is_pre_reservation,
+    )
+
     session.delete(row)
     session.commit()
 
@@ -4789,6 +5148,17 @@ def hospedagem_delete(
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_DELETE: {e}")
+        
+    try:
+        send_lodging_push_event(
+            session,
+            event_type="delete",
+            row=deleted_snapshot,
+            event_key=f"lodging:delete:{res_id}:{deleted_check_in.isoformat()}:{deleted_check_out.isoformat()}",
+        )
+    except Exception as e:
+        audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_DELETE: {e}")   
+    
     audit_event(
         request,
         user,

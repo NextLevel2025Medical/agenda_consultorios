@@ -196,3 +196,38 @@ class LodgingReservation(SQLModel, table=True):
 
     # opcional: vincular à cirurgia (SurgicalMapEntry)
     surgery_entry_id: Optional[int] = Field(default=None, foreign_key="surgicalmapentry.id", index=True)
+
+class PushSubscription(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("endpoint"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+
+    endpoint: str = Field(index=True)
+    p256dh: str
+    auth: str
+
+    is_active: bool = Field(default=True, index=True)
+    user_agent: Optional[str] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class PushNotificationLog(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("event_key"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    event_key: str = Field(index=True)
+    event_type: str = Field(index=True)
+
+    reservation_id: Optional[int] = Field(
+        default=None,
+        foreign_key="lodgingreservation.id",
+        index=True,
+    )
+
+    scheduled_for: Optional[date] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
