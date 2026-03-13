@@ -975,17 +975,62 @@ def register_push_dispatch_once(
 
 
 def send_push_payload_to_all_active_subscriptions(session: Session, payload: dict) -> None:
+    print("[PUSH] entrando em send_push_payload_to_all_active_subscriptions")
+
     if not webpush_is_configured():
         audit_logger.info("WEBPUSH: ignorado (VAPID não configurado).")
+        print("[PUSH] VAPID não configurado")
         return
+
+    print("[PUSH] VAPID configurado")
 
     subs = session.exec(
         select(PushSubscription).where(PushSubscription.is_active == True)
     ).all()
 
+    print(f"[PUSH] inscrições ativas encontradas: {len(subs)}")
+
     if not subs:
         audit_logger.info("WEBPUSH: nenhuma inscrição ativa.")
+        print("[PUSH] nenhuma inscrição ativa")
         return
+
+    changed = False
+
+    for sub in subs:
+        try:
+            print(f"[PUSH] enviando para endpoint: {sub.endpoint[:120]}")
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {
+                        "p256dh": sub.p256dh,
+                        "auth": sub.auth,
+                    },
+                },
+                data=json.dumps(payload, ensure_ascii=False),
+                vapid_private_key=WEBPUSH_VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
+                ttl=60,
+            )
+            print("[PUSH] envio realizado com sucesso")
+
+        except WebPushException as e:
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            audit_logger.exception(
+                f"WEBPUSH_SEND_ERROR: endpoint={sub.endpoint[:80]} status={status_code} err={e}"
+            )
+            print(f"[PUSH] erro ao enviar | status={status_code} | erro={e}")
+
+            if status_code in (404, 410):
+                sub.is_active = False
+                sub.updated_at = datetime.utcnow()
+                session.add(sub)
+                changed = True
+
+    if changed:
+        session.commit()
+        print("[PUSH] inscrições inválidas atualizadas no banco")
 
     changed = False
 
@@ -1027,6 +1072,8 @@ def send_lodging_push_event(
     event_key: Optional[str] = None,
     scheduled_for: Optional[date] = None,
 ) -> None:
+    print(f"[PUSH] send_lodging_push_event chamado | event_type={event_type} | row_id={getattr(row, 'id', None)} | event_key={event_key}")
+
     if event_key:
         ok = register_push_dispatch_once(
             session,
@@ -1035,11 +1082,16 @@ def send_lodging_push_event(
             reservation_id=getattr(row, "id", None),
             scheduled_for=scheduled_for,
         )
+        print(f"[PUSH] register_push_dispatch_once => {ok}")
+
         if not ok:
             audit_logger.info(f"WEBPUSH_SKIP_DUPLICATE: {event_key}")
+            print(f"[PUSH] duplicado, envio cancelado")
             return
 
     payload = build_lodging_push_payload(event_type, row)
+    print(f"[PUSH] payload montado => {payload}")
+
     send_push_payload_to_all_active_subscriptions(session, payload)
 
 
@@ -4860,6 +4912,8 @@ def hospedagem_create(
     except Exception as e:
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_CREATE: {e}")
     
+    print(f"[CREATE] tentando enviar push da hospedagem id={row.id}")
+
     try:
         send_lodging_push_event(
             session,
@@ -4867,8 +4921,10 @@ def hospedagem_create(
             row=row,
             event_key=f"lodging:create:{row.id}:{row.created_at.isoformat()}",
         )
+        print(f"[CREATE] push processado para hospedagem id={row.id}")
     except Exception as e:
         audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_CREATE: {e}")
+        print(f"[CREATE] erro no push: {e}")
 
     audit_event(
         request,
