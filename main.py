@@ -1050,10 +1050,11 @@ def send_push_payload_to_all_active_subscriptions(session: Session, payload: dic
                         "auth": sub.auth,
                     },
                 },
-                data=json.dumps(payload, ensure_ascii=False),
+                data=json.dumps(payload),
                 vapid_private_key=WEBPUSH_VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
-                ttl=60,
+                vapid_claims={
+                    "sub": WEBPUSH_VAPID_SUBJECT
+                },
             )
         except WebPushException as e:
             status_code = getattr(getattr(e, "response", None), "status_code", None)
