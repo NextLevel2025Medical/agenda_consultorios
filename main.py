@@ -1010,7 +1010,7 @@ def send_push_payload_to_all_active_subscriptions(session: Session, payload: dic
                     },
                 },
                 data=json.dumps(payload, ensure_ascii=False),
-                vapid_private_key="private_key.pem",
+                vapid_private_key=WEBPUSH_VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
                 ttl=60,
             )
