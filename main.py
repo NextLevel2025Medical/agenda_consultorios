@@ -999,8 +999,9 @@ def send_push_payload_to_all_active_subscriptions(session: Session, payload: dic
 
     for sub in subs:
         try:
-            print(f"[PUSH] enviando para endpoint: {sub.endpoint[:120]}")
-            webpush(
+            print(f"[PUSH] enviando para endpoint: {sub.endpoint[:120]}", flush=True)
+
+            response = webpush(
                 subscription_info={
                     "endpoint": sub.endpoint,
                     "keys": {
@@ -1013,14 +1014,19 @@ def send_push_payload_to_all_active_subscriptions(session: Session, payload: dic
                 vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
                 ttl=60,
             )
-            print("[PUSH] envio realizado com sucesso")
+
+            print(f"[PUSH] envio realizado com sucesso | response={response}", flush=True)
 
         except WebPushException as e:
             status_code = getattr(getattr(e, "response", None), "status_code", None)
             audit_logger.exception(
                 f"WEBPUSH_SEND_ERROR: endpoint={sub.endpoint[:80]} status={status_code} err={e}"
             )
-            print(f"[PUSH] erro ao enviar | status={status_code} | erro={e}")
+            print(f"[PUSH] WebPushException | status={status_code} | erro={e}", flush=True)
+
+        except Exception as e:
+            audit_logger.exception(f"WEBPUSH_SEND_GENERIC_ERROR: {e}")
+            print(f"[PUSH] erro genérico ao enviar | tipo={type(e).__name__} | erro={e}", flush=True)
 
             if status_code in (404, 410):
                 sub.is_active = False
