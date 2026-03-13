@@ -975,24 +975,24 @@ def register_push_dispatch_once(
 
 
 def send_push_payload_to_all_active_subscriptions(session: Session, payload: dict) -> None:
-    print("[PUSH] entrando em send_push_payload_to_all_active_subscriptions")
+    print("[PUSH] entrando em send_push_payload_to_all_active_subscriptions", flush=True)
 
     if not webpush_is_configured():
         audit_logger.info("WEBPUSH: ignorado (VAPID não configurado).")
-        print("[PUSH] VAPID não configurado")
+        print("[PUSH] VAPID não configurado", flush=True)
         return
 
-    print("[PUSH] VAPID configurado")
+    print("[PUSH] VAPID configurado", flush=True)
 
     subs = session.exec(
         select(PushSubscription).where(PushSubscription.is_active == True)
     ).all()
 
-    print(f"[PUSH] inscrições ativas encontradas: {len(subs)}")
+    print(f"[PUSH] inscrições ativas encontradas: {len(subs)}", flush=True)
 
     if not subs:
         audit_logger.info("WEBPUSH: nenhuma inscrição ativa.")
-        print("[PUSH] nenhuma inscrição ativa")
+        print("[PUSH] nenhuma inscrição ativa", flush=True)
         return
 
     changed = False
@@ -1024,52 +1024,19 @@ def send_push_payload_to_all_active_subscriptions(session: Session, payload: dic
             )
             print(f"[PUSH] WebPushException | status={status_code} | erro={e}", flush=True)
 
+            if status_code in (404, 410):
+                sub.is_active = False
+                sub.updated_at = datetime.utcnow()
+                session.add(sub)
+                changed = True
+
         except Exception as e:
             audit_logger.exception(f"WEBPUSH_SEND_GENERIC_ERROR: {e}")
             print(f"[PUSH] erro genérico ao enviar | tipo={type(e).__name__} | erro={e}", flush=True)
 
-            if status_code in (404, 410):
-                sub.is_active = False
-                sub.updated_at = datetime.utcnow()
-                session.add(sub)
-                changed = True
-
     if changed:
         session.commit()
-        print("[PUSH] inscrições inválidas atualizadas no banco")
-
-    changed = False
-
-    for sub in subs:
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": sub.endpoint,
-                    "keys": {
-                        "p256dh": sub.p256dh,
-                        "auth": sub.auth,
-                    },
-                },
-                data=json.dumps(payload),
-                vapid_private_key="private_key.pem",
-                vapid_claims={
-                    "sub": WEBPUSH_VAPID_SUBJECT
-                },
-            )
-        except WebPushException as e:
-            status_code = getattr(getattr(e, "response", None), "status_code", None)
-            audit_logger.exception(
-                f"WEBPUSH_SEND_ERROR: endpoint={sub.endpoint[:80]} status={status_code} err={e}"
-            )
-
-            if status_code in (404, 410):
-                sub.is_active = False
-                sub.updated_at = datetime.utcnow()
-                session.add(sub)
-                changed = True
-
-    if changed:
-        session.commit()
+        print("[PUSH] inscrições inválidas atualizadas no banco", flush=True)
 
 def send_lodging_push_event(
     session: Session,
