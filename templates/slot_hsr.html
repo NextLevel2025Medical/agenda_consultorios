@@ -189,6 +189,12 @@
   font-size:13px;
 }
 
+.slot-badge-blocked{
+  color: #DC2626;
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.10);
+}
+
 .slot-badge{
   display:inline-flex;
   align-items:center;
@@ -318,7 +324,11 @@
             <td>{{ row.surgeon }}</td>
             <td>{{ row.procedure }}</td>
             <td>{{ row.month_label }}</td>
-            <td><span class="slot-badge">{{ row.slot_type }}</span></td>
+            <td>
+              <span class="slot-badge {% if row.is_blocked %}slot-badge-blocked{% endif %}">
+                {{ row.slot_type }}
+              </span>
+            </td>
           </tr>
         {% else %}
           <tr>
