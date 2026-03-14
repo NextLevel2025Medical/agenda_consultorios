@@ -657,8 +657,8 @@ def human_unit(unit: str) -> str:
 def format_unit_for_email(unit: str) -> str:
     unit_norm = normalize_unit(unit)
     return {
-        "suite_1": "RESERVA SUÍTE 1",
-        "suite_2": "RESERVA SUÍTE 2",
+        "suite_1": "RESERVA SUÍTE 1303",
+        "suite_2": "RESERVA SUÍTE 1304",
         "apto": "RESERVA APARTAMENTO",
     }.get(unit_norm, f"RESERVA {unit_norm.upper()}")
 
@@ -773,6 +773,8 @@ def normalize_unit(unit: Optional[str]) -> str:
 
     return mapping.get(raw, raw)
 
+def normalize_event_key_text(value: str | None) -> str:
+    return " ".join((value or "").strip().lower().split())
 
 def hotel_card_from_reservation(r: LodgingReservation) -> dict:
     unit_norm = normalize_unit(getattr(r, "unit", None))
@@ -1083,32 +1085,34 @@ def dispatch_daily_lodging_pushes(session: Session, ref_day: date) -> None:
     ).all()
 
     for row in checkins:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="checkin_today",
             row=row,
-            event_key=f"lodging:checkin_today:{ref_day.isoformat()}:{row.id}",
+            event_key=f"lodging:checkin_today:{ref_day.isoformat()}:{row.id}:{patient_key}",
             scheduled_for=ref_day,
         )
 
     for row in checkouts:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="checkout_today",
             row=row,
-            event_key=f"lodging:checkout_today:{ref_day.isoformat()}:{row.id}",
+            event_key=f"lodging:checkout_today:{ref_day.isoformat()}:{row.id}:{patient_key}",
             scheduled_for=ref_day,
         )
 
     for row in arrivals_3d:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="arrival_3d",
             row=row,
-            event_key=f"lodging:arrival_3d:{ref_day.isoformat()}:{row.id}",
+            event_key=f"lodging:arrival_3d:{ref_day.isoformat()}:{row.id}:{patient_key}",
             scheduled_for=ref_day,
         )
-
 
 def _next_run_lodging_push_sp(now_sp: datetime) -> datetime:
     run_today = now_sp.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -3762,7 +3766,7 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
         "top_procedures": top_procedures,
     }
 
-def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | None:
+def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str:
     """
     Regras:
     - ignora 'Hospedagem' como núcleo
@@ -3792,7 +3796,7 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
 
     # cirurgia combinada continua SEM slot
     if len(nuclei) > 1:
-        return None
+        return "Slot bloqueado"
 
     # não conseguiu identificar núcleo cirúrgico
     if len(nuclei) == 0:
@@ -3828,7 +3832,7 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str | Non
 def build_slot_hsr_data(session: Session, year: int) -> dict:
     blocked_months = {1, 6, 7, 12}
     limited_slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama"]
-    slot_types = limited_slot_types + ["Slot não identificado"]
+    slot_types = limited_slot_types + ["Slot não identificado", "Slot bloqueado"]
 
     start_day = date(year, 1, 1)
     end_day = date(year + 1, 1, 1)
@@ -3885,30 +3889,28 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
             entry_items = items_by_entry.get(entry.id or 0, [])
             slot_type = classify_hsr_slot_from_items(entry_items)
 
-            if not slot_type:
-                continue
-
             if month in blocked_months:
                 continue
+
+            procedure_label = ", ".join(
+                [x.procedure_name_snapshot for x in entry_items if x.procedure_name_snapshot]
+            ).strip()
+
+            if not procedure_label:
+                procedure_label = "Sem procedimento cadastrado"
 
             if slot_type in month_used_by_type:
                 month_used_by_type[slot_type] += 1
 
-                procedure_label = ", ".join(
-                    [x.procedure_name_snapshot for x in entry_items if x.procedure_name_snapshot]
-                ).strip()
-
-                if not procedure_label:
-                    procedure_label = "Sem procedimento cadastrado"
-
-                details.append({
-                    "date": entry.day.strftime("%d/%m/%Y"),
-                    "patient": entry.patient_name,
-                    "surgeon": surgeons_map.get(entry.surgeon_id, "—"),
-                    "procedure": procedure_label,
-                    "slot_type": slot_type,
-                    "month_label": month_names[month - 1],
-                })
+            details.append({
+                "date": entry.day.strftime("%d/%m/%Y"),
+                "patient": entry.patient_name,
+                "surgeon": surgeons_map.get(entry.surgeon_id, "—"),
+                "procedure": procedure_label,
+                "slot_type": slot_type,
+                "month_label": month_names[month - 1],
+                "is_blocked": slot_type == "Slot bloqueado",
+            })
 
         total_slots = sum(month_capacity_by_type[slot] for slot in limited_slot_types)
         used_slots = sum(month_used_by_type[slot] for slot in limited_slot_types)
@@ -4889,11 +4891,12 @@ def hospedagem_create(
     print(f"[CREATE] tentando enviar push da hospedagem id={row.id}")
 
     try:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="create",
             row=row,
-            event_key=f"lodging:create:{row.id}:{row.created_at.isoformat()}",
+            event_key = f"lodging:create:{row.id}:{patient_key}:{row.created_at.isoformat()}",
         )
         print(f"[CREATE] push processado para hospedagem id={row.id}")
     except Exception as e:
@@ -5018,11 +5021,12 @@ def hospedagem_override(
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_OVERRIDE: {e}")
 
     try:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="override",
             row=row,
-            event_key=f"lodging:override:{row.id}:{row.created_at.isoformat()}",
+            event_key = f"lodging:override:{row.id}:{patient_key}:{row.created_at.isoformat()}",
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_OVERRIDE: {e}")
@@ -5106,11 +5110,12 @@ def hospedagem_update(
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_UPDATE: {e}")
 
     try:
+        patient_key = normalize_event_key_text(getattr(row, "patient_name", None))
         send_lodging_push_event(
             session,
             event_type="update",
             row=row,
-            event_key=f"lodging:update:{row.id}:{row.updated_at.isoformat()}",
+            event_key = f"lodging:update:{row.id}:{patient_key}:{row.updated_at.isoformat()}",
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_UPDATE: {e}")
@@ -5188,11 +5193,12 @@ def hospedagem_delete(
         audit_logger.exception(f"ERRO_EMAIL_HOSPEDAGEM_DELETE: {e}")
         
     try:
+        deleted_patient_key = normalize_event_key_text(deleted_patient_name)
         send_lodging_push_event(
             session,
             event_type="delete",
             row=deleted_snapshot,
-            event_key=f"lodging:delete:{res_id}:{deleted_check_in.isoformat()}:{deleted_check_out.isoformat()}",
+            event_key = f"lodging:delete:{res_id}:{deleted_patient_key}:{deleted_check_in.isoformat()}:{deleted_check_out.isoformat()}",
         )
     except Exception as e:
         audit_logger.exception(f"ERRO_PUSH_HOSPEDAGEM_DELETE: {e}")   
