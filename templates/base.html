@@ -50,44 +50,9 @@
       transition: width .22s ease;
     }
 
-    .sidebar-scroll{
-      overflow-y: auto;
-      flex: 1;
-      padding-right: 6px;
-    }
-
-    .sidebar-footer{
-      border-top: 1px solid rgba(255,255,255,.08);
-      padding-top: 12px;
-      margin-top: 12px;
-    }
-
-    .menu-group{
-      margin-bottom: 10px;
-    }
-
-    .menu-group-title{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      cursor:pointer;
-      font-weight:800;
-      letter-spacing:.05em;
-      font-size:12px;
-      color:rgba(255,255,255,.55);
-      padding:10px 6px;
-    }
-
-    .menu-group-items{
-      display:none;
-    }
-
-    .menu-group.open .menu-group-items{
-      display:block;
-    }
-
     .menu-card{
       width: var(--sidebar-width, 290px);
+      height: 100%;
       border-radius: 22px;
       border: 1px solid rgba(255,255,255,.08);
       background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
@@ -96,6 +61,8 @@
         inset 0 1px 0 rgba(255,255,255,.03);
       overflow: hidden;
       transition: width .22s ease, border-radius .22s ease;
+      display: flex;
+      flex-direction: column;
     }
 
     .app-layout.sidebar-collapsed .menu-card{
@@ -138,6 +105,8 @@
 
     .menu-body{
       padding: 14px 16px 16px 16px;
+      flex: 1;
+      overflow-y: auto;
     }
 
     .menu-section{
@@ -153,6 +122,44 @@
       color: rgba(255,255,255,.58);
       margin: 0 0 10px 8px;
       transition: opacity .18s ease;
+    }
+
+    .menu-section-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin: 0 0 10px 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .menu-section-title{
+      margin: 0;
+    }
+
+    .menu-section-toggle{
+      color: rgba(255,255,255,.45);
+      font-size: 14px;
+      transition: transform .18s ease, opacity .18s ease;
+    }
+
+    .menu-section-items{
+      display: none;
+    }
+
+    .menu-section.open .menu-section-items{
+      display: block;
+    }
+
+    .menu-section.open .menu-section-toggle{
+      transform: rotate(90deg);
+    }
+
+    .menu-footer{
+      border-top: 1px solid rgba(255,255,255,.06);
+      padding: 12px 16px 16px 16px;
+      flex: 0 0 auto;
     }
 
     .menu-link{
@@ -357,7 +364,6 @@
     .mobile-drawer .menu-card{
       width: 100%;
       height: calc(100vh - 28px);
-      overflow-y: auto;
     }
 
     .desktop-only{
@@ -379,6 +385,14 @@
       pointer-events: none;
     }
 
+    .app-layout.sidebar-collapsed .menu-section-toggle{
+      opacity: 0;
+      width: 0;
+      overflow: hidden;
+      margin: 0;
+      pointer-events: none;
+    }
+    
     .app-layout.sidebar-collapsed .menu-top{
       justify-content:center;
       padding-left: 12px;
@@ -524,85 +538,98 @@
       <div class="menu-body">
 
         {% if current_user.role in ("admin", "surgery") %}
-          <div class="menu-section">
-            <div class="menu-section-title">Operação</div>
+          <div class="menu-section open">
+            <div class="menu-section-header" onclick="toggleMenuSection(this)">
+              <div class="menu-section-title">Operação</div>
+              <span class="menu-section-toggle">›</span>
+            </div>
 
-            <a href="/mapa" class="menu-link {% if current_path == '/mapa' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("calendar") }}</span>
-                <span class="menu-text">Mapa Cirúrgico</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+            <div class="menu-section-items">
+              <a href="/mapa" class="menu-link {% if current_path == '/mapa' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("calendar") }}</span>
+                  <span class="menu-text">Mapa Cirúrgico</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
 
-            <a href="/hospedagem" class="menu-link {% if current_path == '/hospedagem' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("hotel") }}</span>
-                <span class="menu-text">Hospedagem</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+              <a href="/hospedagem" class="menu-link {% if current_path == '/hospedagem' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("hotel") }}</span>
+                  <span class="menu-text">Hospedagem</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
 
-            <a href="/bloqueios" class="menu-link {% if current_path == '/bloqueios' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("lock") }}</span>
-                <span class="menu-text">Bloqueios de Agenda</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+              <a href="/bloqueios" class="menu-link {% if current_path == '/bloqueios' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("lock") }}</span>
+                  <span class="menu-text">Bloqueios de Agenda</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
 
-            <a href="/slot_hsr" class="menu-link {% if current_path == '/slot_hsr' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("layers") }}</span>
-                <span class="menu-text">Slots HSR</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+              <a href="/slot_hsr" class="menu-link {% if current_path == '/slot_hsr' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("layers") }}</span>
+                  <span class="menu-text">Slots HSR</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
+            </div>
           </div>
-
           <div class="menu-section">
-            <div class="menu-section-title">Gestão</div>
+            <div class="menu-section-header" onclick="toggleMenuSection(this)">
+              <div class="menu-section-title">Gestão</div>
+              <span class="menu-section-toggle">›</span>
+            </div>
 
-            <a href="/procedimentos" class="menu-link {% if current_path == '/procedimentos' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("puzzle") }}</span>
-                <span class="menu-text">Procedimentos</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+            <div class="menu-section-items">
+              <a href="/procedimentos" class="menu-link {% if current_path == '/procedimentos' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("puzzle") }}</span>
+                  <span class="menu-text">Procedimentos</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
 
-            <a href="/calculadora" class="menu-link {% if current_path == '/calculadora' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("calculator") }}</span>
-                <span class="menu-text">Calculadora</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+              <a href="/calculadora" class="menu-link {% if current_path == '/calculadora' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("calculator") }}</span>
+                  <span class="menu-text">Calculadora</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
+            </div>
           </div>
-
           <div class="menu-section">
-            <div class="menu-section-title">Relatórios</div>
+            <div class="menu-section-header" onclick="toggleMenuSection(this)">
+              <div class="menu-section-title">Relatórios</div>
+              <span class="menu-section-toggle">›</span>
+            </div>
 
-            <a href="/relatorio_execucao" class="menu-link {% if current_path == '/relatorio_execucao' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("chart-bar") }}</span>
-                <span class="menu-text">Relatório de Execução</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+            <div class="menu-section-items">
+              <a href="/relatorio_execucao" class="menu-link {% if current_path == '/relatorio_execucao' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("chart-bar") }}</span>
+                  <span class="menu-text">Relatório de Execução</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
 
-            <a href="/relatorio_gustavo" class="menu-link {% if current_path == '/relatorio_gustavo' %}active{% endif %}">
-              <div class="menu-link-left">
-                <span class="menu-icon">{{ icon("chart-line") }}</span>
-                <span class="menu-text">Relatório Dr. Gustavo</span>
-              </div>
-              <span class="menu-arrow">›</span>
-            </a>
+              <a href="/relatorio_gustavo" class="menu-link {% if current_path == '/relatorio_gustavo' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("chart-line") }}</span>
+                  <span class="menu-text">Relatório Dr. Gustavo</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
+            </div>
           </div>
         {% endif %}
+      </div>
 
-        <div class="menu-divider"></div>
-
+      <div class="menu-footer">
         <form method="post" action="/logout">
           <button type="submit" class="menu-logout-btn">
             <div class="menu-link-left">
@@ -637,54 +664,7 @@
     <div id="appLayout" class="app-layout">
       {% if current_user %}
         <aside class="app-sidebar desktop-only">
-
-          <div class="sidebar-scroll">
-
-            <!-- OPERAÇÃO -->
-            <div class="menu-group open">
-              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
-                OPERAÇÃO
-              </div>
-
-              <div class="menu-group-items">
-                <a class="menu-item" href="/mapa">Mapa Cirúrgico</a>
-                <a class="menu-item" href="/hospedagem">Hospedagem</a>
-                <a class="menu-item" href="/agenda_block">Bloqueios de Agenda</a>
-                <a class="menu-item" href="/slot_hsr">Slots HSR</a>
-              </div>
-            </div>
-
-            <!-- GESTÃO -->
-            <div class="menu-group">
-              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
-                GESTÃO
-              </div>
-
-              <div class="menu-group-items">
-                <a class="menu-item" href="/procedimentos">Procedimentos</a>
-                <a class="menu-item" href="/calculadora">Calculadora</a>
-              </div>
-            </div>
-
-            <!-- RELATÓRIOS -->
-            <div class="menu-group">
-              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
-                RELATÓRIOS
-              </div>
-
-              <div class="menu-group-items">
-                <a class="menu-item" href="/relatorio_execucao">Relatório de Execução</a>
-                <a class="menu-item" href="/relatorio_gustavo">Relatório Dr. Gustavo</a>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- FOOTER FIXO -->
-          <div class="sidebar-footer">
-            <a class="menu-item" href="/logout">Sair</a>
-          </div>
-
+          {{ sidebar_menu(false) }}
         </aside>
       {% endif %}
 
@@ -776,18 +756,11 @@
       });
     }
   </script>
-  <script>
-  function toggleMenuGroup(el){
-
-    const group = el.parentElement;
-
-    if(group.classList.contains("open")){
-        group.classList.remove("open");
-    } else {
-        group.classList.add("open");
-    }
-
-  }
-  </script>
+<script>
+function toggleMenuSection(el){
+  const section = el.parentElement;
+  section.classList.toggle("open");
+}
+</script>
 </body>
 </html>
