@@ -44,7 +44,46 @@
       position: sticky;
       top: 24px;
       align-self: start;
+      height: calc(100vh - 48px);
+      display: flex;
+      flex-direction: column;
       transition: width .22s ease;
+    }
+
+    .sidebar-scroll{
+      overflow-y: auto;
+      flex: 1;
+      padding-right: 6px;
+    }
+
+    .sidebar-footer{
+      border-top: 1px solid rgba(255,255,255,.08);
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+
+    .menu-group{
+      margin-bottom: 10px;
+    }
+
+    .menu-group-title{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      cursor:pointer;
+      font-weight:800;
+      letter-spacing:.05em;
+      font-size:12px;
+      color:rgba(255,255,255,.55);
+      padding:10px 6px;
+    }
+
+    .menu-group-items{
+      display:none;
+    }
+
+    .menu-group.open .menu-group-items{
+      display:block;
     }
 
     .menu-card{
@@ -598,7 +637,54 @@
     <div id="appLayout" class="app-layout">
       {% if current_user %}
         <aside class="app-sidebar desktop-only">
-          {{ sidebar_menu(false) }}
+
+          <div class="sidebar-scroll">
+
+            <!-- OPERAÇÃO -->
+            <div class="menu-group open">
+              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
+                OPERAÇÃO
+              </div>
+
+              <div class="menu-group-items">
+                <a class="menu-item" href="/mapa">Mapa Cirúrgico</a>
+                <a class="menu-item" href="/hospedagem">Hospedagem</a>
+                <a class="menu-item" href="/agenda_block">Bloqueios de Agenda</a>
+                <a class="menu-item" href="/slot_hsr">Slots HSR</a>
+              </div>
+            </div>
+
+            <!-- GESTÃO -->
+            <div class="menu-group">
+              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
+                GESTÃO
+              </div>
+
+              <div class="menu-group-items">
+                <a class="menu-item" href="/procedimentos">Procedimentos</a>
+                <a class="menu-item" href="/calculadora">Calculadora</a>
+              </div>
+            </div>
+
+            <!-- RELATÓRIOS -->
+            <div class="menu-group">
+              <div class="menu-group-title" onclick="toggleMenuGroup(this)">
+                RELATÓRIOS
+              </div>
+
+              <div class="menu-group-items">
+                <a class="menu-item" href="/relatorio_execucao">Relatório de Execução</a>
+                <a class="menu-item" href="/relatorio_gustavo">Relatório Dr. Gustavo</a>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- FOOTER FIXO -->
+          <div class="sidebar-footer">
+            <a class="menu-item" href="/logout">Sair</a>
+          </div>
+
         </aside>
       {% endif %}
 
@@ -689,6 +775,19 @@
           });
       });
     }
+  </script>
+  <script>
+  function toggleMenuGroup(el){
+
+    const group = el.parentElement;
+
+    if(group.classList.contains("open")){
+        group.classList.remove("open");
+    } else {
+        group.classList.add("open");
+    }
+
+  }
   </script>
 </body>
 </html>
