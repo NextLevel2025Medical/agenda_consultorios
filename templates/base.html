@@ -97,7 +97,8 @@
       font-size: 20px;
       font-weight: 700;
       letter-spacing: .06em;
-      color: var(--gold-main);
+      color: #E2B857;
+      text-shadow: 0 0 10px rgba(226,184,87,.18);
       text-transform: uppercase;
       white-space: nowrap;
       transition: opacity .18s ease, width .18s ease, margin .18s ease;
@@ -453,29 +454,43 @@
     }
 
     .menu-card .menu-body::-webkit-scrollbar-thumb{
+
       background: linear-gradient(
         180deg,
-        #f0cf78 0%,
-        #d7ab45 45%,
-        #a9781f 100%
+        #f5d98d 0%,
+        #e2b857 40%,
+        #c89633 70%,
+        #a8741e 100%
       );
-      border-radius: 999px;
-      border: 2px solid rgba(7, 14, 30, 0.95);
+
+      border-radius: 10px;
+
+      border: 2px solid rgba(10,18,38,.95);
+
       box-shadow:
-        inset 0 1px 1px rgba(255,255,255,.22),
-        0 0 8px rgba(215,171,69,.18);
+        inset 0 1px 2px rgba(255,255,255,.35),
+        inset 0 -1px 2px rgba(0,0,0,.25),
+        0 0 10px rgba(215,171,69,.35),
+        0 2px 6px rgba(0,0,0,.45);
+
+      transition: all .2s ease;
     }
 
     .menu-card .menu-body::-webkit-scrollbar-thumb:hover{
+
       background: linear-gradient(
         180deg,
-        #f6d98d 0%,
-        #e2b857 50%,
-        #b88628 100%
+        #fae2a4 0%,
+        #f1c96a 40%,
+        #d6a13a 70%,
+        #b88328 100%
       );
+
       box-shadow:
-        inset 0 1px 2px rgba(255,255,255,.28),
-        0 0 10px rgba(226,184,87,.30);
+        inset 0 1px 2px rgba(255,255,255,.45),
+        inset 0 -1px 2px rgba(0,0,0,.25),
+        0 0 14px rgba(230,190,95,.55),
+        0 3px 8px rgba(0,0,0,.5);
     }
 
     .menu-card .menu-body::-webkit-scrollbar-corner{
@@ -726,13 +741,6 @@
 
       <div class="app-main">
         <div class="flex items-center gap-4 mb-8">
-          <img
-            src="/static/icons/icon-512.png"
-            alt="Concept Clinic"
-            class="h-11 w-11 rounded-full desktop-only"
-            style="box-shadow: 0 10px 30px rgba(0,0,0,.45);"
-          />
-
           {% set _header = (self.header_title() | trim) %}
           {% if _header %}
             <h1 class="brand-title text-3xl md:text-4xl" style="color: var(--gold-main);">
