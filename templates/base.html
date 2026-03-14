@@ -26,14 +26,14 @@
 
     .app-layout{
       display: grid;
-      grid-template-columns: minmax(0, 1fr) var(--sidebar-width, 290px);
+      grid-template-columns: var(--sidebar-width, 290px) minmax(0, 1fr);
       gap: 28px;
       align-items: start;
       transition: grid-template-columns .22s ease;
     }
 
     .app-layout.sidebar-collapsed{
-      grid-template-columns: minmax(0, 1fr) 92px;
+      grid-template-columns: 92px minmax(0, 1fr);
     }
 
     .app-main{
@@ -300,10 +300,10 @@
     .mobile-drawer{
       position: fixed;
       top: 0;
-      right: 0;
+      left: 0;
       width: min(88vw, 320px);
       height: 100vh;
-      transform: translateX(100%);
+      transform: translateX(-100%);
       transition: transform .24s ease;
       z-index: 90;
       padding: 14px;
@@ -596,6 +596,12 @@
     </div>
 
     <div id="appLayout" class="app-layout">
+      {% if current_user %}
+        <aside class="app-sidebar desktop-only">
+          {{ sidebar_menu(false) }}
+        </aside>
+      {% endif %}
+
       <div class="app-main">
         <div class="flex items-center gap-4 mb-8">
           <img
@@ -615,12 +621,6 @@
 
         {% block content %}{% endblock %}
       </div>
-
-      {% if current_user %}
-        <aside class="app-sidebar desktop-only">
-          {{ sidebar_menu(false) }}
-        </aside>
-      {% endif %}
     </div>
   </div>
 
