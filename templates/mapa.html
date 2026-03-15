@@ -286,68 +286,107 @@
     box-shadow: 0 18px 55px rgba(0,0,0,.35);
   }
 
+  /* ===== Radar de Oportunidades Cirúrgicas ===== */
+  .priority-card{
+    border-radius: 22px;
+    border: 1px solid rgba(226,184,87,.18);
+    padding: 18px;
+    background:
+      radial-gradient(circle at top right, rgba(226,184,87,.18), transparent 32%),
+      linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    box-shadow:
+      0 22px 60px rgba(0,0,0,.38),
+      inset 0 1px 0 rgba(255,255,255,.03),
+      0 0 18px rgba(226,184,87,.08);
+    overflow: hidden;
+  }
+
+  .priority-card.red,
+  .priority-card.yellow,
+  .priority-card.green{
+    border-color: rgba(226,184,87,.18);
+  }
+
   .priority-head{
     display:flex;
     align-items:center;
-    justify-content:center;
-    margin-bottom: 10px;
+    justify-content:flex-start;
+    margin-bottom: 14px;
   }
 
   .priority-title{
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 900;
-    text-align: center;
-    width: 100%;
-    color: rgba(255,255,255,.92);
-    letter-spacing: .2px;
+    text-transform: uppercase;
+    color: var(--gold-main);
+    letter-spacing: .08em;
+    line-height: 1.2;
   }
 
   .priority-sub{
-    font-size: 12.5px;
+    margin-top: 4px;
+    font-size: 12px;
     font-weight: 700;
-    color: rgba(255,255,255,.70);
+    color: rgba(255,255,255,.62);
+    letter-spacing: .06em;
+    text-transform: uppercase;
   }
 
   .priority-list{
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 22px; /* linha / coluna */
-    margin-top: 6px;
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-top: 8px;
   }
 
   .priority-item{
-    font-size: 14px;
-    font-weight: 800;
-    color: rgba(255,255,255,.90);
-    display: flex;
-    align-items: center;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(226,184,87,.20);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.04),
+      0 0 14px rgba(226,184,87,.06);
+  }
+
+  .priority-item-left{
+    display:flex;
+    align-items:center;
     gap: 10px;
-    line-height: 1.15;
-    padding: 2px 0;
+    min-width: 0;
   }
 
-  /* variações por modo (você já passa priority_mode do backend) */
-  .priority-card.red{
-    border-color: rgba(239,68,68,.22);
-    background: linear-gradient(180deg, rgba(239,68,68,.06), rgba(255,255,255,.02));
+  .priority-flag{
+    font-size: 16px;
+    line-height: 1;
   }
 
-  .priority-card.yellow{
-    border-color: rgba(226,184,87,.25);
-    background: linear-gradient(180deg, rgba(226,184,87,.08), rgba(255,255,255,.02));
+  .priority-date{
+    font-size: 14px;
+    font-weight: 900;
+    color: rgba(255,255,255,.95);
+    letter-spacing: .02em;
+    white-space: nowrap;
   }
 
-  .priority-card.green{
-    border-color: rgba(16,185,129,.20);
-    background: linear-gradient(180deg, rgba(16,185,129,.08), rgba(255,255,255,.02));
+  .priority-days{
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--gold-main);
+    white-space: nowrap;
   }
 
   .priority-ok{
     font-size: 14px;
     font-weight: 800;
     color: rgba(255,255,255,.88);
+    line-height: 1.4;
   }
-
   .filters-panel{
     margin-top: 18px;
     padding: 14px 16px;
@@ -460,14 +499,28 @@
       <div class="priority-card {{ priority_mode }}">
         <div class="priority-head">
           <div>
-            <div class="priority-title">📅 Datas Prioritárias (90 dias) - Dr. Gustavo Aquino</div>
+            <div class="priority-title">Radar de Oportunidades Cirúrgicas</div>
+            <div class="priority-sub">Datas prioritárias</div>
           </div>
         </div>
 
         {% if priority_items and priority_items|length > 0 %}
           <div class="priority-list">
             {% for item in priority_items %}
-              <div class="priority-item">{{ item }}</div>
+              {% set parts = item.split(' - ') %}
+              <div class="priority-item">
+                <div class="priority-item-left">
+                  <span class="priority-flag">🚩</span>
+                  <span class="priority-date">{{ parts[0] }}</span>
+                </div>
+                <div class="priority-days">
+                  {% if parts|length > 1 %}
+                    {{ parts[1] }}
+                  {% else %}
+                    Prioridade
+                  {% endif %}
+                </div>
+              </div>
             {% endfor %}
           </div>
         {% else %}
@@ -475,7 +528,6 @@
         {% endif %}
       </div>
     </div>
-
     <div class="avail-wrap">
       <div class="avail-card">
         <div class="avail-title">🔎 Consulta de Disponibilidade</div>
