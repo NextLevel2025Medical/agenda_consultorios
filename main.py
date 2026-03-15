@@ -1898,13 +1898,22 @@ def compute_priority_card(session: Session) -> dict:
 
     zeros = [d for d in days if counts.get(d, 0) == 0]
     if zeros:
-        return {"mode": "red", "items": [f"🔴 {d.strftime('%d/%m/%Y')}" for d in zeros]}
+        return {
+            "mode": "red",
+            "items": [
+                f"{d.strftime('%d/%m/%Y')} - Em {(d - today).days} dias"
+                for d in zeros
+            ],
+        }
 
     ones = [d for d in days if counts.get(d, 0) == 1]
     if ones:
         return {
             "mode": "yellow",
-            "items": [f"🟡 {_weekday_pt(d.weekday())} {d.strftime('%d/%m/%Y')}" for d in ones],
+            "items": [
+                f"{d.strftime('%d/%m/%Y')} - Em {(d - today).days} dias"
+                for d in ones
+            ],
         }
 
     # se não tem zeros nem ones, então está tudo com 2+
