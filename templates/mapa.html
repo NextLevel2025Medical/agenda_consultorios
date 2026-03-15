@@ -269,41 +269,9 @@
   .card:hover {
     transform: scale(1.02);
   }
-
-  /* ===== Topo do mapa em 2 colunas ===== */
-  .top-grid{
-    display:grid;
-    grid-template-columns: 340px minmax(0, 1fr);
-    gap: 18px;
-    align-items:start;
-    margin-bottom: 18px;
-  }
-
-  .top-side{
-    min-width: 0;
-  }
-
-  .top-main{
-    min-width: 0;
-  }
-
-  .top-side .priority-card{
-    width: 100%;
-  }
-
-  .top-main .avail-card{
-    width: 100%;
-  }
-
-  @media (max-width: 1180px){
-    .top-grid{
-      grid-template-columns: 1fr;
-    }
-  }
-
     /* ===== Datas Prioritárias (card premium) ===== */
   .priority-wrap{
-    margin: 20px 0;
+  margin: 0;
   }
 
   .priority-card{
@@ -425,6 +393,38 @@
     box-shadow: 0 18px 50px rgba(0,0,0,.35);
   }
 
+  /* ===== Área principal do mapa com radar lateral ===== */
+  .mapa-content{
+    display:grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 18px;
+    align-items:start;
+  }
+
+  .mapa-main{
+    min-width: 0;
+  }
+
+  .mapa-side{
+    min-width: 0;
+    position: sticky;
+    top: 24px;
+  }
+
+  .mapa-side .priority-card{
+    width: 100%;
+  }
+
+  @media (max-width: 1180px){
+    .mapa-content{
+      grid-template-columns: 1fr;
+    }
+
+    .mapa-side{
+      position: static;
+    }
+  }
+
   .day-block{
     margin-top: 14px;
     padding: 16px;
@@ -522,160 +522,116 @@
 
 <div class="page">
   <div class="page-head">
+    <div class="avail-wrap">
+      <div class="avail-card">
+        <div class="avail-title">🔎 Consulta de Disponibilidade</div>
 
-    <div class="top-grid">
+        <form method="get" action="/mapa">
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="av_do" value="1">
 
-      <div class="top-side">
-        <div class="priority-wrap">
-          <div class="priority-card {{ priority_mode }}">
-            <div class="priority-head">
-              <div>
-                <div class="priority-title">Radar de Oportunidades Cirúrgicas</div>
-                <div class="priority-sub">Datas prioritárias</div>
-              </div>
-            </div>
+          <div class="avail-grid">
+            <select class="input" name="av_surgeon_id" required>
+              <option value="">Selecione o cirurgião</option>
+              {% for s in surgeons %}
+                <option value="{{ s.id }}" {% if av_selected_surgeon_id and s.id == av_selected_surgeon_id %}selected{% endif %}>
+                  {{ s.full_name }}
+                </option>
+              {% endfor %}
+            </select>
 
-            {% if priority_items and priority_items|length > 0 %}
-              <div class="priority-list">
-                {% for item in priority_items %}
-                  {% set parts = item.split(' - ') %}
-                  <div class="priority-item">
-                    <div class="priority-item-left">
-                      <span class="priority-flag">🚩</span>
-                      <span class="priority-date">{{ parts[0] }}</span>
-                    </div>
-                    <div class="priority-days">
-                      {% if parts|length > 1 %}
-                        {{ parts[1] }}
-                      {% else %}
-                        Prioridade
-                      {% endif %}
-                    </div>
+            <select class="input" name="av_month" required>
+              <option value="{{ av_year }}-01" {% if av_month == "01" %}selected{% endif %}>Janeiro</option>
+              <option value="{{ av_year }}-02" {% if av_month == "02" %}selected{% endif %}>Fevereiro</option>
+              <option value="{{ av_year }}-03" {% if av_month == "03" %}selected{% endif %}>Março</option>
+              <option value="{{ av_year }}-04" {% if av_month == "04" %}selected{% endif %}>Abril</option>
+              <option value="{{ av_year }}-05" {% if av_month == "05" %}selected{% endif %}>Maio</option>
+              <option value="{{ av_year }}-06" {% if av_month == "06" %}selected{% endif %}>Junho</option>
+              <option value="{{ av_year }}-07" {% if av_month == "07" %}selected{% endif %}>Julho</option>
+              <option value="{{ av_year }}-08" {% if av_month == "08" %}selected{% endif %}>Agosto</option>
+              <option value="{{ av_year }}-09" {% if av_month == "09" %}selected{% endif %}>Setembro</option>
+              <option value="{{ av_year }}-10" {% if av_month == "10" %}selected{% endif %}>Outubro</option>
+              <option value="{{ av_year }}-11" {% if av_month == "11" %}selected{% endif %}>Novembro</option>
+              <option value="{{ av_year }}-12" {% if av_month == "12" %}selected{% endif %}>Dezembro</option>
+            </select>
+
+            <select class="input" name="av_year" disabled>
+              <option selected>{{ av_year }}</option>
+            </select>
+
+            <select class="input" name="av_procedure_type" required>
+              <option {% if av_selected_procedure_type == "Cirurgia" %}selected{% endif %}>Cirurgia</option>
+              <option {% if av_selected_procedure_type == "Refinamento" %}selected{% endif %}>Refinamento</option>
+              <option {% if av_selected_procedure_type == "Procedimento Simples" %}selected{% endif %}>Procedimento Simples</option>
+            </select>
+          </div>
+
+          <div class="avail-actions">
+            <button class="btn-cta" type="submit">Consultar</button>
+          </div>
+        </form>
+
+        {% if av_results is defined %}
+          <div class="avail-results">
+            <div style="font-weight:900; margin-bottom:10px;">Datas disponíveis:</div>
+
+            {% if av_results and av_results|length > 0 %}
+              {% for r in av_results %}
+                <div class="avail-row">
+                  <div class="avail-left">
+                    <span class="avail-date">{{ r.label }}</span>
+                    <span class="avail-emoji">{{ r.emoji }}</span>
                   </div>
-                {% endfor %}
-              </div>
+
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    data-open-mapa-modal
+                    data-day="{{ r.day_iso }}"
+                    data-human="{{ r.human }}"
+                    data-surgeon="{{ av_selected_surgeon_id }}"
+                    data-procedure="{{ av_selected_procedure_type }}"
+                  >
+                    Reservar
+                  </button>
+                </div>
+              {% endfor %}
             {% else %}
-              <div class="priority-ok">✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.</div>
+              <div class="muted">Nenhuma data disponível para os filtros selecionados.</div>
             {% endif %}
           </div>
-        </div>
+        {% endif %}
       </div>
-
-      <div class="top-main">
-        <div class="avail-wrap">
-          <div class="avail-card">
-            <div class="avail-title">🔎 Consulta de Disponibilidade</div>
-
-            <form method="get" action="/mapa">
-              <input type="hidden" name="month" value="{{ selected_month }}">
-              <input type="hidden" name="av_do" value="1">
-
-              <div class="avail-grid">
-                <select class="input" name="av_surgeon_id" required>
-                  <option value="">Selecione o cirurgião</option>
-                  {% for s in surgeons %}
-                    <option value="{{ s.id }}" {% if av_selected_surgeon_id and s.id == av_selected_surgeon_id %}selected{% endif %}>
-                      {{ s.full_name }}
-                    </option>
-                  {% endfor %}
-                </select>
-
-                <select class="input" name="av_month" required>
-                  <option value="{{ av_year }}-01" {% if av_month == "01" %}selected{% endif %}>Janeiro</option>
-                  <option value="{{ av_year }}-02" {% if av_month == "02" %}selected{% endif %}>Fevereiro</option>
-                  <option value="{{ av_year }}-03" {% if av_month == "03" %}selected{% endif %}>Março</option>
-                  <option value="{{ av_year }}-04" {% if av_month == "04" %}selected{% endif %}>Abril</option>
-                  <option value="{{ av_year }}-05" {% if av_month == "05" %}selected{% endif %}>Maio</option>
-                  <option value="{{ av_year }}-06" {% if av_month == "06" %}selected{% endif %}>Junho</option>
-                  <option value="{{ av_year }}-07" {% if av_month == "07" %}selected{% endif %}>Julho</option>
-                  <option value="{{ av_year }}-08" {% if av_month == "08" %}selected{% endif %}>Agosto</option>
-                  <option value="{{ av_year }}-09" {% if av_month == "09" %}selected{% endif %}>Setembro</option>
-                  <option value="{{ av_year }}-10" {% if av_month == "10" %}selected{% endif %}>Outubro</option>
-                  <option value="{{ av_year }}-11" {% if av_month == "11" %}selected{% endif %}>Novembro</option>
-                  <option value="{{ av_year }}-12" {% if av_month == "12" %}selected{% endif %}>Dezembro</option>
-                </select>
-
-                <select class="input" name="av_year" disabled>
-                  <option selected>{{ av_year }}</option>
-                </select>
-
-                <select class="input" name="av_procedure_type" required>
-                  <option {% if av_selected_procedure_type == "Cirurgia" %}selected{% endif %}>Cirurgia</option>
-                  <option {% if av_selected_procedure_type == "Refinamento" %}selected{% endif %}>Refinamento</option>
-                  <option {% if av_selected_procedure_type == "Procedimento Simples" %}selected{% endif %}>Procedimento Simples</option>
-                </select>
-              </div>
-
-              <div class="avail-actions">
-                <button class="btn-cta" type="submit">Consultar</button>
-              </div>
-            </form>
-
-            {% if av_results is defined %}
-              <div class="avail-results">
-                <div style="font-weight:900; margin-bottom:10px;">Datas disponíveis:</div>
-
-                {% if av_results and av_results|length > 0 %}
-                  {% for r in av_results %}
-                    <div class="avail-row">
-                      <div class="avail-left">
-                        <span class="avail-date">{{ r.label }}</span>
-                        <span class="avail-emoji">{{ r.emoji }}</span>
-                      </div>
-
-                      <button
-                        class="btn-secondary"
-                        type="button"
-                        data-open-mapa-modal
-                        data-day="{{ r.day_iso }}"
-                        data-human="{{ r.human }}"
-                        data-surgeon="{{ av_selected_surgeon_id }}"
-                        data-procedure="{{ av_selected_procedure_type }}"
-                      >
-                        Reservar
-                      </button>
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <div class="muted">Nenhuma data disponível para os filtros selecionados.</div>
-                {% endif %}
-              </div>
-            {% endif %}
-          </div>
-        </div>
-
-        <div class="filters-panel">
-          <div class="controls">
-            <label class="lbl">Mês/Ano</label>
-            <div class="month-controls">
-              <select id="monthSelect" class="input">
-                <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
-                <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
-                <option value="03" {% if sel_month == "03" %}selected{% endif %}>Março</option>
-                <option value="04" {% if sel_month == "04" %}selected{% endif %}>Abril</option>
-                <option value="05" {% if sel_month == "05" %}selected{% endif %}>Maio</option>
-                <option value="06" {% if sel_month == "06" %}selected{% endif %}>Junho</option>
-                <option value="07" {% if sel_month == "07" %}selected{% endif %}>Julho</option>
-                <option value="08" {% if sel_month == "08" %}selected{% endif %}>Agosto</option>
-                <option value="09" {% if sel_month == "09" %}selected{% endif %}>Setembro</option>
-                <option value="10" {% if sel_month == "10" %}selected{% endif %}>Outubro</option>
-                <option value="11" {% if sel_month == "11" %}selected{% endif %}>Novembro</option>
-                <option value="12" {% if sel_month == "12" %}selected{% endif %}>Dezembro</option>
-              </select>
-
-              {% set y = sel_year|int %}
-              <select id="yearSelect" class="input">
-                {% for yy in range(y - 1, y + 3) %}
-                  <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
     </div>
 
+    <div class="filters-panel">
+      <div class="controls">
+        <label class="lbl">Mês/Ano</label>
+        <div class="month-controls">
+          <select id="monthSelect" class="input">
+            <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
+            <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
+            <option value="03" {% if sel_month == "03" %}selected{% endif %}>Março</option>
+            <option value="04" {% if sel_month == "04" %}selected{% endif %}>Abril</option>
+            <option value="05" {% if sel_month == "05" %}selected{% endif %}>Maio</option>
+            <option value="06" {% if sel_month == "06" %}selected{% endif %}>Junho</option>
+            <option value="07" {% if sel_month == "07" %}selected{% endif %}>Julho</option>
+            <option value="08" {% if sel_month == "08" %}selected{% endif %}>Agosto</option>
+            <option value="09" {% if sel_month == "09" %}selected{% endif %}>Setembro</option>
+            <option value="10" {% if sel_month == "10" %}selected{% endif %}>Outubro</option>
+            <option value="11" {% if sel_month == "11" %}selected{% endif %}>Novembro</option>
+            <option value="12" {% if sel_month == "12" %}selected{% endif %}>Dezembro</option>
+          </select>
+
+          {% set y = sel_year|int %}
+          <select id="yearSelect" class="input">
+            {% for yy in range(y - 1, y + 3) %}
+              <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="panel">
