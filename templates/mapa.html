@@ -486,6 +486,12 @@
     box-shadow: 0 16px 40px rgba(0,0,0,.30);
   }
 
+  .day-block.materdei-day{
+    background: linear-gradient(180deg, rgba(34,197,94,.18), rgba(22,101,52,.22));
+    border: 1px solid rgba(74,222,128,.38);
+    box-shadow: 0 18px 50px rgba(22,101,52,.20);
+  }
+
     /* Força o botão "Agendar" do cabeçalho do dia a não virar barra */
   .day-head .day-agendar-btn{
     width: auto !important;
@@ -627,8 +633,15 @@
       {% set key = day.isoformat() %}
       {% set items = entries_by_day.get(key, []) %}
       {% set day_blocks = blocks_by_day.get(key, []) %}
+      {% set ns = namespace(has_materdei=false) %}
 
-      <div class="day-block">
+      {% for e in items %}
+        {% if e.location and e.location|lower == "materdei" %}
+          {% set ns.has_materdei = true %}
+        {% endif %}
+      {% endfor %}
+
+      <div class="day-block {% if ns.has_materdei %}materdei-day{% endif %}">
         <!-- (3) Cabeçalho do dia + botão que abre modal -->
         <div class="day-head">
             <div class="day-title day-meta">
@@ -807,6 +820,7 @@
                           data-surgeon="{{ e.surgeon_id }}"
                           data-procedure="{{ e.procedure_type }}"
                           data-location="{{ e.location }}"
+                          data-seller="{{ e.created_by_id }}"
                           data-hsr="{{ 'true' if e.uses_hsr else 'false' }}"
                           data-mode="{{ 'reserve' if e.is_pre_reservation else 'book' }}"
                           data-procs='{{ proc_items | tojson | forceescape }}'
@@ -1235,6 +1249,11 @@
     formEl.querySelector('select[name="surgeon_id"]').value = d.surgeon || "";
     formEl.querySelector('select[name="procedure_type"]').value = d.procedure || "Cirurgia";
     formEl.querySelector('select[name="location"]').value = d.location || "Hospital São Rafael";
+
+    const sellerSelect = formEl.querySelector('select[name="seller_id"]');
+    if (sellerSelect) {
+      sellerSelect.value = d.seller || "";
+    }
 
     const hsr = formEl.querySelector('input[name="uses_hsr"]');
     if (hsr) {
