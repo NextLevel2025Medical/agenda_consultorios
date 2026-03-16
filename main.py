@@ -2080,7 +2080,7 @@ def consulta_disponibilidade_page(
         )
 
     return templates.TemplateResponse(
-        "disponibilidade.html",
+        "consulta_disponibilidade.html",
         {
             "request": request,
             "current_user": user,
