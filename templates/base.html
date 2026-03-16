@@ -574,6 +574,11 @@
         <path d="M4 12l8 4.5 8-4.5"></path>
         <path d="M4 16.5L12 21l8-4.5"></path>
       </svg>
+    {% elif name == "search" %}
+      <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="M20 20l-3.5-3.5"></path>
+      </svg>
     {% elif name == "logout" %}
       <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -620,6 +625,14 @@
                 <div class="menu-link-left">
                   <span class="menu-icon">{{ icon("calendar") }}</span>
                   <span class="menu-text">Mapa Cirúrgico</span>
+                </div>
+                <span class="menu-arrow">›</span>
+              </a>
+
+              <a href="/consulta_disponibilidade" class="menu-link {% if current_path == '/consulta_disponibilidade' %}active{% endif %}">
+                <div class="menu-link-left">
+                  <span class="menu-icon">{{ icon("search") }}</span>
+                  <span class="menu-text">Consulta de Disponibilidade</span>
                 </div>
                 <span class="menu-arrow">›</span>
               </a>
