@@ -3179,7 +3179,6 @@ async def mapa_create(
     block_err = validate_mapa_block_rules(session, day, surgeon_id)
     if block_err and not override:
         month = day.strftime("%Y-%m")
-        from urllib.parse import quote
         audit_event(request, user, "surgical_map_blocked_by_agenda_block", success=False, message=block_err)
 
         form = await request.form()
@@ -3307,7 +3306,6 @@ async def mapa_create(
 
     month = day.strftime("%Y-%m")
     if has_lodging:
-        from urllib.parse import quote
         # check-in e check-out default: 1 dia (você pode mudar depois)
         ci = day.isoformat()
         co = (day + timedelta(days=1)).isoformat()
@@ -3616,7 +3614,6 @@ async def mapa_update(
 
     # ✅ Se marcou "Hospedagem", abre a tela de hospedagem depois de salvar
     if has_lodging:
-        from urllib.parse import quote
 
         # regra padrão: check-in 2 dias após a cirurgia; check-out 1 dia depois (ajuste se quiser)
         check_in = (day + timedelta(days=2)).isoformat()
