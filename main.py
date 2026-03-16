@@ -4969,6 +4969,111 @@ def hospedagem_page(
         },
     )
 
+@app.get("/hospedagem/export_excel")
+def hospedagem_export_excel(
+    request: Request,
+    month: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"))
+
+    selected_month, first_day, next_month_first, _ = safe_selected_month(month)
+
+    q = select(LodgingReservation).where(
+        LodgingReservation.check_in < next_month_first,
+        LodgingReservation.check_out > first_day,
+    )
+    reservations = session.exec(q).all()
+
+    creator_ids = list({
+        getattr(r, "created_by_id", None)
+        for r in reservations
+        if getattr(r, "created_by_id", None)
+    })
+
+    users_by_id: dict[int, User] = {}
+    if creator_ids:
+        users = session.exec(select(User).where(User.id.in_(creator_ids))).all()
+        users_by_id = {u.id: u for u in users if u.id is not None}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Hospedagens"
+
+    headers = [
+        "Data da Reserva",
+        "Paciente",
+        "CPF",
+        "Telefone",
+        "Quarto Reservado",
+        "Check-in",
+        "Check-out",
+        "Vendedor",
+        "Observações",
+    ]
+    ws.append(headers)
+
+    for r in reservations:
+        created_at = getattr(r, "created_at", None)
+        if created_at:
+            try:
+                data_reserva = created_at.astimezone(TZ).strftime("%d/%m/%Y %H:%M")
+            except Exception:
+                try:
+                    data_reserva = created_at.strftime("%d/%m/%Y %H:%M")
+                except Exception:
+                    data_reserva = str(created_at)
+        else:
+            data_reserva = ""
+
+        vendedor = ""
+        cid = getattr(r, "created_by_id", None)
+        if isinstance(cid, str) and cid.isdigit():
+            cid = int(cid)
+
+        if cid is not None and cid in users_by_id:
+            vendedor = users_by_id[cid].full_name or users_by_id[cid].username or ""
+
+        ws.append([
+            data_reserva,
+            (r.patient_name or "").strip(),
+            getattr(r, "patient_cpf", "") or "",
+            getattr(r, "patient_phone", "") or "",
+            human_unit(normalize_unit(getattr(r, "unit", None))),
+            r.check_in.strftime("%d/%m/%Y") if r.check_in else "",
+            r.check_out.strftime("%d/%m/%Y") if r.check_out else "",
+            vendedor,
+            getattr(r, "note", "") or "",
+        ])
+
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                max_length = max(max_length, len(str(cell.value or "")))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_length + 2, 35)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"hospedagens_{selected_month}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+    
 @app.post("/hospedagem/create")
 def hospedagem_create(
     request: Request,
