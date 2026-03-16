@@ -2044,7 +2044,56 @@ def slot_hsr_page(
             **payload,
         },
     )
-    
+
+@app.get("/consulta_disponibilidade", response_class=HTMLResponse)
+def consulta_disponibilidade_page(
+    request: Request,
+    month: Optional[str] = None,
+    do_search: Optional[str] = None,
+    surgeon_id: Optional[int] = None,
+    procedure_type: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Consulta de Disponibilidade.")
+
+    selected_month, _, _, _ = safe_selected_month(month)
+
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
+    selected_procedure_type = procedure_type or "Cirurgia"
+    results: list[dict[str, str]] = []
+
+    if do_search == "1" and surgeon_id:
+        results = compute_month_availability(
+            session=session,
+            surgeon_id=int(surgeon_id),
+            month_ym=selected_month,
+            procedure_type=selected_procedure_type,
+        )
+
+    return templates.TemplateResponse(
+        "disponibilidade.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Consulta de Disponibilidade",
+            "selected_month": selected_month,
+            "surgeons": surgeons,
+            "selected_surgeon_id": surgeon_id,
+            "selected_procedure_type": selected_procedure_type,
+            "results": results,
+            "did_search": do_search == "1",
+        },
+    )
+
 @app.get("/comissoes")
 def comissoes_page(
     request: Request,
@@ -2959,23 +3008,7 @@ def mapa_page(
     mapa_hsr_summary = get_mapa_hsr_month_summary(session, selected_month)
 
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
-
-    # =========================
-    # Consulta de Disponibilidade (card)
-    # =========================
-    av_results: list[dict[str, str]] = []
-    av_selected_month = av_month or selected_month
-    av_selected_surgeon_id = av_surgeon_id
-    av_selected_procedure_type = av_procedure_type or "Cirurgia"
-
-    if av_do == "1" and av_selected_surgeon_id:
-        av_results = compute_month_availability(
-            session=session,
-            surgeon_id=int(av_selected_surgeon_id),
-            month_ym=av_selected_month,
-            procedure_type=av_selected_procedure_type,
-        )
-    
+        
     return templates.TemplateResponse(
         "mapa.html",
         {
@@ -3002,10 +3035,6 @@ def mapa_page(
             "procedures_by_entry": procedures_by_entry,
             "blocked_all_days": blocked_all_days,  # set[str] -> "2026-01-15"
             "blocked_surgeons_by_day": blocked_surgeons_by_day,  # dict[str, list[int]]
-            "av_selected_month": av_selected_month,
-            "av_selected_surgeon_id": av_selected_surgeon_id,
-            "av_selected_procedure_type": av_selected_procedure_type,
-            "av_results": av_results,
             "mapa_hsr_summary": mapa_hsr_summary,
         },
     )
