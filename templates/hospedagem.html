@@ -12,6 +12,14 @@
   .month-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .month-controls select.input { width: 120px;  min-width: 120px; }
   .btn-small { padding: 10px 14px; font-size: 14px; border-radius: 12px; }
+  .btn-export{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-width: 180px;
+    white-space: nowrap;
+  }
   .legend { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color: var(--muted); font-size: 13px; }
   .legend .swatch { display:inline-block; width:26px; height:10px; border-radius: 999px; background: rgba(255,255,255,0.18); }
   .legend .swatch.pre { background: transparent; border: 2px dashed rgba(255,255,255,0.35); }
@@ -200,7 +208,7 @@
       </form>
 
       <button class="btn btn-small btn-warning" type="button" onclick="openCreateModal(null)">Nova Reserva</button>
-      <a class="btn btn-small" href="/hospedagem/export_excel?month={{ selected_month }}">
+      <a class="btn btn-small btn-export" href="/hospedagem/export_excel">
         Exportar Excel
       </a>
     </div>
