@@ -2829,10 +2829,6 @@ def mapa_page(
     request: Request,
     month: Optional[str] = None,
     err: str | None = None,
-    av_do: Optional[str] = None,
-    av_surgeon_id: Optional[int] = None,
-    av_month: Optional[str] = None,
-    av_procedure_type: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
     user = get_current_user(request, session)
