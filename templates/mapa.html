@@ -412,6 +412,58 @@
     }
   }
 
+  .hsr-mini-card{
+    margin-top: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.03);
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    padding: 16px;
+  }
+
+  .hsr-mini-title{
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--gold-main);
+    margin-bottom: 10px;
+  }
+
+  .hsr-mini-sub{
+    font-size: 12px;
+    color: rgba(255,255,255,.62);
+    margin-bottom: 12px;
+  }
+
+  .hsr-mini-list{
+    display: grid;
+    gap: 8px;
+  }
+
+  .hsr-mini-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+  }
+
+  .hsr-mini-label{
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255,255,255,.84);
+  }
+
+  .hsr-mini-value{
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--gold-main);
+  }
+
   .day-block{
     margin-top: 14px;
     padding: 16px;
@@ -1031,6 +1083,23 @@
           </div>
         {% endif %}
       </div>
+    </div>
+    <div class="hsr-mini-card">
+      <div class="hsr-mini-title">Slots HSR</div>
+      <div class="hsr-mini-sub">{{ mapa_hsr_summary.month_label }}</div>
+
+      {% if mapa_hsr_summary.blocked %}
+        <div class="muted">Mês bloqueado para uso de Slot HSR.</div>
+      {% else %}
+        <div class="hsr-mini-list">
+          {% for row in mapa_hsr_summary.rows %}
+            <div class="hsr-mini-row">
+              <span class="hsr-mini-label">{{ row.label }}</span>
+              <span class="hsr-mini-value">{{ row.used }}/{{ row.total }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
     </div>
   </aside>
 </div>
