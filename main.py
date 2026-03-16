@@ -2959,6 +2959,8 @@ def mapa_page(
             d += timedelta(days=1)
 
     priority = compute_priority_card(session)
+    
+    mapa_hsr_summary = get_mapa_hsr_month_summary(session, selected_month)
 
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
 
@@ -3008,6 +3010,7 @@ def mapa_page(
             "av_selected_surgeon_id": av_selected_surgeon_id,
             "av_selected_procedure_type": av_selected_procedure_type,
             "av_results": av_results,
+            "mapa_hsr_summary": mapa_hsr_summary,
         },
     )
 
@@ -3206,15 +3209,25 @@ async def mapa_create(
     if block_err and override:
         audit_event(request, user, "surgical_map_override_agenda_block", success=True, message=block_err)
 
+    form = await request.form()
+
     err = validate_mapa_rules(session, day, surgeon_id, procedure_type, uses_hsr=bool(uses_hsr))
-    if err and not override:
+    hsr_err, requested_slot_type, hsr_used, hsr_total = validate_hsr_slot_availability(
+        session,
+        day=day,
+        uses_hsr=bool(uses_hsr),
+        procedure_ids=procedure_id,
+        exclude_entry_id=None,
+    )
+
+    if (err or hsr_err) and not override:
         month = day.strftime("%Y-%m")
         audit_event(
             request,
             user,
             "surgical_map_create_validation_error",
             success=False,
-            message=err,
+            message=(hsr_err or err),
             extra={
                 "day": day_iso,
                 "time_hhmm": time_hhmm,
@@ -3223,21 +3236,18 @@ async def mapa_create(
                 "procedure_type": procedure_type,
                 "location": location,
                 "uses_hsr": bool(uses_hsr),
+                "requested_slot_type": requested_slot_type,
+                "hsr_used": hsr_used,
+                "hsr_total": hsr_total,
                 "mode": mode,
             },
         )
-        from urllib.parse import quote
 
-        form = await request.form()
-
-        proc_qs = ""
-        for pid in (procedure_id or []):
-            proc_qs += f"&procedure_id={pid}"
-            proc_qs += f"&procedure_amount_{pid}={quote(str(form.get(f'procedure_amount_{pid}', '') or ''))}"
+        proc_qs = build_hsr_proc_qs(procedure_id, dict(form))
 
         return redirect(
             f"/mapa?month={month}&open=1"
-            f"&err={quote(err)}"
+            f"&err={quote(hsr_err or err)}"
             f"&day_iso={quote(day_iso)}"
             f"&mode={quote(mode)}"
             f"&time_hhmm={quote(time_hhmm or '')}"
@@ -3344,12 +3354,21 @@ async def mapa_request_authorization(
     is_pre = (mode == "reserve")
     time_hhmm = (time_hhmm or "").strip()
 
-    # Revalida regras SEM override (precisa realmente estar fora da regra)
+    form = await request.form()
+
     block_err = validate_mapa_block_rules(session, day, surgeon_id)
     rule_err = validate_mapa_rules(session, day, surgeon_id, procedure_type, uses_hsr=bool(uses_hsr))
+    hsr_err, requested_slot_type, hsr_used, hsr_total = validate_hsr_slot_availability(
+        session,
+        day=day,
+        uses_hsr=bool(uses_hsr),
+        procedure_ids=procedure_id,
+        exclude_entry_id=None,
+    )
 
-    if not block_err and not rule_err:
-        # Se não há erro, não faz sentido pedir autorização
+    effective_err = block_err or hsr_err or rule_err
+
+    if not effective_err:
         return redirect(f"/mapa?month={day.strftime('%Y-%m')}")
 
     row = SurgicalMapEntry(
@@ -3385,7 +3404,7 @@ async def mapa_request_authorization(
         target_type="surgical_map",
         target_id=row.id,
         success=True,
-        message=(block_err or rule_err),
+        message=effective_err,
         extra={
             "day": day_iso,
             "mode": mode,
@@ -3394,6 +3413,9 @@ async def mapa_request_authorization(
             "procedure_type": procedure_type,
             "location": location,
             "uses_hsr": bool(uses_hsr),
+            "requested_slot_type": requested_slot_type,
+            "hsr_used": hsr_used,
+            "hsr_total": hsr_total,
         },
     )
 
@@ -3490,6 +3512,8 @@ async def mapa_update(
     is_pre = (mode == "reserve")
 
     # valida regras EXCLUINDO o próprio item (pra não bloquear edição à toa)
+    form = await request.form()
+
     err = validate_mapa_rules(
         session,
         day,
@@ -3498,21 +3522,23 @@ async def mapa_update(
         uses_hsr=bool(uses_hsr),
         exclude_entry_id=entry_id,
     )
-    
-    if err:
+
+    hsr_err, requested_slot_type, hsr_used, hsr_total = validate_hsr_slot_availability(
+        session,
+        day=day,
+        uses_hsr=bool(uses_hsr),
+        procedure_ids=procedure_id,
+        exclude_entry_id=entry_id,
+    )
+
+    if err or hsr_err:
         month = day.strftime("%Y-%m")
-        from urllib.parse import quote
 
-        form = await request.form()
-
-        proc_qs = ""
-        for pid in (procedure_id or []):
-            proc_qs += f"&procedure_id={pid}"
-            proc_qs += f"&procedure_amount_{pid}={quote(str(form.get(f'procedure_amount_{pid}', '') or ''))}"
+        proc_qs = build_hsr_proc_qs(procedure_id, dict(form))
 
         return redirect(
             f"/mapa?month={month}&open=1&edit_id={entry_id}"
-            f"&err={quote(err)}"
+            f"&err={quote(hsr_err or err)}"
             f"&day_iso={quote(day_iso)}"
             f"&mode={quote(mode)}"
             f"&time_hhmm={quote(time_hhmm or '')}"
@@ -3837,6 +3863,132 @@ def classify_hsr_slot_from_items(items: list[SurgeryProcedureItem]) -> str:
 
     return "Slot não identificado"
 
+def classify_hsr_slot_from_catalog(procedures: list[ProcedureCatalog]) -> str:
+    fake_items = [
+        SimpleNamespace(
+            nucleus_snapshot=(p.nucleus or ""),
+            procedure_name_snapshot=(p.name or ""),
+        )
+        for p in procedures
+    ]
+    return classify_hsr_slot_from_items(fake_items)
+
+
+def get_hsr_slot_config() -> tuple[set[int], list[str], list[str]]:
+    blocked_months = {1, 6, 7, 12}
+    limited_slot_types = ["Abdominoplastia", "Lipo", "Mastopexia", "Mama"]
+    slot_types = limited_slot_types + ["Slot não identificado", "Slot bloqueado"]
+    return blocked_months, limited_slot_types, slot_types
+
+
+def build_hsr_proc_qs(procedure_ids: list[int] | None, form_data: dict) -> str:
+    proc_qs = ""
+    for pid in (procedure_ids or []):
+        proc_qs += f"&procedure_id={pid}"
+        proc_qs += f"&procedure_amount_{pid}={quote(str(form_data.get(f'procedure_amount_{pid}', '') or ''))}"
+    return proc_qs
+
+
+def validate_hsr_slot_availability(
+    session: Session,
+    *,
+    day: date,
+    uses_hsr: bool,
+    procedure_ids: list[int] | None,
+    exclude_entry_id: int | None = None,
+) -> tuple[str | None, str | None, int, int]:
+    if not uses_hsr:
+        return None, None, 0, 0
+
+    blocked_months, limited_slot_types, _ = get_hsr_slot_config()
+
+    if day.month in blocked_months:
+        return "Regra: não é permitido agendar Slot HSR neste mês.", None, 0, 0
+
+    if not procedure_ids:
+        return "Selecione ao menos um procedimento para classificar o Slot HSR.", None, 0, 0
+
+    procedures = session.exec(
+        select(ProcedureCatalog).where(
+            ProcedureCatalog.id.in_(procedure_ids),
+            ProcedureCatalog.is_active == True,
+        )
+    ).all()
+
+    slot_type = classify_hsr_slot_from_catalog(procedures)
+
+    if slot_type == "Slot bloqueado":
+        return "Os procedimentos selecionados não se enquadram em um Slot HSR válido.", slot_type, 0, 0
+
+    if slot_type not in limited_slot_types:
+        return None, slot_type, 0, 0
+
+    start_day = date(day.year, day.month, 1)
+    if day.month == 12:
+        end_day = date(day.year + 1, 1, 1)
+    else:
+        end_day = date(day.year, day.month + 1, 1)
+
+    entries = session.exec(
+        select(SurgicalMapEntry).where(
+            SurgicalMapEntry.day >= start_day,
+            SurgicalMapEntry.day < end_day,
+            SurgicalMapEntry.uses_hsr == True,
+        )
+    ).all()
+
+    if exclude_entry_id is not None:
+        entries = [e for e in entries if e.id != exclude_entry_id]
+
+    entry_ids = [e.id for e in entries if e.id is not None]
+
+    items = []
+    if entry_ids:
+        items = session.exec(
+            select(SurgeryProcedureItem).where(
+                SurgeryProcedureItem.surgery_entry_id.in_(entry_ids)
+            )
+        ).all()
+
+    items_by_entry: dict[int, list[SurgeryProcedureItem]] = defaultdict(list)
+    for item in items:
+        items_by_entry[item.surgery_entry_id].append(item)
+
+    used = 0
+    total = 4
+
+    for entry in entries:
+        entry_items = items_by_entry.get(entry.id or 0, [])
+        existing_slot_type = classify_hsr_slot_from_items(entry_items)
+        if existing_slot_type == slot_type:
+            used += 1
+
+    if used >= total:
+        return f"Quantidade máximas de slots de {slot_type} excedidas.", slot_type, used, total
+
+    return None, slot_type, used, total
+
+
+def get_mapa_hsr_month_summary(session: Session, selected_month: str) -> dict:
+    year_str, month_str = selected_month.split("-")
+    year = int(year_str)
+    month = int(month_str)
+
+    data = build_slot_hsr_data(session, year)
+    month_data = next((m for m in data["months"] if m["month"] == month), None)
+
+    if not month_data:
+        return {
+            "month_label": selected_month,
+            "blocked": False,
+            "rows": [],
+        }
+
+    return {
+        "month_label": month_data["name"],
+        "blocked": month_data["blocked"],
+        "rows": month_data["by_type"],
+    }
 
 def build_slot_hsr_data(session: Session, year: int) -> dict:
     blocked_months = {1, 6, 7, 12}
