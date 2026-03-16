@@ -4981,13 +4981,9 @@ def hospedagem_export_excel(
 
     require(user.role in ("admin", "surgery"))
 
-    selected_month, first_day, next_month_first, _ = safe_selected_month(month)
-
-    q = select(LodgingReservation).where(
-        LodgingReservation.check_in < next_month_first,
-        LodgingReservation.check_out > first_day,
-    )
-    reservations = session.exec(q).all()
+    reservations = session.exec(
+        select(LodgingReservation).order_by(LodgingReservation.check_in, LodgingReservation.patient_name)
+    ).all()
 
     creator_ids = list({
         getattr(r, "created_by_id", None)
@@ -5064,7 +5060,7 @@ def hospedagem_export_excel(
     wb.save(output)
     output.seek(0)
 
-    filename = f"hospedagens_{selected_month}.xlsx"
+    filename = f"hospedagens.xlsx"
 
     return StreamingResponse(
         output,
