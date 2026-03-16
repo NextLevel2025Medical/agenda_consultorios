@@ -384,34 +384,30 @@
     box-shadow: 0 18px 50px rgba(0,0,0,.35);
   }
 
-  /* ===== Área principal do mapa com radar lateral ===== */
-  .mapa-content{
-    display:grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 18px;
-    align-items:start;
+  /* ===== Layout com radar como lateral externa ===== */
+  .mapa-layout{
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 22px;
+    align-items: start;
   }
 
-  .mapa-main{
-    min-width: 0;
-  }
-
-  .mapa-side{
-    min-width: 0;
+  .radar-sidebar{
     position: sticky;
     top: 24px;
+    align-self: start;
   }
 
-  .mapa-side .priority-card{
+  .radar-sidebar .priority-card{
     width: 100%;
   }
 
-  @media (max-width: 1180px){
-    .mapa-content{
+  @media (max-width: 1380px){
+    .mapa-layout{
       grid-template-columns: 1fr;
     }
 
-    .mapa-side{
+    .radar-sidebar{
       position: static;
     }
   }
@@ -511,8 +507,9 @@
   }
 </style>
 
-<div class="page">
-  <div class="page-head">
+<div class="mapa-layout">
+  <div class="page">
+    <div class="page-head">
     <div class="avail-wrap">
       <div class="avail-card">
         <div class="avail-title">🔎 Consulta de Disponibilidade</div>
@@ -625,8 +622,6 @@
     </div>
   </div>
 
-  <div class="mapa-content">
-    <div class="mapa-main">
       <div class="panel">
     {% if err %}
       <div class="alert">
@@ -998,47 +993,46 @@
       </div>
 
     {% endfor %}
-      </div>
-    </div>
-
-    <div class="mapa-side">
-      <div class="priority-wrap">
-        <div class="priority-card {{ priority_mode }}">
-          <div class="priority-head">
-            <div>
-              <div class="priority-title">Radar de Oportunidades Cirúrgicas</div>
-              <div class="priority-sub">Datas prioritárias</div>
-            </div>
-          </div>
-
-          {% if priority_items and priority_items|length > 0 %}
-            <div class="priority-list">
-              {% for item in priority_items %}
-                {% set parts = item.split(' - ') %}
-                <div class="priority-item">
-                  <div class="priority-item-left">
-                    <span class="priority-flag">🚩</span>
-                    <span class="priority-date">{{ parts[0] }}</span>
-                  </div>
-                  <div class="priority-days">
-                    {% if parts|length > 1 %}
-                      {{ parts[1] }}
-                    {% else %}
-                      Prioridade
-                    {% endif %}
-                  </div>
-                </div>
-              {% endfor %}
-            </div>
-          {% else %}
-            <div class="priority-ok">
-              ✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.
-            </div>
-          {% endif %}
-        </div>
-      </div>
     </div>
   </div>
+
+  <aside class="radar-sidebar">
+    <div class="priority-wrap">
+      <div class="priority-card {{ priority_mode }}">
+        <div class="priority-head">
+          <div>
+            <div class="priority-title">Radar de Oportunidades Cirúrgicas</div>
+            <div class="priority-sub">Datas prioritárias</div>
+          </div>
+        </div>
+
+        {% if priority_items and priority_items|length > 0 %}
+          <div class="priority-list">
+            {% for item in priority_items %}
+              {% set parts = item.split(' - ') %}
+              <div class="priority-item">
+                <div class="priority-item-left">
+                  <span class="priority-flag">🚩</span>
+                  <span class="priority-date">{{ parts[0] }}</span>
+                </div>
+                <div class="priority-days">
+                  {% if parts|length > 1 %}
+                    {{ parts[1] }}
+                  {% else %}
+                    Prioridade
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="priority-ok">
+            ✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </aside>
 </div>
 
 <!-- Modal único reutilizável -->
