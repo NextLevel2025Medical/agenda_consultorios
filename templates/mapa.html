@@ -427,6 +427,15 @@
     text-transform: uppercase;
     letter-spacing: .08em;
     color: var(--gold-main);
+    margin-bottom: 6px;
+  }
+
+  .hsr-mini-desc{
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,.58);
+    text-transform: uppercase;
+    letter-spacing: .05em;
     margin-bottom: 10px;
   }
 
@@ -452,16 +461,24 @@
     background: rgba(255,255,255,.03);
   }
 
+  .hsr-mini-row.available .hsr-mini-label,
+  .hsr-mini-row.available .hsr-mini-value{
+    color: #4ade80;
+  }
+
+  .hsr-mini-row.full .hsr-mini-label,
+  .hsr-mini-row.full .hsr-mini-value{
+    color: #f87171;
+  }
+
   .hsr-mini-label{
     font-size: 13px;
     font-weight: 700;
-    color: rgba(255,255,255,.84);
   }
 
   .hsr-mini-value{
     font-size: 13px;
     font-weight: 900;
-    color: var(--gold-main);
   }
 
   .day-block{
@@ -1086,6 +1103,7 @@
     </div>
     <div class="hsr-mini-card">
       <div class="hsr-mini-title">Slots HSR</div>
+      <div class="hsr-mini-desc">Qtde Vendidos / Qtde Disponíveis</div>
       <div class="hsr-mini-sub">{{ mapa_hsr_summary.month_label }}</div>
 
       {% if mapa_hsr_summary.blocked %}
@@ -1093,7 +1111,13 @@
       {% else %}
         <div class="hsr-mini-list">
           {% for row in mapa_hsr_summary.rows %}
-            <div class="hsr-mini-row">
+            {% if row.total > 0 and row.used < row.total %}
+              {% set slot_status = 'available' %}
+            {% else %}
+              {% set slot_status = 'full' %}
+            {% endif %}
+
+            <div class="hsr-mini-row {{ slot_status }}">
               <span class="hsr-mini-label">{{ row.label }}</span>
               <span class="hsr-mini-value">{{ row.used }}/{{ row.total }}</span>
             </div>
