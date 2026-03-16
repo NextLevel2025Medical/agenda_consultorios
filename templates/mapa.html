@@ -274,15 +274,6 @@
   margin: 0;
   }
 
-  .priority-card{
-    width: min(900px, 92vw);
-    background: rgba(255,255,255,.03);
-    border: 1px solid rgba(255,255,255,.10);
-    border-radius: 18px;
-    padding: 16px 18px;
-    box-shadow: 0 18px 55px rgba(0,0,0,.35);
-  }
-
   /* ===== Radar de Oportunidades Cirúrgicas ===== */
   .priority-card{
     border-radius: 22px;
@@ -634,7 +625,9 @@
     </div>
   </div>
 
-  <div class="panel">
+  <div class="mapa-content">
+    <div class="mapa-main">
+      <div class="panel">
     {% if err %}
       <div class="alert">
         {{ err }}
@@ -1005,6 +998,46 @@
       </div>
 
     {% endfor %}
+      </div>
+    </div>
+
+    <div class="mapa-side">
+      <div class="priority-wrap">
+        <div class="priority-card {{ priority_mode }}">
+          <div class="priority-head">
+            <div>
+              <div class="priority-title">Radar de Oportunidades Cirúrgicas</div>
+              <div class="priority-sub">Datas prioritárias</div>
+            </div>
+          </div>
+
+          {% if priority_items and priority_items|length > 0 %}
+            <div class="priority-list">
+              {% for item in priority_items %}
+                {% set parts = item.split(' - ') %}
+                <div class="priority-item">
+                  <div class="priority-item-left">
+                    <span class="priority-flag">🚩</span>
+                    <span class="priority-date">{{ parts[0] }}</span>
+                  </div>
+                  <div class="priority-days">
+                    {% if parts|length > 1 %}
+                      {{ parts[1] }}
+                    {% else %}
+                      Prioridade
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="priority-ok">
+              ✅ Todas as segundas e quartas estão bem preenchidas nos próximos 90 dias.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
