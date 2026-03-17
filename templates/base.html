@@ -692,6 +692,16 @@
               </a>
 
               {% if current_user and current_user.username == "johnny.ge" %}
+                <a href="/usuarios" class="menu-link {% if current_path == '/usuarios' %}active{% endif %}">
+                  <div class="menu-link-left">
+                    <span class="menu-icon">{{ icon("lock") }}</span>
+                    <span class="menu-text">Usuários e Acessos</span>
+                  </div>
+                  <span class="menu-arrow">›</span>
+                </a>
+              {% endif %}
+
+              {% if current_user and current_user.username == "johnny.ge" %}
                 <a href="/logs" class="menu-link {% if current_path == '/logs' %}active{% endif %}">
                   <div class="menu-link-left">
                     <span class="menu-icon">{{ icon("chart-line") }}</span>

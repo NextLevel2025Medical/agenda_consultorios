@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - USUÁRIOS E ACESSOS{% endblock %}
+{% block header_title %}Usuários e Acessos{% endblock %}
+{% block content %}
+
+<style>
+  .users-page{
+    display:grid;
+    gap:18px;
+  }
+
+  .users-card{
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+    padding: 18px;
+  }
+
+  .users-title{
+    font-size: 22px;
+    font-weight: 900;
+    color: rgba(255,255,255,.95);
+    margin-bottom: 6px;
+  }
+
+  .users-sub{
+    font-size: 13px;
+    color: rgba(255,255,255,.62);
+    margin-bottom: 14px;
+  }
+
+  .users-grid{
+    display:grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .users-grid-4{
+    display:grid;
+    grid-template-columns: 1.3fr 1fr 1fr 1fr;
+    gap: 10px;
+  }
+
+  .user-row{
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding-top: 16px;
+    margin-top: 16px;
+    display:grid;
+    gap:12px;
+  }
+
+  .user-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .user-name{
+    font-size: 18px;
+    font-weight: 900;
+    color: rgba(255,255,255,.95);
+  }
+
+  .user-meta{
+    font-size: 13px;
+    color: rgba(255,255,255,.65);
+    margin-top: 4px;
+  }
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:800;
+    border:1px solid rgba(255,255,255,.10);
+    background: rgba(255,255,255,.04);
+  }
+
+  .badge.active{
+    color:#4ade80;
+    border-color:rgba(74,222,128,.35);
+    background:rgba(74,222,128,.08);
+  }
+
+  .badge.inactive{
+    color:#f87171;
+    border-color:rgba(248,113,113,.35);
+    background:rgba(248,113,113,.08);
+  }
+
+  .actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  .alert-ok,
+  .alert-err{
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .alert-ok{
+    color:#4ade80;
+    border:1px solid rgba(74,222,128,.25);
+    background:rgba(74,222,128,.08);
+  }
+
+  .alert-err{
+    color:#f87171;
+    border:1px solid rgba(248,113,113,.25);
+    background:rgba(248,113,113,.08);
+  }
+
+  @media (max-width: 1100px){
+    .users-grid,
+    .users-grid-4{
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="users-page">
+
+  <div class="users-card">
+    <div class="users-title">Criar novo usuário</div>
+    <div class="users-sub">Somente o usuário master pode criar acessos e definir perfis.</div>
+
+    {% if ok %}
+      <div class="alert-ok">{{ ok }}</div>
+    {% endif %}
+    {% if err %}
+      <div class="alert-err" style="margin-top:10px;">{{ err }}</div>
+    {% endif %}
+
+    <form method="post" action="/usuarios/create" style="margin-top:14px;">
+      <div class="users-grid">
+        <input class="input" type="text" name="full_name" placeholder="Nome completo" required>
+        <input class="input" type="text" name="username" placeholder="Username" required>
+        <input class="input" type="text" name="password" placeholder="Senha inicial" required>
+
+        <select class="input" name="role" required>
+          {% for value, label in role_options %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+
+        <label style="display:flex; align-items:center; gap:10px; height:46px;">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>Usuário ativo</span>
+        </label>
+      </div>
+
+      <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+        <button class="btn-cta" type="submit">Criar usuário</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="users-card">
+    <div class="users-title">Usuários cadastrados</div>
+    <div class="users-sub">Edite nome, username, perfil, senha e status de acesso.</div>
+
+    {% for u in users %}
+      <div class="user-row">
+        <div class="user-head">
+          <div>
+            <div class="user-name">{{ u.full_name or "Sem nome" }}</div>
+            <div class="user-meta">@{{ u.username }} · Perfil atual: {{ u.role }}</div>
+          </div>
+
+          <div class="actions">
+            {% if u.is_active %}
+              <span class="badge active">Ativo</span>
+            {% else %}
+              <span class="badge inactive">Inativo</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <form method="post" action="/usuarios/update/{{ u.id }}">
+          <div class="users-grid-4">
+            <input class="input" type="text" name="full_name" value="{{ u.full_name }}" required>
+            <input class="input" type="text" name="username" value="{{ u.username }}" required>
+
+            <select class="input" name="role" required>
+              {% for value, label in role_options %}
+                <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+
+            <input class="input" type="text" name="new_password" placeholder="Nova senha (opcional)">
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:12px; flex-wrap:wrap;">
+            <label style="display:flex; align-items:center; gap:10px;">
+              <input
+                type="checkbox"
+                name="is_active"
+                value="1"
+                {% if u.is_active %}checked{% endif %}
+                {% if u.username == 'johnny.ge' %}disabled{% endif %}
+              >
+              <span>Usuário ativo</span>
+            </label>
+
+            <div class="actions">
+              <button class="btn-secondary" type="submit">Salvar alterações</button>
+            </div>
+          </div>
+        </form>
+
+        {% if u.username != 'johnny.ge' %}
+          <form method="post" action="/usuarios/toggle/{{ u.id }}">
+            <div class="actions" style="justify-content:flex-end;">
+              <button class="btn-secondary" type="submit">
+                {% if u.is_active %}Desativar{% else %}Ativar{% endif %}
+              </button>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% endblock %}
