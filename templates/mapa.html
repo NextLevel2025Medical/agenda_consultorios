@@ -780,6 +780,8 @@
 
                   {% if e.status == 'pending' %}
                     {% if current_user and current_user.username == "johnny.ge" %}
+                      <a class="btn-secondary btn-small" href="/logs?entry_id={{ e.id }}">Logs</a>
+
                       <form method="post" action="/mapa/approve/{{ e.id }}">
                         <button class="btn-cta btn-small" type="submit">Aprovar</button>
                       </form>
@@ -806,7 +808,11 @@
                         </button>
                       </div>
                       {% set proc_items = procedures_by_entry.get(e.id, []) %}
-                      <div style="display:flex; gap:10px; margin-left:auto;">
+                      <div style="display:flex; gap:10px; margin-left:auto; flex-wrap:wrap;">
+                        {% if current_user and current_user.username == "johnny.ge" %}
+                          <a class="btn-secondary" href="/logs?entry_id={{ e.id }}">Logs</a>
+                        {% endif %}
+
                         <button
                           type="button"
                           class="btn-secondary"

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - LOGS{% endblock %}
+{% block header_title %}Logs{% endblock %}
+{% block content %}
+
+<style>
+  .logs-page{
+    display:grid;
+    gap:18px;
+  }
+  .logs-filters,
+  .log-group{
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+    padding: 18px;
+  }
+  .logs-filters-grid{
+    display:grid;
+    grid-template-columns: 160px minmax(220px, 1fr) minmax(220px, 1fr) auto;
+    gap: 10px;
+    align-items:end;
+  }
+  .logs-title{
+    font-size: 22px;
+    font-weight: 900;
+    color: rgba(255,255,255,.95);
+    margin-bottom: 6px;
+  }
+  .logs-sub{
+    font-size: 13px;
+    color: rgba(255,255,255,.62);
+    margin-bottom: 14px;
+  }
+  .log-group-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom: 14px;
+    flex-wrap:wrap;
+  }
+  .log-group-title{
+    font-size: 18px;
+    font-weight: 900;
+    color: rgba(255,255,255,.96);
+  }
+  .log-badges{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .log-badge{
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    border: 1px solid rgba(255,255,255,.12);
+    background: rgba(255,255,255,.04);
+  }
+  .log-badge.active{ color:#4ade80; border-color:rgba(74,222,128,.35); background:rgba(74,222,128,.08); }
+  .log-badge.pending{ color:#facc15; border-color:rgba(250,204,21,.35); background:rgba(250,204,21,.08); }
+  .log-badge.deleted,
+  .log-badge.denied{ color:#f87171; border-color:rgba(248,113,113,.35); background:rgba(248,113,113,.08); }
+
+  .log-event{
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding-top: 14px;
+    margin-top: 14px;
+    display:grid;
+    gap:10px;
+  }
+  .log-event-top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .log-event-title{
+    font-weight: 900;
+    color: rgba(255,255,255,.95);
+  }
+  .log-event-meta{
+    font-size: 13px;
+    color: rgba(255,255,255,.64);
+  }
+  .log-message{
+    font-size: 14px;
+    color: rgba(255,255,255,.82);
+  }
+  .log-changes{
+    display:grid;
+    gap:6px;
+    margin-top: 2px;
+  }
+  .log-change{
+    font-size: 13px;
+    color: rgba(255,255,255,.86);
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .snapshot-box{
+    margin-top: 6px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.07);
+    background: rgba(255,255,255,.03);
+    overflow:hidden;
+  }
+  .snapshot-box summary{
+    cursor:pointer;
+    padding: 10px 12px;
+    font-weight: 800;
+    color: rgba(255,255,255,.88);
+  }
+  .snapshot-box pre{
+    margin:0;
+    padding: 12px;
+    overflow:auto;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255,255,255,.86);
+    background: rgba(0,0,0,.16);
+  }
+
+  @media (max-width: 980px){
+    .logs-filters-grid{
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="logs-page">
+  <div class="logs-filters">
+    <div class="logs-title">LOGS DO MAPA CIRÚRGICO</div>
+    <div class="logs-sub">Rastreabilidade completa por card: criação, edição, exclusão lógica, aprovação, reprovação, procedimentos e valores.</div>
+
+    <form method="get" action="/logs">
+      <div class="logs-filters-grid">
+        <input class="input" type="number" name="entry_id" placeholder="ID do card" value="{{ entry_id_filter }}">
+        <input class="input" type="text" name="patient_name" placeholder="Paciente" value="{{ patient_name_filter }}">
+        <select class="input" name="action">
+          {% for value, label in action_options %}
+            <option value="{{ value }}" {% if action_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn-cta" type="submit">Filtrar</button>
+      </div>
+    </form>
+  </div>
+
+  {% if grouped_cards and grouped_cards|length > 0 %}
+    {% for card in grouped_cards %}
+      <div class="log-group">
+        <div class="log-group-head">
+          <div>
+            <div class="log-group-title">
+              Card #{{ card.entry_id }} — {{ card.patient_name or "Paciente não identificado" }}
+            </div>
+            <div class="muted" style="margin-top:4px;">
+              Data: {{ card.day or "—" }}
+            </div>
+          </div>
+
+          <div class="log-badges">
+            {% set status_class = card.status if card.status in ['pending','deleted','denied'] else 'active' %}
+            <span class="log-badge {{ status_class }}">
+              Status atual: {{ card.status }}
+            </span>
+            <a class="btn-secondary btn-small" href="/mapa?month={{ (card.day or '')[:7] if card.day and card.day != '—' else '' }}">
+              Ir para o mapa
+            </a>
+          </div>
+        </div>
+
+        {% for ev in card.events %}
+          <div class="log-event">
+            <div class="log-event-top">
+              <div class="log-event-title">{{ ev.action_label }}</div>
+              <div class="log-event-meta">
+                {{ ev.when }} · {{ ev.actor_username or "—" }}
+              </div>
+            </div>
+
+            {% if ev.message %}
+              <div class="log-message">{{ ev.message }}</div>
+            {% endif %}
+
+            {% if ev.changes and ev.changes|length > 0 %}
+              <div class="log-changes">
+                {% for change in ev.changes %}
+                  <div class="log-change">{{ change }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            {% if ev.snapshot_before %}
+              <details class="snapshot-box">
+                <summary>Snapshot anterior</summary>
+                <pre>{{ ev.snapshot_before | tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+
+            {% if ev.snapshot_after %}
+              <details class="snapshot-box">
+                <summary>Snapshot posterior</summary>
+                <pre>{{ ev.snapshot_after | tojson(indent=2) }}</pre>
+              </details>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="logs-filters">
+      <div class="muted">Nenhum log encontrado para os filtros informados.</div>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

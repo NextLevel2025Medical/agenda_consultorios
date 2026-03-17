@@ -197,6 +197,7 @@
       align-items:center;
       gap: 12px;
       min-width: 0;
+      flex: 1 1 auto;
     }
 
     .menu-icon{
@@ -217,6 +218,9 @@
 
     .menu-text{
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
       transition: opacity .18s ease, width .18s ease;
     }
 
@@ -224,6 +228,7 @@
       color: rgba(255,255,255,.45);
       font-size: 16px;
       transition: opacity .18s ease;
+      flex: 0 0 auto;
     }
 
     .menu-divider{
@@ -685,6 +690,16 @@
                 </div>
                 <span class="menu-arrow">›</span>
               </a>
+
+              {% if current_user and current_user.username == "johnny.ge" %}
+                <a href="/logs" class="menu-link {% if current_path == '/logs' %}active{% endif %}">
+                  <div class="menu-link-left">
+                    <span class="menu-icon">{{ icon("chart-line") }}</span>
+                    <span class="menu-text">Logs</span>
+                  </div>
+                  <span class="menu-arrow">›</span>
+                </a>
+              {% endif %}
 
             </div>
           </div>
