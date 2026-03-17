@@ -416,6 +416,97 @@ def audit_event(
     except Exception as e:
         audit_logger.exception("AUDIT_DB_FAIL | action=%s | err=%s", action, str(e))
 
+def visible_surgical_map_status_clause():
+    return or_(
+        SurgicalMapEntry.status == None,
+        SurgicalMapEntry.status.in_(["approved", "pending"])
+    )
+
+
+def load_surgical_map_procedures_snapshot(session: Session, entry_id: int) -> list[dict[str, Any]]:
+    items = session.exec(
+        select(SurgeryProcedureItem)
+        .where(SurgeryProcedureItem.surgery_entry_id == entry_id)
+        .order_by(SurgeryProcedureItem.id)
+    ).all()
+
+    return [
+        {
+            "procedure_id": item.procedure_id,
+            "procedure_name": item.procedure_name_snapshot,
+            "nucleus": item.nucleus_snapshot,
+            "amount": float(item.amount or 0),
+        }
+        for item in items
+    ]
+
+
+def build_surgical_map_snapshot(session: Session, entry_or_id: SurgicalMapEntry | int | None) -> dict[str, Any]:
+    if entry_or_id is None:
+        return {}
+
+    entry = entry_or_id if isinstance(entry_or_id, SurgicalMapEntry) else session.get(SurgicalMapEntry, entry_or_id)
+    if not entry:
+        return {}
+
+    surgeon = session.get(User, entry.surgeon_id) if entry.surgeon_id else None
+    seller = session.get(User, entry.created_by_id) if entry.created_by_id else None
+
+    procedures = load_surgical_map_procedures_snapshot(session, entry.id)
+    total_amount = round(sum(float(p.get("amount") or 0) for p in procedures), 2)
+
+    return {
+        "entry_id": entry.id,
+        "status": entry.status or "active",
+        "day": entry.day.isoformat() if entry.day else None,
+        "time_hhmm": entry.time_hhmm,
+        "patient_name": entry.patient_name,
+        "surgeon_id": entry.surgeon_id,
+        "surgeon_name": surgeon.full_name if surgeon else None,
+        "seller_id": entry.created_by_id,
+        "seller_name": seller.full_name if seller else None,
+        "procedure_type": entry.procedure_type,
+        "location": entry.location,
+        "uses_hsr": bool(entry.uses_hsr),
+        "is_pre_reservation": bool(entry.is_pre_reservation),
+        "created_at": fmt_brasilia(entry.created_at) if getattr(entry, "created_at", None) else None,
+        "procedures": procedures,
+        "procedures_total_amount": total_amount,
+    }
+
+
+def build_surgical_map_changes(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+    labels = {
+        "day": "Data",
+        "time_hhmm": "Horário",
+        "patient_name": "Paciente",
+        "surgeon_name": "Cirurgião",
+        "seller_name": "Vendedor",
+        "procedure_type": "Tipo",
+        "location": "Hospital",
+        "uses_hsr": "Slot HSR",
+        "is_pre_reservation": "Modo",
+        "status": "Status",
+    }
+
+    changes: list[str] = []
+
+    for key, label in labels.items():
+        b = before.get(key)
+        a = after.get(key)
+        if b != a:
+            changes.append(f"{label}: {b or '—'} → {a or '—'}")
+
+    if before.get("procedures") != after.get("procedures"):
+        changes.append("Procedimentos e/ou valores alterados.")
+
+    if before.get("procedures_total_amount") != after.get("procedures_total_amount"):
+        changes.append(
+            f"Valor total dos procedimentos: "
+            f"{before.get('procedures_total_amount', 0)} → {after.get('procedures_total_amount', 0)}"
+        )
+
+    return changes
 
 def redirect(path: str):
     return RedirectResponse(path, status_code=303)
@@ -510,8 +601,9 @@ def validate_mapa_rules(
     ricardo = session.exec(select(User).where(User.full_name == "Dr. Ricardo Vilela")).first()
 
     def _apply_exclude(q):
+        q = q.where(visible_surgical_map_status_clause())
         if exclude_entry_id is not None:
-            return q.where(SurgicalMapEntry.id != exclude_entry_id)
+            q = q.where(SurgicalMapEntry.id != exclude_entry_id)
         return q
 
     # HSR jan/jul
@@ -2914,7 +3006,11 @@ def mapa_page(
 
     entries = session.exec(
         select(SurgicalMapEntry)
-        .where(SurgicalMapEntry.day >= first_day, SurgicalMapEntry.day < next_first)
+        .where(
+            SurgicalMapEntry.day >= first_day,
+            SurgicalMapEntry.day < next_first,
+            visible_surgical_map_status_clause(),
+        )
         .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
     ).all()
     
@@ -3747,6 +3843,7 @@ def build_relatorio_execucao_data(session: Session, month: Optional[str] = None)
         .where(
             SurgicalMapEntry.day >= first_day,
             SurgicalMapEntry.day < next_month,
+            visible_surgical_map_status_clause(),
         )
         .order_by(SurgicalMapEntry.day, SurgicalMapEntry.patient_name)
     ).all()
@@ -4026,6 +4123,7 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
             SurgicalMapEntry.day >= start_day,
             SurgicalMapEntry.day < end_day,
             SurgicalMapEntry.uses_hsr == True,
+            visible_surgical_map_status_clause(),
         )
         .order_by(SurgicalMapEntry.day)
     ).all()
