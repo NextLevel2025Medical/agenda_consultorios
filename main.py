@@ -2030,60 +2030,68 @@ def migrate_sqlite_schema(engine):
             conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
 
     with engine.begin() as conn:
-        # Se a tabela ainda não existir, create_db_and_tables() vai criar.
-        # Aqui só migramos se ela existir.
-        tables = conn.exec_driver_sql(
+        # =========================
+        # Migração de agendablock
+        # =========================
+        agenda_tables = conn.exec_driver_sql(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='agendablock';"
         ).fetchall()
-        if not tables:
-            return
 
-        # --- Novas colunas do modelo atual ---
-        _add_column_if_missing(conn, "agendablock", "start_date", "DATE")
-        _add_column_if_missing(conn, "agendablock", "end_date", "DATE")
-        _add_column_if_missing(conn, "agendablock", "reason", "TEXT")
-        _add_column_if_missing(conn, "agendablock", "applies_to_all", "INTEGER DEFAULT 0")
+        if agenda_tables:
+            # --- Novas colunas do modelo atual ---
+            _add_column_if_missing(conn, "agendablock", "start_date", "DATE")
+            _add_column_if_missing(conn, "agendablock", "end_date", "DATE")
+            _add_column_if_missing(conn, "agendablock", "reason", "TEXT")
+            _add_column_if_missing(conn, "agendablock", "applies_to_all", "INTEGER DEFAULT 0")
 
-        # --- Backfill a partir do schema antigo, se existir ---
-        # Antigo: data, motivo, profissional
-        has_old_date = _has_column(conn, "agendablock", "data")
-        has_old_reason = _has_column(conn, "agendablock", "motivo")
-        has_old_prof = _has_column(conn, "agendablock", "profissional")
+            # --- Backfill a partir do schema antigo, se existir ---
+            has_old_date = _has_column(conn, "agendablock", "data")
+            has_old_reason = _has_column(conn, "agendablock", "motivo")
+            has_old_prof = _has_column(conn, "agendablock", "profissional")
 
-        if has_old_date:
+            if has_old_date:
+                conn.exec_driver_sql("""
+                    UPDATE agendablock
+                    SET start_date = COALESCE(start_date, data),
+                        end_date   = COALESCE(end_date, data)
+                    WHERE data IS NOT NULL;
+                """)
+
+            if has_old_reason:
+                conn.exec_driver_sql("""
+                    UPDATE agendablock
+                    SET reason = COALESCE(reason, motivo)
+                    WHERE motivo IS NOT NULL;
+                """)
+
+            if has_old_prof:
+                conn.exec_driver_sql("""
+                    UPDATE agendablock
+                    SET applies_to_all = CASE
+                            WHEN applies_to_all IS NULL THEN
+                                CASE WHEN lower(profissional)='todos' THEN 1 ELSE 0 END
+                            ELSE applies_to_all
+                        END;
+                """)
+
             conn.exec_driver_sql("""
-                UPDATE agendablock
-                   SET start_date = COALESCE(start_date, data),
-                       end_date   = COALESCE(end_date, data)
-                 WHERE data IS NOT NULL;
+                CREATE TABLE IF NOT EXISTS agendablocksurgeon (
+                    block_id INTEGER NOT NULL,
+                    surgeon_id INTEGER NOT NULL,
+                    PRIMARY KEY (block_id, surgeon_id)
+                );
             """)
 
-        if has_old_reason:
-            conn.exec_driver_sql("""
-                UPDATE agendablock
-                   SET reason = COALESCE(reason, motivo)
-                 WHERE motivo IS NOT NULL;
-            """)
+        # =========================
+        # Migração de reservationrequest
+        # =========================
+        request_tables = conn.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='reservationrequest';"
+        ).fetchall()
 
-        if has_old_prof:
-            # Se profissional='todos' no schema antigo, vira applies_to_all=1
-            conn.exec_driver_sql("""
-                UPDATE agendablock
-                   SET applies_to_all = CASE
-                        WHEN applies_to_all IS NULL THEN
-                            CASE WHEN lower(profissional)='todos' THEN 1 ELSE 0 END
-                        ELSE applies_to_all
-                       END;
-            """)
-
-        # --- Criar tabela de relacionamento (multi-cirurgião) ---
-        conn.exec_driver_sql("""
-            CREATE TABLE IF NOT EXISTS agendablocksurgeon (
-                block_id INTEGER NOT NULL,
-                surgeon_id INTEGER NOT NULL,
-                PRIMARY KEY (block_id, surgeon_id)
-            );
-        """)
+        if request_tables:
+            _add_column_if_missing(conn, "reservationrequest", "decide_by_id", "INTEGER")
+            _add_column_if_missing(conn, "reservationrequest", "decided_at", "DATETIME")
 
 def get_commercial_period(month_year: str) -> tuple[datetime, datetime]:
     """
