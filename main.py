@@ -2376,6 +2376,240 @@ def logout(request: Request, session: Session = Depends(get_session)):
     request.session.clear()
     return redirect("/login")
 
+USER_ROLE_OPTIONS = [
+    ("admin", "Admin"),
+    ("surgery", "Cirúrgico"),
+    ("doctor", "Médico"),
+    ("viewer", "Visualizador"),
+    ("comissao", "Comissão"),
+]
+
+
+@app.get("/usuarios", response_class=HTMLResponse)
+def usuarios_page(
+    request: Request,
+    err: str = "",
+    ok: str = "",
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.username == "johnny.ge", "Acesso restrito.")
+
+    users = session.exec(
+        select(User).order_by(User.is_active.desc(), User.full_name, User.username)
+    ).all()
+
+    return templates.TemplateResponse(
+        "usuarios.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Usuários e Acessos",
+            "users": users,
+            "role_options": USER_ROLE_OPTIONS,
+            "err": err,
+            "ok": ok,
+        },
+    )
+
+
+@app.post("/usuarios/create")
+def usuarios_create(
+    request: Request,
+    full_name: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form(...),
+    is_active: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    actor = get_current_user(request, session)
+    if not actor:
+        return redirect("/login")
+    require(actor.username == "johnny.ge", "Acesso restrito.")
+
+    full_name = (full_name or "").strip()
+    username = (username or "").strip().lower()
+    password = (password or "").strip()
+    role = (role or "").strip()
+
+    valid_roles = {value for value, _ in USER_ROLE_OPTIONS}
+
+    if not full_name:
+        return redirect("/usuarios?err=" + quote("Informe o nome completo."))
+    if not username:
+        return redirect("/usuarios?err=" + quote("Informe o username."))
+    if not password:
+        return redirect("/usuarios?err=" + quote("Informe a senha inicial."))
+    if role not in valid_roles:
+        return redirect("/usuarios?err=" + quote("Perfil inválido."))
+
+    exists = session.exec(select(User).where(User.username == username)).first()
+    if exists:
+        return redirect("/usuarios?err=" + quote("Já existe um usuário com esse username."))
+
+    row = User(
+        full_name=full_name,
+        username=username,
+        role=role,
+        password_hash=hash_password(password),
+        is_active=bool(is_active),
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    audit_event(
+        request,
+        actor,
+        "user_created",
+        target_type="user",
+        target_id=row.id,
+        message=f"Usuário criado: {row.username}",
+        extra={
+            "full_name": row.full_name,
+            "username": row.username,
+            "role": row.role,
+            "is_active": row.is_active,
+        },
+    )
+
+    return redirect("/usuarios?ok=" + quote("Usuário criado com sucesso."))
+
+
+@app.post("/usuarios/update/{user_id}")
+def usuarios_update(
+    request: Request,
+    user_id: int,
+    full_name: str = Form(...),
+    username: str = Form(...),
+    role: str = Form(...),
+    new_password: str = Form(""),
+    is_active: Optional[str] = Form(None),
+    session: Session = Depends(get_session),
+):
+    actor = get_current_user(request, session)
+    if not actor:
+        return redirect("/login")
+    require(actor.username == "johnny.ge", "Acesso restrito.")
+
+    row = session.get(User, user_id)
+    if not row:
+        return redirect("/usuarios?err=" + quote("Usuário não encontrado."))
+
+    full_name = (full_name or "").strip()
+    username = (username or "").strip().lower()
+    role = (role or "").strip()
+    new_password = (new_password or "").strip()
+
+    valid_roles = {value for value, _ in USER_ROLE_OPTIONS}
+
+    if not full_name:
+        return redirect("/usuarios?err=" + quote("Informe o nome completo."))
+    if not username:
+        return redirect("/usuarios?err=" + quote("Informe o username."))
+    if role not in valid_roles:
+        return redirect("/usuarios?err=" + quote("Perfil inválido."))
+
+    other = session.exec(
+        select(User).where(User.username == username, User.id != user_id)
+    ).first()
+    if other:
+        return redirect("/usuarios?err=" + quote("Já existe outro usuário com esse username."))
+
+    if row.username == "johnny.ge" and is_active is None:
+        forced_active = True
+    else:
+        forced_active = bool(is_active)
+
+    before = {
+        "full_name": row.full_name,
+        "username": row.username,
+        "role": row.role,
+        "is_active": row.is_active,
+    }
+
+    row.full_name = full_name
+    row.username = username
+    row.role = role
+    row.is_active = forced_active
+
+    if row.username == "johnny.ge":
+        row.is_active = True
+
+    if new_password:
+        row.password_hash = hash_password(new_password)
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    after = {
+        "full_name": row.full_name,
+        "username": row.username,
+        "role": row.role,
+        "is_active": row.is_active,
+        "password_changed": bool(new_password),
+    }
+
+    audit_event(
+        request,
+        actor,
+        "user_updated",
+        target_type="user",
+        target_id=row.id,
+        message=f"Usuário atualizado: {row.username}",
+        extra={
+            "before": before,
+            "after": after,
+        },
+    )
+
+    return redirect("/usuarios?ok=" + quote("Usuário atualizado com sucesso."))
+
+
+@app.post("/usuarios/toggle/{user_id}")
+def usuarios_toggle(
+    request: Request,
+    user_id: int,
+    session: Session = Depends(get_session),
+):
+    actor = get_current_user(request, session)
+    if not actor:
+        return redirect("/login")
+    require(actor.username == "johnny.ge", "Acesso restrito.")
+
+    row = session.get(User, user_id)
+    if not row:
+        return redirect("/usuarios?err=" + quote("Usuário não encontrado."))
+
+    if row.username == "johnny.ge":
+        return redirect("/usuarios?err=" + quote("O usuário master não pode ser desativado."))
+
+    before = row.is_active
+    row.is_active = not bool(row.is_active)
+
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+
+    audit_event(
+        request,
+        actor,
+        "user_toggled",
+        target_type="user",
+        target_id=row.id,
+        message=f"Usuário {'ativado' if row.is_active else 'desativado'}: {row.username}",
+        extra={
+            "before_is_active": before,
+            "after_is_active": row.is_active,
+            "username": row.username,
+        },
+    )
+
+    return redirect("/usuarios?ok=" + quote("Status do usuário atualizado."))
 
 def availability_context(session: Session, day: date, role: str):
     rooms = session.exec(select(Room).order_by(Room.id)).all()
