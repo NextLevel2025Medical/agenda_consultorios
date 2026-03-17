@@ -3408,20 +3408,17 @@ async def mapa_create(
         form_data=dict(form),
     )
 
+    snapshot_after = build_surgical_map_snapshot(session, row.id)
+
     audit_event(
         request,
         user,
         "surgical_map_created",
         target_type="surgical_map",
         target_id=row.id,
+        message=f"Card criado para {row.patient_name}",
         extra={
-            "day": day_iso,
-            "patient_name": patient_name,
-            "surgeon_id": surgeon_id,
-            "procedure_type": procedure_type,
-            "location": location,
-            "uses_hsr": bool(uses_hsr),
-            "procedure_ids": procedure_id or [],
+            "snapshot_after": snapshot_after,
         },
     )
 
@@ -3516,6 +3513,8 @@ async def mapa_request_authorization(
         form_data=dict(form),
     )
 
+    snapshot_after = build_surgical_map_snapshot(session, row.id)
+
     audit_event(
         request,
         user,
@@ -3523,18 +3522,9 @@ async def mapa_request_authorization(
         target_type="surgical_map",
         target_id=row.id,
         success=True,
-        message=effective_err,
+        message=(block_err or rule_err),
         extra={
-            "day": day_iso,
-            "mode": mode,
-            "time_hhmm": time_hhmm,
-            "surgeon_id": surgeon_id,
-            "procedure_type": procedure_type,
-            "location": location,
-            "uses_hsr": bool(uses_hsr),
-            "requested_slot_type": requested_slot_type,
-            "hsr_used": hsr_used,
-            "hsr_total": hsr_total,
+            "snapshot_after": snapshot_after,
         },
     )
 
@@ -3558,15 +3548,31 @@ def mapa_approve(request: Request, entry_id: int, session: Session = Depends(get
     if row.status != "pending":
         return redirect(f"/mapa?month={row.day.strftime('%Y-%m')}")
 
+    before_snapshot = build_surgical_map_snapshot(session, row.id)
+
     row.status = "approved"
     row.decide_by_id = user.id
     row.decided_at = datetime.utcnow()
 
     session.add(row)
     session.commit()
+    session.refresh(row)
 
-    audit_event(request, user, "surgical_map_auth_approved", target_type="surgical_map", target_id=row.id)
+    after_snapshot = build_surgical_map_snapshot(session, row.id)
 
+    audit_event(
+        request,
+        user,
+        "surgical_map_auth_approved",
+        target_type="surgical_map",
+        target_id=row.id,
+        message="Solicitação aprovada pelo Johnny",
+        extra={
+            "snapshot_before": before_snapshot,
+            "snapshot_after": after_snapshot,
+            "changes": build_surgical_map_changes(before_snapshot, after_snapshot),
+        },
+    )
     return redirect(f"/mapa?month={row.day.strftime('%Y-%m')}")
 
 
@@ -3584,10 +3590,28 @@ def mapa_deny(request: Request, entry_id: int, session: Session = Depends(get_se
 
     month = row.day.strftime("%Y-%m")
 
-    audit_event(request, user, "surgical_map_auth_denied", target_type="surgical_map", target_id=row.id)
+    before_snapshot = build_surgical_map_snapshot(session, row.id)
 
-    session.delete(row)
+    row.status = "denied"
+    session.add(row)
     session.commit()
+    session.refresh(row)
+
+    after_snapshot = build_surgical_map_snapshot(session, row.id)
+
+    audit_event(
+        request,
+        user,
+        "surgical_map_auth_denied",
+        target_type="surgical_map",
+        target_id=row.id,
+        message="Solicitação reprovada pelo Johnny",
+        extra={
+            "snapshot_before": before_snapshot,
+            "snapshot_after": after_snapshot,
+            "changes": build_surgical_map_changes(before_snapshot, after_snapshot),
+        },
+    )
 
     return redirect(f"/mapa?month={month}")
 
@@ -3672,16 +3696,7 @@ async def mapa_update(
         )
 
     # snapshot (opcional) pra auditoria
-    before = {
-        "day": row.day.isoformat(),
-        "time_hhmm": row.time_hhmm,
-        "patient_name": row.patient_name,
-        "surgeon_id": row.surgeon_id,
-        "procedure_type": row.procedure_type,
-        "location": row.location,
-        "uses_hsr": row.uses_hsr,
-        "is_pre_reservation": row.is_pre_reservation,
-    }
+    before_snapshot = build_surgical_map_snapshot(session, row.id)
 
     time_hhmm = (time_hhmm or "").strip()  # normaliza
 
@@ -3709,25 +3724,19 @@ async def mapa_update(
         form_data=dict(form),
     )
 
+    after_snapshot = build_surgical_map_snapshot(session, row.id)
+
     audit_event(
         request,
         user,
         "surgical_map_updated",
         target_type="surgical_map",
         target_id=row.id,
+        message=f"Card editado: {row.patient_name}",
         extra={
-            "before": before,
-            "after": {
-                "day": row.day.isoformat(),
-                "time_hhmm": row.time_hhmm,
-                "patient_name": row.patient_name,
-                "surgeon_id": row.surgeon_id,
-                "procedure_type": row.procedure_type,
-                "location": row.location,
-                "uses_hsr": row.uses_hsr,
-                "is_pre_reservation": row.is_pre_reservation,
-                "procedure_ids": procedure_id or [],
-            },
+            "snapshot_before": before_snapshot,
+            "snapshot_after": after_snapshot,
+            "changes": build_surgical_map_changes(before_snapshot, after_snapshot),
         },
     )
 
@@ -3765,8 +3774,14 @@ def mapa_delete(
     row = session.get(SurgicalMapEntry, entry_id)
     if row:
         month = row.day.strftime("%Y-%m")
-        session.delete(row)
+        before_snapshot = build_surgical_map_snapshot(session, row.id)
+
+        row.status = "deleted"
+        session.add(row)
         session.commit()
+        session.refresh(row)
+
+        after_snapshot = build_surgical_map_snapshot(session, row.id)
 
         audit_event(
             request,
@@ -3774,15 +3789,11 @@ def mapa_delete(
             "surgical_map_deleted",
             target_type="surgical_map",
             target_id=entry_id,
+            message="Card ocultado do mapa (soft delete)",
             extra={
-                "day": row.day.isoformat(),
-                "time_hhmm": row.time_hhmm,
-                "patient_name": row.patient_name,
-                "surgeon_id": row.surgeon_id,
-                "procedure_type": row.procedure_type,
-                "location": row.location,
-                "uses_hsr": row.uses_hsr,
-                "is_pre_reservation": getattr(row, "is_pre_reservation", None),
+                "snapshot_before": before_snapshot,
+                "snapshot_after": after_snapshot,
+                "changes": build_surgical_map_changes(before_snapshot, after_snapshot),
             },
         )
         return redirect(f"/mapa?month={month}")
@@ -3797,6 +3808,159 @@ def mapa_delete(
         target_id=entry_id,
     )
     return redirect("/mapa")
+
+@app.get("/logs", response_class=HTMLResponse)
+def logs_page(
+    request: Request,
+    entry_id: Optional[int] = None,
+    action: str = "",
+    patient_name: str = "",
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.username == "johnny.ge", "Acesso restrito aos logs.")
+
+    q = (
+        select(AuditLog)
+        .where(AuditLog.target_type == "surgical_map")
+        .order_by(AuditLog.id.desc())
+    )
+
+    if entry_id:
+        q = q.where(AuditLog.target_id == entry_id)
+
+    if action.strip():
+        q = q.where(AuditLog.action == action.strip())
+
+    raw_logs = session.exec(q).all()
+
+    parsed_logs = []
+    entry_ids = set()
+
+    for log in raw_logs:
+        extra = {}
+        raw_extra = getattr(log, "extra_json", None)
+
+        if raw_extra:
+            try:
+                extra = json.loads(raw_extra)
+            except Exception:
+                extra = {}
+
+        snapshot_before = extra.get("snapshot_before") or {}
+        snapshot_after = extra.get("snapshot_after") or {}
+        snapshot_ref = snapshot_after or snapshot_before or {}
+
+        target_id = getattr(log, "target_id", None) or snapshot_ref.get("entry_id")
+        if target_id:
+            entry_ids.add(target_id)
+
+        parsed_logs.append({
+            "id": getattr(log, "id", None),
+            "target_id": target_id,
+            "action": getattr(log, "action", ""),
+            "actor_username": getattr(log, "actor_username", None),
+            "actor_role": getattr(log, "actor_role", None),
+            "success": getattr(log, "success", True),
+            "message": getattr(log, "message", None),
+            "when": fmt_brasilia(getattr(log, "created_at", None)) if getattr(log, "created_at", None) else "—",
+            "changes": extra.get("changes", []) or [],
+            "snapshot_before": snapshot_before,
+            "snapshot_after": snapshot_after,
+            "path": getattr(log, "path", None),
+            "method": getattr(log, "method", None),
+        })
+
+    entries_map: dict[int, SurgicalMapEntry] = {}
+    if entry_ids:
+        rows = session.exec(
+            select(SurgicalMapEntry).where(SurgicalMapEntry.id.in_(list(entry_ids)))
+        ).all()
+        entries_map = {r.id: r for r in rows if r.id is not None}
+
+    if patient_name.strip():
+        needle = patient_name.strip().upper()
+        filtered = []
+        for log in parsed_logs:
+            s_after = log["snapshot_after"] or {}
+            s_before = log["snapshot_before"] or {}
+            patient = (s_after.get("patient_name") or s_before.get("patient_name") or "").upper()
+            if needle in patient:
+                filtered.append(log)
+        parsed_logs = filtered
+
+    action_labels = {
+        "surgical_map_created": "Criação",
+        "surgical_map_updated": "Edição",
+        "surgical_map_deleted": "Exclusão lógica",
+        "surgical_map_auth_requested": "Pedido de autorização",
+        "surgical_map_auth_approved": "Aprovação",
+        "surgical_map_auth_denied": "Reprovação",
+        "surgical_map_override_agenda_block": "Override de bloqueio",
+        "surgical_map_create_validation_error": "Tentativa bloqueada por regra",
+        "surgical_map_blocked_by_agenda_block": "Tentativa bloqueada por agenda",
+    }
+
+    grouped: dict[int, dict[str, Any]] = {}
+
+    for log in parsed_logs:
+        tid = log["target_id"]
+        if not tid:
+            continue
+
+        entry = entries_map.get(tid)
+        snap = log["snapshot_after"] or log["snapshot_before"] or {}
+
+        group = grouped.setdefault(
+            tid,
+            {
+                "entry_id": tid,
+                "patient_name": snap.get("patient_name") or (entry.patient_name if entry else "—"),
+                "day": snap.get("day") or (entry.day.isoformat() if entry and entry.day else "—"),
+                "status": snap.get("status") or (entry.status if entry else "—") or "active",
+                "events": [],
+                "last_log_id": log["id"] or 0,
+            },
+        )
+
+        group["patient_name"] = snap.get("patient_name") or group["patient_name"]
+        group["day"] = snap.get("day") or group["day"]
+        group["status"] = snap.get("status") or group["status"]
+
+        group["events"].append({
+            **log,
+            "action_label": action_labels.get(log["action"], log["action"]),
+        })
+
+        if (log["id"] or 0) > group["last_log_id"]:
+            group["last_log_id"] = log["id"] or 0
+
+    grouped_cards = sorted(grouped.values(), key=lambda x: x["last_log_id"], reverse=True)
+
+    return templates.TemplateResponse(
+        "logs.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Logs",
+            "grouped_cards": grouped_cards,
+            "entry_id_filter": entry_id or "",
+            "action_filter": action,
+            "patient_name_filter": patient_name,
+            "action_options": [
+                ("", "Todas as ações"),
+                ("surgical_map_created", "Criação"),
+                ("surgical_map_updated", "Edição"),
+                ("surgical_map_deleted", "Exclusão lógica"),
+                ("surgical_map_auth_requested", "Pedido de autorização"),
+                ("surgical_map_auth_approved", "Aprovação"),
+                ("surgical_map_auth_denied", "Reprovação"),
+            ],
+        },
+    )
 
 @app.get("/calculadora")
 def calculadora_page(request: Request, session: Session = Depends(get_session)):
