@@ -4180,6 +4180,7 @@ def mapa_delete(
 def meus_clientes_page(
     request: Request,
     month: Optional[str] = None,
+    year: Optional[str] = None,
     search: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
@@ -4188,9 +4189,41 @@ def meus_clientes_page(
         return redirect("/login")
     require(user.role in ("admin", "surgery"), "Acesso restrito ao Mapa Cirúrgico.")
 
-    selected_month, first_day, next_first, days = safe_selected_month(month)
-
     search_term = (search or "").strip().upper()
+
+    selected_month = ""
+    selected_year = ""
+
+    query = (
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.created_by_id == user.id,
+            visible_surgical_map_status_clause(),
+        )
+    )
+
+    if month and year:
+        try:
+            month_int = int(month)
+            year_int = int(year)
+            first_day = date(year_int, month_int, 1)
+            if month_int == 12:
+                next_first = date(year_int + 1, 1, 1)
+            else:
+                next_first = date(year_int, month_int + 1, 1)
+
+            query = query.where(
+                SurgicalMapEntry.day >= first_day,
+                SurgicalMapEntry.day < next_first,
+            )
+
+            selected_month = f"{month_int:02d}"
+            selected_year = str(year_int)
+        except ValueError:
+            pass
+
+    if search_term:
+        query = query.where(SurgicalMapEntry.patient_name.contains(search_term))
 
     audit_event(
         request,
@@ -4198,6 +4231,7 @@ def meus_clientes_page(
         "meus_clientes_page_view",
         extra={
             "month": selected_month,
+            "year": selected_year,
             "search": search_term,
         },
     )
@@ -4210,19 +4244,6 @@ def meus_clientes_page(
 
     users_all = session.exec(select(User)).all()
     users_by_id = {u.id: u for u in users_all if u.id is not None}
-
-    query = (
-        select(SurgicalMapEntry)
-        .where(
-            SurgicalMapEntry.day >= first_day,
-            SurgicalMapEntry.day < next_first,
-            SurgicalMapEntry.created_by_id == user.id,
-            visible_surgical_map_status_clause(),
-        )
-    )
-
-    if search_term:
-        query = query.where(SurgicalMapEntry.patient_name.contains(search_term))
 
     entries = session.exec(
         query.order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
@@ -4249,8 +4270,14 @@ def meus_clientes_page(
         })
 
     entries_by_day: dict[str, list[SurgicalMapEntry]] = {}
+    ordered_days: list[date] = []
+
     for e in entries:
-        entries_by_day.setdefault(e.day.isoformat(), []).append(e)
+        key = e.day.isoformat()
+        if key not in entries_by_day:
+            entries_by_day[key] = []
+            ordered_days.append(e.day)
+        entries_by_day[key].append(e)
 
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
 
@@ -4266,21 +4293,22 @@ def meus_clientes_page(
             "current_user": user,
             "fmt_brasilia": fmt_brasilia,
             "title": "Meus Clientes",
-            "selected_month": selected_month,
-            "days": days,
+            "days": ordered_days,
             "entries_by_day": entries_by_day,
             "surgeons": surgeons,
             "weekday_map": weekday_map,
             "users_by_id": users_by_id,
             "procedures_by_entry": procedures_by_entry,
             "search": search or "",
+            "selected_month": selected_month,
+            "selected_year": selected_year,
             "total_clientes": total_clientes,
             "total_confirmados": total_confirmados,
             "total_pre_reservas": total_pre_reservas,
             "total_pendentes": total_pendentes,
         },
     )
-
+        
 @app.get("/logs", response_class=HTMLResponse)
 def logs_page(
     request: Request,
