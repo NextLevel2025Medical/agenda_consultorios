@@ -3,30 +3,11 @@
 {% block header_title %}Meus Clientes{% endblock %}
 {% block content %}
 
-{% set parts = selected_month.split('-') %}
-{% set sel_year = parts[0] %}
-{% set sel_month = parts[1] %}
-
 <style>
-  .month-controls { display: flex; gap: 10px; align-items: center; }
-  .month-controls .input { min-width: 160px; }
-
-  .page-head-grid{
+  .filters-grid{
     display:grid;
-    grid-template-columns: 1fr auto;
-    gap: 16px;
-    align-items:end;
-  }
-
-  .filters-panel{
-    display:grid;
-    gap:16px;
-  }
-
-  .controls-row{
-    display:flex;
+    grid-template-columns: 1.2fr .9fr .9fr auto auto;
     gap:14px;
-    flex-wrap:wrap;
     align-items:end;
   }
 
@@ -92,6 +73,7 @@
     display:flex;
     align-items:center;
     gap:10px;
+    flex-wrap:wrap;
   }
 
   .badge-count{
@@ -237,9 +219,17 @@
 
   .entry-actions{
     display:flex;
-    justify-content:flex-end;
-    gap:10px;
+    justify-content:space-between;
+    gap:12px;
     margin-top: 12px;
+    flex-wrap:wrap;
+    width:100%;
+  }
+
+  .actions-right{
+    display:flex;
+    gap:10px;
+    margin-left:auto;
     flex-wrap:wrap;
   }
 
@@ -261,17 +251,20 @@
     margin-top:16px;
   }
 
-  @media (max-width: 900px){
-    .page-head-grid{
-      grid-template-columns: 1fr;
+  @media (max-width: 1100px){
+    .filters-grid{
+      grid-template-columns: 1fr 1fr;
     }
+  }
 
+  @media (max-width: 900px){
     .summary-row{
       grid-template-columns: 1fr 1fr;
     }
   }
 
   @media (max-width: 640px){
+    .filters-grid,
     .summary-row{
       grid-template-columns: 1fr;
     }
@@ -280,47 +273,52 @@
 
 <div class="page">
   <div class="page-head">
-    <div class="page-head-grid">
-      <div class="filters-panel">
-        <div class="controls-row">
-          <div class="control-group">
-            <label class="lbl">Mês/Ano</label>
-            <div class="month-controls">
-              <select id="monthSelect" class="input">
-                <option value="01" {% if sel_month == "01" %}selected{% endif %}>Janeiro</option>
-                <option value="02" {% if sel_month == "02" %}selected{% endif %}>Fevereiro</option>
-                <option value="03" {% if sel_month == "03" %}selected{% endif %}>Março</option>
-                <option value="04" {% if sel_month == "04" %}selected{% endif %}>Abril</option>
-                <option value="05" {% if sel_month == "05" %}selected{% endif %}>Maio</option>
-                <option value="06" {% if sel_month == "06" %}selected{% endif %}>Junho</option>
-                <option value="07" {% if sel_month == "07" %}selected{% endif %}>Julho</option>
-                <option value="08" {% if sel_month == "08" %}selected{% endif %}>Agosto</option>
-                <option value="09" {% if sel_month == "09" %}selected{% endif %}>Setembro</option>
-                <option value="10" {% if sel_month == "10" %}selected{% endif %}>Outubro</option>
-                <option value="11" {% if sel_month == "11" %}selected{% endif %}>Novembro</option>
-                <option value="12" {% if sel_month == "12" %}selected{% endif %}>Dezembro</option>
-              </select>
-
-              {% set y = sel_year|int %}
-              <select id="yearSelect" class="input">
-                {% for yy in range(y - 1, y + 3) %}
-                  <option value="{{ yy }}" {% if yy|string == sel_year %}selected{% endif %}>{{ yy }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-
-          <div class="control-group" style="min-width:320px; flex:1;">
-            <label class="lbl">Buscar paciente</label>
-            <form method="get" action="/meus_clientes" style="display:flex; gap:10px;">
-              <input type="hidden" name="month" value="{{ selected_month }}">
-              <input type="text" name="search" class="input" placeholder="Digite o nome do paciente" value="{{ search }}">
-              <button type="submit" class="btn-cta">Buscar</button>
-            </form>
-          </div>
-        </div>
+    <form method="get" action="/meus_clientes" class="filters-grid">
+      <div class="control-group">
+        <label class="lbl">Buscar paciente</label>
+        <input type="text" name="search" class="input" placeholder="Digite o nome do paciente" value="{{ search }}">
       </div>
-    </div>
+
+      <div class="control-group">
+        <label class="lbl">Mês</label>
+        <select name="month" class="input">
+          <option value="" {% if not selected_month %}selected{% endif %}>Todos</option>
+          <option value="01" {% if selected_month == "01" %}selected{% endif %}>Janeiro</option>
+          <option value="02" {% if selected_month == "02" %}selected{% endif %}>Fevereiro</option>
+          <option value="03" {% if selected_month == "03" %}selected{% endif %}>Março</option>
+          <option value="04" {% if selected_month == "04" %}selected{% endif %}>Abril</option>
+          <option value="05" {% if selected_month == "05" %}selected{% endif %}>Maio</option>
+          <option value="06" {% if selected_month == "06" %}selected{% endif %}>Junho</option>
+          <option value="07" {% if selected_month == "07" %}selected{% endif %}>Julho</option>
+          <option value="08" {% if selected_month == "08" %}selected{% endif %}>Agosto</option>
+          <option value="09" {% if selected_month == "09" %}selected{% endif %}>Setembro</option>
+          <option value="10" {% if selected_month == "10" %}selected{% endif %}>Outubro</option>
+          <option value="11" {% if selected_month == "11" %}selected{% endif %}>Novembro</option>
+          <option value="12" {% if selected_month == "12" %}selected{% endif %}>Dezembro</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label class="lbl">Ano</label>
+        <select name="year" class="input">
+          <option value="" {% if not selected_year %}selected{% endif %}>Todos</option>
+          {% set current_year = now().year if now else 2026 %}
+          {% for yy in range(current_year - 2, current_year + 3) %}
+            <option value="{{ yy }}" {% if selected_year == yy|string %}selected{% endif %}>{{ yy }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="control-group">
+        <button type="submit" class="btn-cta">Buscar</button>
+      </div>
+
+      <div class="control-group">
+        <a href="/meus_clientes" class="btn-secondary" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">
+          Limpar filtros
+        </a>
+      </div>
+    </form>
 
     <div class="summary-row">
       <div class="summary-card">
@@ -378,6 +376,8 @@
               %}
 
               {% set creator = users_by_id.get(e.created_by_id) %}
+              {% set proc_items = procedures_by_entry.get(e.id, []) %}
+              {% set card_month = e.day.strftime("%Y-%m") %}
 
               <div class="entry-card {% if e.is_pre_reservation %}pre{% endif %} {% if e.status == 'pending' %}pending-approval{% endif %}" data-entry-card>
                 <button type="button" class="entry-compact" data-toggle-entry>
@@ -426,25 +426,39 @@
                   </div>
 
                   <div class="entry-actions">
-                    {% if e.status != 'pending' %}
-                      <button
-                        type="button"
-                        class="btn-secondary btn-small"
-                        data-toggle-procs="{{ e.id }}"
-                      >
-                        Ver procedimentos
-                      </button>
-                    {% else %}
-                      <span class="muted" style="font-size:12px; font-weight:800;">
-                        Aguardando aprovação do Johnny
-                      </span>
-                    {% endif %}
+                    <div>
+                      {% if e.status != 'pending' %}
+                        <button
+                          type="button"
+                          class="btn-secondary btn-small"
+                          data-toggle-procs="{{ e.id }}"
+                        >
+                          Ver procedimentos
+                        </button>
+                      {% else %}
+                        <span class="muted" style="font-size:12px; font-weight:800;">
+                          Aguardando aprovação do Johnny
+                        </span>
+                      {% endif %}
+                    </div>
+
+                    <div class="actions-right">
+                      {% if current_user and current_user.username == "johnny.ge" %}
+                        <a class="btn-secondary btn-small" href="/logs?entry_id={{ e.id }}">Logs</a>
+                      {% endif %}
+
+                      <a class="btn-secondary btn-small" href="/mapa?month={{ card_month }}&open=1&edit_id={{ e.id }}">
+                        Editar no mapa
+                      </a>
+
+                      <form method="post" action="/mapa/delete/{{ e.id }}" onsubmit="return confirm('Tem certeza que deseja excluir este agendamento?');">
+                        <button class="btn-secondary btn-small" type="submit">Excluir</button>
+                      </form>
+                    </div>
                   </div>
 
                   {% if e.status != 'pending' %}
                     <div id="proc-box-{{ e.id }}" class="procedures-box">
-                      {% set proc_items = procedures_by_entry.get(e.id, []) %}
-
                       {% if proc_items and proc_items|length > 0 %}
                         {% set ns = namespace(total=0) %}
                         <div style="display:grid; gap:8px;">
@@ -486,33 +500,13 @@
 
     {% if not ns_page.has_any %}
       <div class="empty-state">
-        Nenhum cliente encontrado para este mês{% if search %} com esse filtro de busca{% endif %}.
+        Nenhum cliente encontrado{% if search %} com esse nome{% endif %}.
       </div>
     {% endif %}
   </div>
 </div>
 
 <script>
-  const monthSelect = document.getElementById("monthSelect");
-  const yearSelect = document.getElementById("yearSelect");
-
-  function reloadMonth() {
-    const month = monthSelect.value;
-    const year = yearSelect.value;
-    const params = new URLSearchParams(window.location.search);
-    params.set("month", `${year}-${month}`);
-
-    const search = params.get("search");
-    if (!search) {
-      params.delete("search");
-    }
-
-    window.location.href = `/meus_clientes?${params.toString()}`;
-  }
-
-  if (monthSelect) monthSelect.addEventListener("change", reloadMonth);
-  if (yearSelect) yearSelect.addEventListener("change", reloadMonth);
-
   document.querySelectorAll("[data-toggle-entry]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const card = btn.closest("[data-entry-card]");
