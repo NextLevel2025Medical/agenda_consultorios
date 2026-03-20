@@ -314,6 +314,9 @@
           <th>Procedimentos</th>
           <th>Mês</th>
           <th>Slot</th>
+          {% if current_user and current_user.username == "johnny.ge" %}
+            <th>Ações</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -329,6 +332,17 @@
                 {{ row.slot_type }}
               </span>
             </td>
+
+            {% if current_user and current_user.username == "johnny.ge" %}
+              <td>
+                <form method="post" action="/slot_hsr/{{ row.entry_id }}/refresh" style="margin:0;">
+                  <input type="hidden" name="year" value="{{ selected_year }}">
+                  <button type="submit" class="btn-secondary">
+                    Reprocessar
+                  </button>
+                </form>
+              </td>
+            {% endif %}
           </tr>
         {% else %}
           <tr>
