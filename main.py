@@ -70,37 +70,6 @@ app.add_middleware(SessionMiddleware, secret_key="CHANGE_ME_SUPER_SECRET_KEY")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-
-@app.middleware("http")
-async def feegow_alert_gate_middleware(request: Request, call_next):
-    path = request.url.path
-
-    public_prefixes = (
-        "/login",
-        "/logout",
-        "/auditoria_feegow/alertas",
-        "/auditoria_feegow/alertas/ciencia",
-        "/static",
-        "/service-worker.js",
-        "/favicon.ico",
-    )
-
-    session_data = request.scope.get("session") or {}
-    user_id = session_data.get("user_id")
-    gate_required = session_data.get("feegow_alert_gate_required")
-
-    if user_id and gate_required:
-        is_allowed_path = any(
-            path == prefix or path.startswith(prefix + "/")
-            for prefix in public_prefixes
-        )
-
-        if not is_allowed_path:
-            return RedirectResponse(url="/auditoria_feegow/alertas", status_code=303)
-
-    response = await call_next(request)
-    return response
-
 @app.get("/service-worker.js")
 def service_worker():
     return FileResponse(
@@ -380,11 +349,35 @@ def build_slots_for_day(day: date):
         cur += timedelta(minutes=SLOT_MINUTES)
     return slots
 
+def is_feegow_gate_allowed_path(path: str) -> bool:
+    allowed_prefixes = (
+        "/login",
+        "/logout",
+        "/auditoria_feegow/alertas",
+        "/auditoria_feegow/alertas/ciencia",
+        "/static",
+        "/service-worker.js",
+        "/favicon.ico",
+    )
+
+    return any(
+        path == prefix or path.startswith(prefix + "/")
+        for prefix in allowed_prefixes
+    )
 
 def get_current_user(request: Request, session: Session) -> Optional[User]:
     uid = request.session.get("user_id")
     if not uid:
         return None
+
+    if request.session.get("feegow_alert_gate_required"):
+        current_path = request.url.path
+        if not is_feegow_gate_allowed_path(current_path):
+            raise HTTPException(
+                status_code=303,
+                headers={"Location": "/auditoria_feegow/alertas"},
+            )
+
     return session.get(User, uid)
 
 def audit_event(
