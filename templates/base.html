@@ -231,6 +231,28 @@
       flex: 0 0 auto;
     }
 
+    .menu-badge-alert{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: rgba(239,68,68,.16);
+      border: 1px solid rgba(239,68,68,.30);
+      color: #fca5a5;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      margin-left: 8px;
+      flex: 0 0 auto;
+    }
+
+    .app-layout.sidebar-collapsed .menu-badge-alert{
+      display:none;
+    }
+
     .menu-divider{
       height: 1px;
       background: rgba(255,255,255,.06);
@@ -713,7 +735,10 @@
                 <a href="/validacao_feegow" class="menu-link {% if current_path == '/validacao_feegow' %}active{% endif %}">
                   <div class="menu-link-left">
                     <span class="menu-icon">{{ icon("shield-check") }}</span>
-                    <span class="menu-text">Validação Feegow</span>
+                    <span class="menu-text">Auditoria Feegow</span>
+                    {% if feegow_alert_count|default(0) > 0 %}
+                      <span class="menu-badge-alert">{{ feegow_alert_count }}</span>
+                    {% endif %}
                   </div>
                   <span class="menu-arrow">›</span>
                 </a>

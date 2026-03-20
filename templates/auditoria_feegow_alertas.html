@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - ALERTAS AUDITORIA FEEGOW{% endblock %}
+{% block header_title %}Alertas da Auditoria Feegow{% endblock %}
+{% block content %}
+
+<style>
+  .alert-gate-wrap{
+    display:grid;
+    gap:18px;
+  }
+
+  .alert-gate-box{
+    border:1px solid rgba(239,68,68,.20);
+    background:linear-gradient(180deg, rgba(239,68,68,.10), rgba(255,255,255,.03));
+    border-radius:22px;
+    padding:22px;
+    box-shadow:0 18px 48px rgba(0,0,0,.32);
+  }
+
+  .alert-gate-title{
+    font-size:28px;
+    font-weight:900;
+    color:#fff;
+    margin-bottom:8px;
+  }
+
+  .alert-gate-subtitle{
+    color:rgba(255,255,255,.76);
+    line-height:1.6;
+    margin-bottom:14px;
+  }
+
+  .alert-run-meta{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color:rgba(255,255,255,.82);
+    font-size:13px;
+    font-weight:800;
+  }
+
+  .alert-list{
+    display:grid;
+    gap:12px;
+    margin-top:18px;
+  }
+
+  .alert-card{
+    border:1px solid rgba(239,68,68,.20);
+    background:rgba(255,255,255,.03);
+    border-radius:18px;
+    padding:16px;
+  }
+
+  .alert-patient{
+    font-size:18px;
+    font-weight:900;
+    color:#fff;
+  }
+
+  .alert-meta{
+    margin-top:8px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .alert-pill{
+    display:inline-flex;
+    align-items:center;
+    padding:6px 10px;
+    border-radius:999px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color:rgba(255,255,255,.82);
+    font-size:12px;
+    font-weight:800;
+  }
+
+  .alert-status{
+    background:rgba(239,68,68,.12);
+    border:1px solid rgba(239,68,68,.28);
+    color:#fca5a5;
+  }
+
+  .alert-detail{
+    margin-top:10px;
+    color:rgba(255,255,255,.74);
+    line-height:1.55;
+  }
+
+  .alert-actions{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-top:18px;
+  }
+</style>
+
+<div class="alert-gate-wrap">
+  <div class="alert-gate-box">
+    <div class="alert-gate-title">⚠️ Atenção: existem pendências na Auditoria Feegow</div>
+
+    <div class="alert-gate-subtitle">
+      Antes de seguir para o sistema, revise os pacientes abaixo. Essas pendências foram atribuídas a agendamentos cadastrados por você e precisam ser corrigidas no Feegow ou no mapa cirúrgico.
+    </div>
+
+    {% if latest_run %}
+      <div class="alert-run-meta">
+        Execução #{{ latest_run.id }} · período de {{ latest_run.period_start.strftime("%d/%m/%Y") }} até {{ latest_run.period_end.strftime("%d/%m/%Y") }}
+      </div>
+    {% endif %}
+
+    <div class="alert-list">
+      {% for row in pending_alerts %}
+        <div class="alert-card">
+          <div class="alert-patient">{{ row.map_patient_name }}</div>
+
+          <div class="alert-meta">
+            <span class="alert-pill">{{ row.map_day.strftime("%d/%m/%Y") }}</span>
+            <span class="alert-pill">{{ row.map_surgeon_name or "—" }}</span>
+
+            {% if row.validation_status == "alert" %}
+              <span class="alert-pill alert-status">ALERTA FEEGOW</span>
+            {% elif row.validation_status == "surgeon_not_mapped" %}
+              <span class="alert-pill alert-status">SEM MAPEAMENTO</span>
+            {% elif row.validation_status == "api_error" %}
+              <span class="alert-pill alert-status">ERRO API</span>
+            {% endif %}
+          </div>
+
+          <div class="alert-detail">
+            {{ row.detail_message or "Pendência identificada na auditoria." }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="alert-actions">
+      <a href="/validacao_feegow" class="btn-secondary">Ver auditoria completa</a>
+
+      <form method="post" action="/auditoria_feegow/alertas/ciencia">
+        <button type="submit" class="btn-cta">Estou ciente</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

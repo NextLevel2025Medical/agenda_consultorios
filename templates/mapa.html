@@ -250,6 +250,61 @@
     border-color: rgba(168, 85, 247, .35);
   }
 
+  .entry-card.feegow-ok{
+    border-color: rgba(34,197,94,.30);
+    box-shadow: 0 0 0 1px rgba(34,197,94,.12) inset;
+  }
+
+  .entry-card.feegow-alert{
+    border-color: rgba(239,68,68,.45);
+    box-shadow: 0 0 0 1px rgba(239,68,68,.18) inset;
+  }
+
+  .entry-card.feegow-unmapped{
+    border-color: rgba(234,179,8,.40);
+    box-shadow: 0 0 0 1px rgba(234,179,8,.14) inset;
+  }
+
+  .entry-card.feegow-api-error{
+    border-color: rgba(168,85,247,.40);
+    box-shadow: 0 0 0 1px rgba(168,85,247,.14) inset;
+  }
+
+  .feegow-status-badge{
+    display:inline-flex;
+    align-items:center;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.04em;
+    line-height:1;
+  }
+
+  .feegow-status-badge.ok{
+    background: rgba(34,197,94,.12);
+    border:1px solid rgba(34,197,94,.28);
+    color:#86efac;
+  }
+
+  .feegow-status-badge.alert{
+    background: rgba(239,68,68,.12);
+    border:1px solid rgba(239,68,68,.28);
+    color:#fca5a5;
+  }
+
+  .feegow-status-badge.unmapped{
+    background: rgba(234,179,8,.12);
+    border:1px solid rgba(234,179,8,.28);
+    color:#fde68a;
+  }
+
+  .feegow-status-badge.api{
+    background: rgba(168,85,247,.12);
+    border:1px solid rgba(168,85,247,.28);
+    color:#d8b4fe;
+  }
+
   .entry-actions{
     display:flex;
     justify-content:flex-end;
@@ -730,17 +785,33 @@
                 else ("type-refinamento" if e.procedure_type == "Refinamento" else "type-simples")
             %}
 
+            {% set feegow_status = latest_feegow_status_by_entry.get(e.id) if latest_feegow_status_by_entry is defined else None %}
+
             <div class="entry-card
               {% if e.is_pre_reservation %}pre{% endif %}
               {% if e.status == 'pending' %}pending-approval{% endif %}
+              {% if feegow_status == 'ok' %}feegow-ok{% elif feegow_status == 'alert' %}feegow-alert{% elif feegow_status == 'surgeon_not_mapped' %}feegow-unmapped{% elif feegow_status == 'api_error' %}feegow-api-error{% endif %}
             ">
                 <div class="entry-top">
-                <div>
-                    <div class="patient-name">{{ e.patient_name }}</div>
-                    <div class="muted" style="margin-top:4px; font-weight:600;margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 10px;">
-                    {{ day.strftime("%d/%m/%Y") }}
+                  <div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                      <div class="patient-name">{{ e.patient_name }}</div>
+
+                      {% if feegow_status == 'ok' %}
+                        <span class="feegow-status-badge ok">FEEGOW OK</span>
+                      {% elif feegow_status == 'alert' %}
+                        <span class="feegow-status-badge alert">ALERTA FEEGOW</span>
+                      {% elif feegow_status == 'surgeon_not_mapped' %}
+                        <span class="feegow-status-badge unmapped">SEM MAPEAMENTO</span>
+                      {% elif feegow_status == 'api_error' %}
+                        <span class="feegow-status-badge api">ERRO API</span>
+                      {% endif %}
                     </div>
-                </div>
+
+                    <div class="muted" style="margin-top:4px; font-weight:600;margin-bottom: 25px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border-radius: 10px;">
+                      {{ day.strftime("%d/%m/%Y") }}
+                    </div>
+                  </div>
                 </div>
 
                 {% set creator = users_by_id.get(e.created_by_id) %}
