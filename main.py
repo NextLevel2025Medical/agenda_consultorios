@@ -888,8 +888,8 @@ def hotel_card_from_reservation(r: LodgingReservation) -> dict:
 
 
 def build_hotel_dashboard_data(session: Session, ref_day: date) -> dict:
-    units = ["suite_1", "suite_2", "apto"]
-
+    units = ["suite_2", "suite_1", "apto"]
+    
     # check-in hoje
     checkins_rows = session.exec(
         select(LodgingReservation).where(
@@ -5118,8 +5118,8 @@ def hospedagem_page(
     years = list(range(first_day.year, first_day.year + 6))
     day_index = {d: i for i, d in enumerate(days)}
 
-    units = ["suite_1", "suite_2", "apto"]
-
+    units = ["suite_2", "suite_1", "apto"]
+    
     audit_logger.info(
         f"HOSPEDAGEM_PAGE: selected_month={selected_month} "
         f"first_day={first_day} next_month_first={next_month_first}"
