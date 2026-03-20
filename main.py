@@ -85,8 +85,15 @@ async def feegow_alert_gate_middleware(request: Request, call_next):
         "/favicon.ico",
     )
 
-    if request.session.get("user_id") and request.session.get("feegow_alert_gate_required"):
-        is_allowed_path = any(path == prefix or path.startswith(prefix + "/") for prefix in public_prefixes)
+    session_data = request.scope.get("session") or {}
+    user_id = session_data.get("user_id")
+    gate_required = session_data.get("feegow_alert_gate_required")
+
+    if user_id and gate_required:
+        is_allowed_path = any(
+            path == prefix or path.startswith(prefix + "/")
+            for prefix in public_prefixes
+        )
 
         if not is_allowed_path:
             return RedirectResponse(url="/auditoria_feegow/alertas", status_code=303)
@@ -2676,7 +2683,7 @@ def login_action(
         request.session["feegow_alert_gate_required"] = True
         return redirect("/auditoria_feegow/alertas")
 
-    request.session["feegow_alert_gate_required"] = True
+    request.session["feegow_alert_gate_required"] = False
     return redirect("/")
 
 @app.post("/logout")
