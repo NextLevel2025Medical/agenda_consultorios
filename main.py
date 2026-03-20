@@ -70,6 +70,30 @@ app.add_middleware(SessionMiddleware, secret_key="CHANGE_ME_SUPER_SECRET_KEY")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+@app.middleware("http")
+async def feegow_alert_gate_middleware(request: Request, call_next):
+    path = request.url.path
+
+    public_prefixes = (
+        "/login",
+        "/logout",
+        "/auditoria_feegow/alertas",
+        "/auditoria_feegow/alertas/ciencia",
+        "/static",
+        "/service-worker.js",
+        "/favicon.ico",
+    )
+
+    if request.session.get("user_id") and request.session.get("feegow_alert_gate_required"):
+        is_allowed_path = any(path == prefix or path.startswith(prefix + "/") for prefix in public_prefixes)
+
+        if not is_allowed_path:
+            return RedirectResponse(url="/auditoria_feegow/alertas", status_code=303)
+
+    response = await call_next(request)
+    return response
+
 @app.get("/service-worker.js")
 def service_worker():
     return FileResponse(
@@ -2649,8 +2673,10 @@ def login_action(
 
     pending_feegow_alerts = get_pending_feegow_alerts_for_user(session, user.id)
     if pending_feegow_alerts:
+        request.session["feegow_alert_gate_required"] = True
         return redirect("/auditoria_feegow/alertas")
 
+    request.session["feegow_alert_gate_required"] = True
     return redirect("/")
 
 @app.post("/logout")
@@ -2672,7 +2698,10 @@ def auditoria_feegow_alertas_page(
     pending_alerts = get_pending_feegow_alerts_for_user(session, user.id)
 
     if not pending_alerts:
+        request.session["feegow_alert_gate_required"] = False
         return redirect("/")
+
+    request.session["feegow_alert_gate_required"] = True
 
     latest_run = get_latest_feegow_run(session)
 
@@ -2721,6 +2750,8 @@ def auditoria_feegow_alertas_ciencia(
         )
 
     session.commit()
+
+    request.session["feegow_alert_gate_required"] = False
 
     latest_run = get_latest_feegow_run(session)
 
