@@ -4176,6 +4176,111 @@ def mapa_delete(
     )
     return redirect("/mapa")
 
+@app.get("/meus_clientes", response_class=HTMLResponse)
+def meus_clientes_page(
+    request: Request,
+    month: Optional[str] = None,
+    search: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "surgery"), "Acesso restrito ao Mapa Cirúrgico.")
+
+    selected_month, first_day, next_first, days = safe_selected_month(month)
+
+    search_term = (search or "").strip().upper()
+
+    audit_event(
+        request,
+        user,
+        "meus_clientes_page_view",
+        extra={
+            "month": selected_month,
+            "search": search_term,
+        },
+    )
+
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
+    users_all = session.exec(select(User)).all()
+    users_by_id = {u.id: u for u in users_all if u.id is not None}
+
+    query = (
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= first_day,
+            SurgicalMapEntry.day < next_first,
+            SurgicalMapEntry.created_by_id == user.id,
+            visible_surgical_map_status_clause(),
+        )
+    )
+
+    if search_term:
+        query = query.where(SurgicalMapEntry.patient_name.contains(search_term))
+
+    entries = session.exec(
+        query.order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+    ).all()
+
+    entry_ids = [e.id for e in entries if e.id is not None]
+
+    procedure_items = []
+    if entry_ids:
+        procedure_items = session.exec(
+            select(SurgeryProcedureItem)
+            .where(SurgeryProcedureItem.surgery_entry_id.in_(entry_ids))
+            .order_by(SurgeryProcedureItem.surgery_entry_id, SurgeryProcedureItem.id)
+        ).all()
+
+    procedures_by_entry: dict[int, list[dict]] = defaultdict(list)
+
+    for item in procedure_items:
+        procedures_by_entry[item.surgery_entry_id].append({
+            "procedure_id": item.procedure_id,
+            "procedure_name": item.procedure_name_snapshot,
+            "amount": item.amount,
+            "nucleus": item.nucleus_snapshot,
+        })
+
+    entries_by_day: dict[str, list[SurgicalMapEntry]] = {}
+    for e in entries:
+        entries_by_day.setdefault(e.day.isoformat(), []).append(e)
+
+    weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
+
+    total_clientes = len(entries)
+    total_confirmados = len([e for e in entries if e.status != "pending" and not e.is_pre_reservation])
+    total_pre_reservas = len([e for e in entries if e.is_pre_reservation])
+    total_pendentes = len([e for e in entries if e.status == "pending"])
+
+    return templates.TemplateResponse(
+        "meus_clientes.html",
+        {
+            "request": request,
+            "current_user": user,
+            "fmt_brasilia": fmt_brasilia,
+            "title": "Meus Clientes",
+            "selected_month": selected_month,
+            "days": days,
+            "entries_by_day": entries_by_day,
+            "surgeons": surgeons,
+            "weekday_map": weekday_map,
+            "users_by_id": users_by_id,
+            "procedures_by_entry": procedures_by_entry,
+            "search": search or "",
+            "total_clientes": total_clientes,
+            "total_confirmados": total_confirmados,
+            "total_pre_reservas": total_pre_reservas,
+            "total_pendentes": total_pendentes,
+        },
+    )
+
 @app.get("/logs", response_class=HTMLResponse)
 def logs_page(
     request: Request,
@@ -6269,7 +6374,7 @@ def procedimentos_update(
             "old_allowed_nuclei": old_allowed or [],
             "new_name": row.name,
             "new_nucleus": row.nucleus,
-            "new_allowed_nuclei": json.loads(row.allowed_nuclei_json or "[]"),
+            "new_allowed_nuclei": row.allowed_nuclei_json or [],
             "is_active": row.is_active,
         },
     )
