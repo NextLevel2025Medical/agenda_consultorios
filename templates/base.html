@@ -584,6 +584,11 @@
         <circle cx="11" cy="11" r="7"></circle>
         <path d="M20 20l-3.5-3.5"></path>
       </svg>
+    {% elif name == "shield-check" %}
+      <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-3z"></path>
+        <path d="M9 12l2 2 4-4"></path>
+      </svg>
     {% elif name == "user" %}
       <svg fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 21a8 8 0 0 0-16 0"></path>
@@ -705,6 +710,14 @@
               </a>
 
               {% if current_user and current_user.username == "johnny.ge" %}
+                <a href="/validacao_feegow" class="menu-link {% if current_path == '/validacao_feegow' %}active{% endif %}">
+                  <div class="menu-link-left">
+                    <span class="menu-icon">{{ icon("shield-check") }}</span>
+                    <span class="menu-text">Validação Feegow</span>
+                  </div>
+                  <span class="menu-arrow">›</span>
+                </a>
+
                 <a href="/usuarios" class="menu-link {% if current_path == '/usuarios' %}active{% endif %}">
                   <div class="menu-link-left">
                     <span class="menu-icon">{{ icon("lock") }}</span>

@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block page_title %}CONCEPT SYS - VALIDAÇÃO FEEGOW{% endblock %}
+{% block header_title %}Validação Feegow{% endblock %}
+{% block content %}
+
+<style>
+  .validation-wrap{display:grid; gap:18px;}
+  .panel-box{
+    border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.03);
+    border-radius:18px;
+    padding:18px;
+    box-shadow:0 16px 40px rgba(0,0,0,.28);
+  }
+  .panel-title{
+    font-size:18px;
+    font-weight:900;
+    color:#fff;
+    margin-bottom:10px;
+  }
+  .panel-subtitle{
+    color:rgba(255,255,255,.68);
+    line-height:1.5;
+    margin-bottom:14px;
+  }
+  .msg{
+    padding:12px 14px;
+    border-radius:14px;
+    font-weight:700;
+    margin-bottom:10px;
+  }
+  .msg-ok{
+    background:rgba(34,197,94,.12);
+    border:1px solid rgba(34,197,94,.28);
+    color:#86efac;
+  }
+  .msg-err{
+    background:rgba(239,68,68,.12);
+    border:1px solid rgba(239,68,68,.28);
+    color:#fca5a5;
+  }
+  .grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  .grid-3{
+    display:grid;
+    grid-template-columns:1fr 1fr auto;
+    gap:14px;
+    align-items:end;
+  }
+  .summary-grid{
+    display:grid;
+    grid-template-columns:repeat(5, minmax(0,1fr));
+    gap:12px;
+  }
+  .summary-card{
+    border-radius:16px;
+    border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.03);
+    padding:14px 16px;
+  }
+  .summary-label{
+    font-size:12px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:rgba(255,255,255,.56);
+  }
+  .summary-value{
+    margin-top:6px;
+    font-size:26px;
+    font-weight:900;
+    color:var(--accent);
+  }
+  .field{
+    display:grid;
+    gap:8px;
+  }
+  .field label{
+    font-size:12px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:rgba(255,255,255,.56);
+  }
+  .mapping-table,
+  .result-table{
+    width:100%;
+    border-collapse:collapse;
+  }
+  .mapping-table th,
+  .mapping-table td,
+  .result-table th,
+  .result-table td{
+    padding:12px 10px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    vertical-align:top;
+    text-align:left;
+  }
+  .mapping-table th,
+  .result-table th{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:rgba(255,255,255,.56);
+  }
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    padding:6px 10px;
+    border-radius:999px;
+    font-weight:800;
+    font-size:12px;
+    letter-spacing:.04em;
+  }
+  .badge-ok{
+    background:rgba(34,197,94,.12);
+    border:1px solid rgba(34,197,94,.28);
+    color:#86efac;
+  }
+  .badge-alert{
+    background:rgba(239,68,68,.12);
+    border:1px solid rgba(239,68,68,.28);
+    color:#fca5a5;
+  }
+  .badge-unmapped{
+    background:rgba(234,179,8,.12);
+    border:1px solid rgba(234,179,8,.28);
+    color:#fde68a;
+  }
+  .badge-api{
+    background:rgba(168,85,247,.12);
+    border:1px solid rgba(168,85,247,.28);
+    color:#d8b4fe;
+  }
+  .muted{
+    color:rgba(255,255,255,.64);
+  }
+  .note{
+    font-size:13px;
+    color:rgba(255,255,255,.60);
+    margin-top:10px;
+  }
+  @media (max-width: 1100px){
+    .grid-2, .grid-3, .summary-grid{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+<div class="validation-wrap">
+
+  {% if ok %}
+    <div class="msg msg-ok">{{ ok }}</div>
+  {% endif %}
+
+  {% if err %}
+    <div class="msg msg-err">{{ err }}</div>
+  {% endif %}
+
+  <div class="panel-box">
+    <div class="panel-title">Validação Feegow</div>
+    <div class="panel-subtitle">
+      Esta rotina confere se os pacientes do mapa cirúrgico possuem agendamento correspondente no Feegow,
+      usando data + cirurgião mapeado + nome do paciente normalizado.
+    </div>
+
+    {% if not feegow_token_configured %}
+      <div class="msg msg-err">
+        A variável de ambiente <strong>FEEGOW_API_TOKEN</strong> ainda não está configurada no servidor.
+      </div>
+    {% endif %}
+
+    <div class="note">
+      Nesta primeira versão, a execução está limitada a <strong>30 dias por vez</strong>.
+    </div>
+  </div>
+
+  <div class="panel-box">
+    <div class="panel-title">1. Mapeamento manual dos cirurgiões</div>
+    <div class="panel-subtitle">
+      Preencha o <strong>profissional_id</strong> do Feegow para cada médico interno. Isso é feito uma única vez e depois reaproveitado nas validações.
+    </div>
+
+    <form method="post" action="/validacao_feegow/mapeamentos">
+      <table class="mapping-table">
+        <thead>
+          <tr>
+            <th>Cirurgião interno</th>
+            <th>ID do usuário interno</th>
+            <th>Feegow profissional_id</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for surgeon in surgeons %}
+            {% set mapping = mappings_by_user_id.get(surgeon.id) %}
+            <tr>
+              <td>{{ surgeon.full_name }}</td>
+              <td>{{ surgeon.id }}</td>
+              <td style="max-width:180px;">
+                <input
+                  type="number"
+                  class="input"
+                  name="feegow_professional_id_{{ surgeon.id }}"
+                  value="{{ mapping.feegow_professional_id if mapping else '' }}"
+                  placeholder="Ex: 1"
+                >
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div style="margin-top:14px;">
+        <button type="submit" class="btn-cta">Salvar mapeamentos</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel-box">
+    <div class="panel-title">2. Executar validação</div>
+    <div class="panel-subtitle">
+      O sistema vai olhar o mapa cirúrgico nesse intervalo e verificar se existe agendamento correspondente no Feegow.
+    </div>
+
+    <form method="post" action="/validacao_feegow/executar" class="grid-3">
+      <div class="field">
+        <label>Data inicial</label>
+        <input type="date" name="start_date" class="input" value="{{ today_iso }}" required>
+      </div>
+
+      <div class="field">
+        <label>Data final</label>
+        <input type="date" name="end_date" class="input" value="{{ default_end_iso }}" required>
+      </div>
+
+      <div>
+        <button type="submit" class="btn-cta">Executar validação</button>
+      </div>
+    </form>
+  </div>
+
+  {% if selected_run %}
+    <div class="panel-box">
+      <div class="panel-title">3. Resultado da última execução</div>
+      <div class="panel-subtitle">
+        Execução #{{ selected_run.id }} · período de {{ selected_run.period_start.strftime("%d/%m/%Y") }} até {{ selected_run.period_end.strftime("%d/%m/%Y") }}
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">Total analisado</div>
+          <div class="summary-value">{{ selected_run.total_entries }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">OK</div>
+          <div class="summary-value">{{ selected_run.total_ok }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Alertas</div>
+          <div class="summary-value">{{ selected_run.total_alert }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Não mapeados</div>
+          <div class="summary-value">{{ selected_run.total_unmapped }}</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Erros API</div>
+          <div class="summary-value">{{ selected_run.total_api_error }}</div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px; overflow:auto;">
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Paciente</th>
+              <th>Cirurgião</th>
+              <th>Status</th>
+              <th>Detalhe</th>
+              <th>Feegow</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in results %}
+              <tr>
+                <td>{{ row.map_day.strftime("%d/%m/%Y") }}</td>
+                <td>{{ row.map_patient_name }}</td>
+                <td>{{ row.map_surgeon_name or "—" }}</td>
+                <td>
+                  {% if row.validation_status == "ok" %}
+                    <span class="badge badge-ok">OK</span>
+                  {% elif row.validation_status == "alert" %}
+                    <span class="badge badge-alert">ALERTA</span>
+                  {% elif row.validation_status == "surgeon_not_mapped" %}
+                    <span class="badge badge-unmapped">NÃO MAPEADO</span>
+                  {% else %}
+                    <span class="badge badge-api">ERRO API</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.detail_message or "—" }}</td>
+                <td class="muted">
+                  {% if row.matched_feegow_patient_name %}
+                    Paciente: {{ row.matched_feegow_patient_name }}<br>
+                  {% endif %}
+                  {% if row.matched_feegow_agendamento_id %}
+                    Agendamento: {{ row.matched_feegow_agendamento_id }}<br>
+                  {% endif %}
+                  {% if row.matched_feegow_professional_id %}
+                    Profissional: {{ row.matched_feegow_professional_id }}<br>
+                  {% endif %}
+                  {% if row.matched_feegow_date %}
+                    Data: {{ row.matched_feegow_date }}
+                  {% endif %}
+                  {% if not row.matched_feegow_patient_name and not row.matched_feegow_agendamento_id and not row.matched_feegow_professional_id %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}
