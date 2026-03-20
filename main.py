@@ -2145,6 +2145,57 @@ def slot_hsr_page(
         },
     )
 
+@app.post("/slot_hsr/{entry_id}/refresh")
+def slot_hsr_refresh_entry(
+    entry_id: int,
+    request: Request,
+    year: Optional[int] = Form(None),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    if user.username != "johnny.ge":
+        raise HTTPException(status_code=403, detail="Apenas o usuário master pode reprocessar slots.")
+
+    entry = session.get(SurgicalMapEntry, entry_id)
+    if not entry:
+        return redirect(f"/slot_hsr?year={year or date.today().year}")
+
+    before_items = session.exec(
+        select(SurgeryProcedureItem)
+        .where(SurgeryProcedureItem.surgery_entry_id == entry_id)
+        .order_by(SurgeryProcedureItem.id)
+    ).all()
+    before_slot_type = classify_hsr_slot_from_items(before_items)
+
+    refresh_surgery_procedure_items(session, surgery_entry_id=entry_id)
+
+    after_items = session.exec(
+        select(SurgeryProcedureItem)
+        .where(SurgeryProcedureItem.surgery_entry_id == entry_id)
+        .order_by(SurgeryProcedureItem.id)
+    ).all()
+    after_slot_type = classify_hsr_slot_from_items(after_items)
+
+    audit_event(
+        request,
+        user,
+        "slot_hsr_refresh",
+        success=True,
+        target_type="surgical_map_entry",
+        target_id=entry_id,
+        message=f"Slot HSR reprocessado: {before_slot_type} -> {after_slot_type}",
+        extra={
+            "entry_id": entry_id,
+            "before_slot_type": before_slot_type,
+            "after_slot_type": after_slot_type,
+        },
+    )
+
+    return redirect(f"/slot_hsr?year={year or date.today().year}")
+
 @app.get("/consulta_disponibilidade", response_class=HTMLResponse)
 def consulta_disponibilidade_page(
     request: Request,
@@ -3457,7 +3508,6 @@ def save_surgery_procedure_items(
     - form_data: dados do form (para ler procedure_amount_{id})
     """
 
-    # remove itens antigos da cirurgia (útil para update também)
     session.exec(
         delete(SurgeryProcedureItem).where(
             SurgeryProcedureItem.surgery_entry_id == surgery_entry_id
@@ -3468,11 +3518,17 @@ def save_surgery_procedure_items(
         session.commit()
         return
 
+    entry = session.get(SurgicalMapEntry, surgery_entry_id)
+    surgeon = None
+    if entry and entry.surgeon_id:
+        surgeon = session.get(User, entry.surgeon_id)
+
     catalog_rows = session.exec(
         select(ProcedureCatalog).where(ProcedureCatalog.id.in_(procedure_ids))
     ).all()
 
     catalog_by_id = {p.id: p for p in catalog_rows if p.id is not None}
+    resolved_nuclei = resolve_procedure_nuclei_for_entry(catalog_rows, surgeon)
 
     items_to_add = []
 
@@ -3489,13 +3545,82 @@ def save_surgery_procedure_items(
         except ValueError:
             amount = 0.0
 
+        resolved_nucleus = resolved_nuclei.get(pid, proc.nucleus)
+
         items_to_add.append(
             SurgeryProcedureItem(
                 surgery_entry_id=surgery_entry_id,
                 procedure_id=pid,
                 procedure_name_snapshot=proc.name,
-                nucleus_snapshot=proc.nucleus,
+                nucleus_snapshot=resolved_nucleus,
                 amount=amount,
+            )
+        )
+
+    if items_to_add:
+        session.add_all(items_to_add)
+
+    session.commit()
+
+def refresh_surgery_procedure_items(session: Session, *, surgery_entry_id: int) -> None:
+    """
+    Reprocessa os procedimentos já gravados de uma cirurgia,
+    preservando os mesmos procedimentos e valores, mas recalculando
+    o nucleus_snapshot com base no catálogo atual e no cirurgião.
+    """
+    entry = session.get(SurgicalMapEntry, surgery_entry_id)
+    if not entry:
+        return
+
+    current_items = session.exec(
+        select(SurgeryProcedureItem)
+        .where(SurgeryProcedureItem.surgery_entry_id == surgery_entry_id)
+        .order_by(SurgeryProcedureItem.id)
+    ).all()
+
+    if not current_items:
+        return
+
+    procedure_ids = [item.procedure_id for item in current_items if item.procedure_id]
+    if not procedure_ids:
+        return
+
+    amount_by_pid = {}
+    for item in current_items:
+        if item.procedure_id is not None:
+            amount_by_pid[item.procedure_id] = float(item.amount or 0)
+
+    surgeon = None
+    if entry.surgeon_id:
+        surgeon = session.get(User, entry.surgeon_id)
+
+    catalog_rows = session.exec(
+        select(ProcedureCatalog).where(ProcedureCatalog.id.in_(procedure_ids))
+    ).all()
+
+    catalog_by_id = {p.id: p for p in catalog_rows if p.id is not None}
+    resolved_nuclei = resolve_procedure_nuclei_for_entry(catalog_rows, surgeon)
+
+    session.exec(
+        delete(SurgeryProcedureItem).where(
+            SurgeryProcedureItem.surgery_entry_id == surgery_entry_id
+        )
+    )
+
+    items_to_add = []
+
+    for pid in procedure_ids:
+        proc = catalog_by_id.get(pid)
+        if not proc:
+            continue
+
+        items_to_add.append(
+            SurgeryProcedureItem(
+                surgery_entry_id=surgery_entry_id,
+                procedure_id=pid,
+                procedure_name_snapshot=proc.name,
+                nucleus_snapshot=resolved_nuclei.get(pid, proc.nucleus),
+                amount=amount_by_pid.get(pid, 0.0),
             )
         )
 
@@ -4590,6 +4715,7 @@ def build_slot_hsr_data(session: Session, year: int) -> dict:
                 month_used_by_type[slot_type] += 1
 
             details.append({
+                "entry_id": entry.id,
                 "date": entry.day.strftime("%d/%m/%Y"),
                 "patient": entry.patient_name,
                 "surgeon": surgeons_map.get(entry.surgeon_id, "—"),
