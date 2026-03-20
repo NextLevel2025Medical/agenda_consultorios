@@ -741,16 +741,16 @@ def get_lodging_conflict_row(
 
 def human_unit(unit: str) -> str:
     return {
-        "suite_1": "Suíte 1303",
-        "suite_2": "Suíte 1304",
+        "suite_1": "Suíte 1304",
+        "suite_2": "Suíte 1303",
         "apto": "Apartamento",
     }.get(unit, unit)
 
 def format_unit_for_email(unit: str) -> str:
     unit_norm = normalize_unit(unit)
     return {
-        "suite_1": "RESERVA SUÍTE 1303",
-        "suite_2": "RESERVA SUÍTE 1304",
+        "suite_1": "RESERVA SUÍTE 1304",
+        "suite_2": "RESERVA SUÍTE 1303",
         "apto": "RESERVA APARTAMENTO",
     }.get(unit_norm, f"RESERVA {unit_norm.upper()}")
 
