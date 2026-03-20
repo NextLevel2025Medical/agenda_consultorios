@@ -36,6 +36,9 @@ from models import (
     SurgeryProcedureItem,
     PushSubscription,
     PushNotificationLog,
+    FeegowProfessionalMap,
+    FeegowValidationRun,
+    FeegowValidationResult,
 )
 from auth import hash_password, verify_password, require
 
@@ -45,6 +48,9 @@ import calendar
 import os
 import json
 import logging
+import re
+import unicodedata
+import requests
 from logging.handlers import RotatingFileHandler
 
 import threading
@@ -507,6 +513,141 @@ def build_surgical_map_changes(before: dict[str, Any], after: dict[str, Any]) ->
         )
 
     return changes
+
+FEEGOW_API_BASE_URL = "https://api.feegow.com/v1/api"
+FEEGOW_API_TOKEN = os.getenv("FEEGOW_API_TOKEN", "").strip()
+FEEGOW_VALIDATION_MAX_DAYS = 30
+
+
+def normalize_person_name(value: str | None) -> str:
+    text_value = (value or "").strip().upper()
+    text_value = unicodedata.normalize("NFKD", text_value)
+    text_value = "".join(ch for ch in text_value if not unicodedata.combining(ch))
+    text_value = re.sub(r"[^A-Z0-9 ]+", " ", text_value)
+    text_value = re.sub(r"\s+", " ", text_value).strip()
+    return text_value
+
+
+def names_equivalent(a: str | None, b: str | None) -> bool:
+    na = normalize_person_name(a)
+    nb = normalize_person_name(b)
+
+    if not na or not nb:
+        return False
+
+    if na == nb:
+        return True
+
+    if na in nb or nb in na:
+        return True
+
+    stopwords = {"DA", "DE", "DI", "DO", "DU", "DAS", "DOS", "E"}
+    ta = [t for t in na.split() if len(t) > 1 and t not in stopwords]
+    tb = [t for t in nb.split() if len(t) > 1 and t not in stopwords]
+
+    if not ta or not tb:
+        return False
+
+    common = set(ta) & set(tb)
+    return len(common) >= min(2, len(ta), len(tb))
+
+
+def feegow_headers() -> dict[str, str]:
+    if not FEEGOW_API_TOKEN:
+        raise RuntimeError("A variável de ambiente FEEGOW_API_TOKEN não foi configurada.")
+    return {
+        "Host": "api.feegow.com",
+        "x-access-token": FEEGOW_API_TOKEN,
+    }
+
+
+def feegow_get_json(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
+    url = f"{FEEGOW_API_BASE_URL}/{endpoint.lstrip('/')}"
+    response = requests.get(url, headers=feegow_headers(), params=params, timeout=45)
+
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {"success": False, "content": response.text}
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Feegow retornou {response.status_code} em {endpoint}: {payload}"
+        )
+
+    return payload
+
+
+def feegow_date_str(value: date) -> str:
+    return value.strftime("%d-%m-%Y")
+
+
+def fetch_feegow_patient_name(patient_id: int | None, patient_cache: dict[int, str]) -> str:
+    if not patient_id:
+        return ""
+
+    if patient_id in patient_cache:
+        return patient_cache[patient_id]
+
+    payload = feegow_get_json(
+        "patient/search",
+        {
+            "paciente_id": patient_id,
+            "photo": 0,
+        },
+    )
+
+    content = payload.get("content") or {}
+    patient_name = (content.get("nome") or "").strip()
+    patient_cache[patient_id] = patient_name
+    return patient_name
+
+
+def fetch_feegow_appointments_for_professional(
+    professional_id: int,
+    start_date: date,
+    end_date: date,
+    patient_cache: dict[int, str],
+) -> list[dict[str, Any]]:
+    payload = feegow_get_json(
+        "appoints/search",
+        {
+            "profissional_id": professional_id,
+            "data_start": feegow_date_str(start_date),
+            "data_end": feegow_date_str(end_date),
+        },
+    )
+
+    rows = payload.get("content") or []
+    normalized_rows: list[dict[str, Any]] = []
+
+    for item in rows:
+        item_copy = dict(item)
+        patient_id = item_copy.get("paciente_id")
+        patient_name = fetch_feegow_patient_name(patient_id, patient_cache)
+
+        item_copy["patient_name"] = patient_name
+        item_copy["patient_name_normalized"] = normalize_person_name(patient_name)
+        normalized_rows.append(item_copy)
+
+    return normalized_rows
+
+
+def find_matching_feegow_appointment(
+    entry: SurgicalMapEntry,
+    appointments: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, str]:
+    target_date = entry.day.strftime("%d-%m-%Y")
+
+    same_day = [row for row in appointments if (row.get("data") or "") == target_date]
+    if not same_day:
+        return None, "Nenhum agendamento encontrado no Feegow para esta data."
+
+    for row in same_day:
+        if names_equivalent(entry.patient_name, row.get("patient_name")):
+            return row, "Paciente encontrado no Feegow para a mesma data."
+
+    return None, "Há agenda do cirurgião nesta data, mas o paciente não foi encontrado no Feegow."
 
 def redirect(path: str):
     return RedirectResponse(path, status_code=303)
@@ -4308,6 +4449,353 @@ def meus_clientes_page(
             "total_pendentes": total_pendentes,
         },
     )
+
+@app.get("/validacao_feegow", response_class=HTMLResponse)
+def validacao_feegow_page(
+    request: Request,
+    run_id: Optional[int] = None,
+    err: str = "",
+    ok: str = "",
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
+    mappings = session.exec(
+        select(FeegowProfessionalMap).order_by(FeegowProfessionalMap.surgeon_user_id)
+    ).all()
+    mappings_by_user_id = {m.surgeon_user_id: m for m in mappings}
+
+    selected_run = None
+    if run_id:
+        selected_run = session.get(FeegowValidationRun, run_id)
+
+    if not selected_run:
+        selected_run = session.exec(
+            select(FeegowValidationRun).order_by(FeegowValidationRun.id.desc())
+        ).first()
+
+    results = []
+    if selected_run:
+        results = session.exec(
+            select(FeegowValidationResult)
+            .where(FeegowValidationResult.run_id == selected_run.id)
+            .order_by(
+                FeegowValidationResult.map_day,
+                FeegowValidationResult.map_surgeon_name,
+                FeegowValidationResult.map_patient_name,
+            )
+        ).all()
+
+    today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    default_end = today_sp + timedelta(days=30)
+
+    audit_event(
+        request,
+        user,
+        "feegow_validation_page_view",
+        target_type="feegow_validation",
+        target_id=selected_run.id if selected_run else None,
+    )
+
+    return templates.TemplateResponse(
+        "validacao_feegow.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Validação Feegow",
+            "surgeons": surgeons,
+            "mappings_by_user_id": mappings_by_user_id,
+            "selected_run": selected_run,
+            "results": results,
+            "today_iso": today_sp.isoformat(),
+            "default_end_iso": default_end.isoformat(),
+            "err": err,
+            "ok": ok,
+            "feegow_token_configured": bool(FEEGOW_API_TOKEN),
+        },
+    )
+
+@app.post("/validacao_feegow/mapeamentos")
+async def validacao_feegow_save_mappings(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+
+    form = await request.form()
+
+    surgeons = session.exec(
+        select(User)
+        .where(User.role == "doctor", User.is_active == True)
+        .order_by(User.full_name)
+    ).all()
+
+    existing = session.exec(select(FeegowProfessionalMap)).all()
+    existing_by_user_id = {row.surgeon_user_id: row for row in existing}
+
+    for surgeon in surgeons:
+        raw_value = str(form.get(f"feegow_professional_id_{surgeon.id}", "") or "").strip()
+        existing_row = existing_by_user_id.get(surgeon.id)
+
+        if not raw_value:
+            if existing_row:
+                session.delete(existing_row)
+            continue
+
+        try:
+            feegow_professional_id = int(raw_value)
+        except ValueError:
+            return redirect(
+                "/validacao_feegow?err=" + quote(f"ID inválido informado para {surgeon.full_name}.")
+            )
+
+        if existing_row:
+            existing_row.feegow_professional_id = feegow_professional_id
+            existing_row.surgeon_name_snapshot = surgeon.full_name
+            existing_row.updated_by_id = user.id
+            existing_row.updated_at = datetime.utcnow()
+            session.add(existing_row)
+        else:
+            session.add(
+                FeegowProfessionalMap(
+                    surgeon_user_id=surgeon.id,
+                    feegow_professional_id=feegow_professional_id,
+                    surgeon_name_snapshot=surgeon.full_name,
+                    created_by_id=user.id,
+                    updated_by_id=user.id,
+                )
+            )
+
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "feegow_validation_mapping_saved",
+        target_type="feegow_validation",
+        message="Mapeamentos Feegow atualizados manualmente.",
+    )
+
+    return redirect("/validacao_feegow?ok=" + quote("Mapeamentos salvos com sucesso."))
+
+@app.post("/validacao_feegow/executar")
+def validacao_feegow_executar(
+    request: Request,
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+
+    if not FEEGOW_API_TOKEN:
+        return redirect(
+            "/validacao_feegow?err=" + quote("A variável FEEGOW_API_TOKEN não está configurada no ambiente.")
+        )
+
+    try:
+        period_start = datetime.fromisoformat(start_date).date()
+        period_end = datetime.fromisoformat(end_date).date()
+    except ValueError:
+        return redirect(
+            "/validacao_feegow?err=" + quote("Período inválido. Informe datas válidas.")
+        )
+
+    if period_end < period_start:
+        return redirect(
+            "/validacao_feegow?err=" + quote("A data final não pode ser menor que a data inicial.")
+        )
+
+    range_days = (period_end - period_start).days
+    if range_days > FEEGOW_VALIDATION_MAX_DAYS:
+        return redirect(
+            "/validacao_feegow?err=" + quote("Na primeira versão, a validação aceita no máximo 30 dias por execução.")
+        )
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= period_start,
+            SurgicalMapEntry.day <= period_end,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(
+            SurgicalMapEntry.day,
+            SurgicalMapEntry.surgeon_id,
+            SurgicalMapEntry.time_hhmm,
+            SurgicalMapEntry.patient_name,
+        )
+    ).all()
+
+    mappings = session.exec(select(FeegowProfessionalMap)).all()
+    mappings_by_surgeon_id = {m.surgeon_user_id: m for m in mappings}
+
+    surgeons = session.exec(select(User).where(User.role == "doctor")).all()
+    surgeons_by_id = {s.id: s for s in surgeons if s.id is not None}
+
+    run = FeegowValidationRun(
+        period_start=period_start,
+        period_end=period_end,
+        status="completed",
+        created_by_id=user.id,
+        total_entries=len(entries),
+        notes_json={"executed_by": user.username},
+    )
+    session.add(run)
+    session.commit()
+    session.refresh(run)
+
+    patient_cache: dict[int, str] = {}
+    appointments_by_professional: dict[int, list[dict[str, Any]]] = {}
+    results_to_save: list[FeegowValidationResult] = []
+
+    total_ok = 0
+    total_alert = 0
+    total_unmapped = 0
+    total_api_error = 0
+
+    for entry in entries:
+        surgeon = surgeons_by_id.get(entry.surgeon_id)
+        mapping = mappings_by_surgeon_id.get(entry.surgeon_id)
+
+        if not mapping:
+            total_unmapped += 1
+            results_to_save.append(
+                FeegowValidationResult(
+                    run_id=run.id,
+                    surgical_entry_id=entry.id,
+                    map_day=entry.day,
+                    map_patient_name=entry.patient_name,
+                    map_surgeon_id=entry.surgeon_id,
+                    map_surgeon_name=surgeon.full_name if surgeon else "—",
+                    validation_status="surgeon_not_mapped",
+                    detail_message="Cirurgião sem mapeamento manual para o Feegow.",
+                )
+            )
+            continue
+
+        professional_id = mapping.feegow_professional_id
+
+        if professional_id not in appointments_by_professional:
+            try:
+                appointments_by_professional[professional_id] = fetch_feegow_appointments_for_professional(
+                    professional_id=professional_id,
+                    start_date=period_start,
+                    end_date=period_end,
+                    patient_cache=patient_cache,
+                )
+            except Exception as exc:
+                appointments_by_professional[professional_id] = [{"__api_error__": str(exc)}]
+
+        professional_rows = appointments_by_professional.get(professional_id, [])
+
+        if professional_rows and professional_rows[0].get("__api_error__"):
+            total_api_error += 1
+            results_to_save.append(
+                FeegowValidationResult(
+                    run_id=run.id,
+                    surgical_entry_id=entry.id,
+                    map_day=entry.day,
+                    map_patient_name=entry.patient_name,
+                    map_surgeon_id=entry.surgeon_id,
+                    map_surgeon_name=surgeon.full_name if surgeon else "—",
+                    validation_status="api_error",
+                    detail_message=professional_rows[0]["__api_error__"],
+                    matched_feegow_professional_id=professional_id,
+                )
+            )
+            continue
+
+        match, detail_message = find_matching_feegow_appointment(entry, professional_rows)
+
+        if match:
+            total_ok += 1
+            results_to_save.append(
+                FeegowValidationResult(
+                    run_id=run.id,
+                    surgical_entry_id=entry.id,
+                    map_day=entry.day,
+                    map_patient_name=entry.patient_name,
+                    map_surgeon_id=entry.surgeon_id,
+                    map_surgeon_name=surgeon.full_name if surgeon else "—",
+                    validation_status="ok",
+                    detail_message=detail_message,
+                    matched_feegow_professional_id=professional_id,
+                    matched_feegow_agendamento_id=match.get("agendamento_id"),
+                    matched_feegow_patient_id=match.get("paciente_id"),
+                    matched_feegow_patient_name=match.get("patient_name"),
+                    matched_feegow_date=match.get("data"),
+                    raw_match_json=match,
+                )
+            )
+        else:
+            total_alert += 1
+            results_to_save.append(
+                FeegowValidationResult(
+                    run_id=run.id,
+                    surgical_entry_id=entry.id,
+                    map_day=entry.day,
+                    map_patient_name=entry.patient_name,
+                    map_surgeon_id=entry.surgeon_id,
+                    map_surgeon_name=surgeon.full_name if surgeon else "—",
+                    validation_status="alert",
+                    detail_message=detail_message,
+                    matched_feegow_professional_id=professional_id,
+                )
+            )
+
+    if results_to_save:
+        session.add_all(results_to_save)
+
+    run.total_ok = total_ok
+    run.total_alert = total_alert
+    run.total_unmapped = total_unmapped
+    run.total_api_error = total_api_error
+    run.notes_json = {
+        "executed_by": user.username,
+        "patient_cache_size": len(patient_cache),
+        "professionals_queried": list(appointments_by_professional.keys()),
+    }
+
+    session.add(run)
+    session.commit()
+
+    audit_event(
+        request,
+        user,
+        "feegow_validation_executed",
+        target_type="feegow_validation",
+        target_id=run.id,
+        message="Validação Feegow executada.",
+        extra={
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+            "total_entries": len(entries),
+            "total_ok": total_ok,
+            "total_alert": total_alert,
+            "total_unmapped": total_unmapped,
+            "total_api_error": total_api_error,
+        },
+    )
+
+    return redirect("/validacao_feegow?run_id=" + str(run.id) + "&ok=" + quote("Validação executada com sucesso."))
         
 @app.get("/logs", response_class=HTMLResponse)
 def logs_page(

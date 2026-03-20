@@ -231,3 +231,64 @@ class PushNotificationLog(SQLModel, table=True):
 
     scheduled_for: Optional[date] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    
+class FeegowProfessionalMap(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("surgeon_user_id"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    surgeon_user_id: int = Field(foreign_key="user.id", index=True)
+    feegow_professional_id: int = Field(index=True)
+
+    surgeon_name_snapshot: Optional[str] = None
+    feegow_professional_name: Optional[str] = None
+
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class FeegowValidationRun(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    period_start: date = Field(index=True)
+    period_end: date = Field(index=True)
+
+    status: str = Field(default="completed", index=True)  # completed | failed
+
+    total_entries: int = Field(default=0)
+    total_ok: int = Field(default=0)
+    total_alert: int = Field(default=0)
+    total_unmapped: int = Field(default=0)
+    total_api_error: int = Field(default=0)
+
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    notes_json: Optional[dict] = Field(default=None, sa_column=Column(SQLiteJSON))
+
+
+class FeegowValidationResult(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    run_id: int = Field(foreign_key="feegowvalidationrun.id", index=True)
+    surgical_entry_id: Optional[int] = Field(default=None, foreign_key="surgicalmapentry.id", index=True)
+
+    map_day: date = Field(index=True)
+    map_patient_name: str = Field(index=True)
+    map_surgeon_id: Optional[int] = Field(default=None, foreign_key="user.id", index=True)
+    map_surgeon_name: Optional[str] = Field(default=None, index=True)
+
+    validation_status: str = Field(index=True)  # ok | alert | surgeon_not_mapped | api_error
+    detail_message: Optional[str] = None
+
+    matched_feegow_professional_id: Optional[int] = Field(default=None, index=True)
+    matched_feegow_agendamento_id: Optional[int] = Field(default=None, index=True)
+    matched_feegow_patient_id: Optional[int] = Field(default=None, index=True)
+    matched_feegow_patient_name: Optional[str] = None
+    matched_feegow_date: Optional[str] = None
+
+    raw_match_json: Optional[dict] = Field(default=None, sa_column=Column(SQLiteJSON))
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
