@@ -292,3 +292,21 @@ class FeegowValidationResult(SQLModel, table=True):
     raw_match_json: Optional[dict] = Field(default=None, sa_column=Column(SQLiteJSON))
 
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+class FeegowValidationAcknowledgement(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("validation_result_id", "ack_user_id"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    validation_result_id: int = Field(
+        foreign_key="feegowvalidationresult.id",
+        index=True
+    )
+
+    ack_user_id: int = Field(
+        foreign_key="user.id",
+        index=True
+    )
+
+    ack_message: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

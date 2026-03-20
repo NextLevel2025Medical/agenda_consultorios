@@ -39,6 +39,7 @@ from models import (
     FeegowProfessionalMap,
     FeegowValidationRun,
     FeegowValidationResult,
+    FeegowValidationAcknowledgement,
 )
 from auth import hash_password, verify_password, require
 
@@ -518,6 +519,85 @@ FEEGOW_API_BASE_URL = "https://api.feegow.com/v1/api"
 FEEGOW_API_TOKEN = os.getenv("FEEGOW_API_TOKEN", "").strip()
 FEEGOW_VALIDATION_MAX_DAYS = 30
 
+
+def get_latest_feegow_run(session: Session) -> Optional[FeegowValidationRun]:
+    return session.exec(
+        select(FeegowValidationRun).order_by(FeegowValidationRun.id.desc())
+    ).first()
+
+
+def get_latest_feegow_alert_count(session: Session) -> int:
+    latest_run = get_latest_feegow_run(session)
+    if not latest_run:
+        return 0
+
+    return session.exec(
+        select(func.count())
+        .select_from(FeegowValidationResult)
+        .where(
+            FeegowValidationResult.run_id == latest_run.id,
+            FeegowValidationResult.validation_status == "alert",
+        )
+    ).one()
+
+
+def get_latest_feegow_status_by_entry(session: Session) -> dict[int, str]:
+    latest_run = get_latest_feegow_run(session)
+    if not latest_run:
+        return {}
+
+    rows = session.exec(
+        select(FeegowValidationResult)
+        .where(FeegowValidationResult.run_id == latest_run.id)
+    ).all()
+
+    status_by_entry: dict[int, str] = {}
+    for row in rows:
+        if row.surgical_entry_id is not None:
+            status_by_entry[row.surgical_entry_id] = row.validation_status
+
+    return status_by_entry
+
+def get_pending_feegow_alerts_for_user(
+    session: Session,
+    user_id: int,
+) -> list[FeegowValidationResult]:
+    latest_run = get_latest_feegow_run(session)
+    if not latest_run:
+        return []
+
+    rows = session.exec(
+        select(FeegowValidationResult, SurgicalMapEntry)
+        .join(
+            SurgicalMapEntry,
+            SurgicalMapEntry.id == FeegowValidationResult.surgical_entry_id,
+        )
+        .where(
+            FeegowValidationResult.run_id == latest_run.id,
+            FeegowValidationResult.validation_status.in_(["alert", "surgeon_not_mapped", "api_error"]),
+            SurgicalMapEntry.created_by_id == user_id,
+        )
+        .order_by(
+            FeegowValidationResult.map_day,
+            FeegowValidationResult.map_patient_name,
+        )
+    ).all()
+
+    pending: list[FeegowValidationResult] = []
+
+    for result_row, _entry in rows:
+        already_ack = session.exec(
+            select(FeegowValidationAcknowledgement)
+            .where(
+                FeegowValidationAcknowledgement.validation_result_id == result_row.id,
+                FeegowValidationAcknowledgement.ack_user_id == user_id,
+            )
+        ).first()
+
+        if not already_ack:
+            pending.append(result_row)
+
+    return pending
 
 def normalize_person_name(value: str | None) -> str:
     text_value = (value or "").strip().upper()
@@ -2566,8 +2646,12 @@ def login_action(
         )
     request.session["user_id"] = user.id
     audit_event(request, user, "login_success")
-    return redirect("/")
 
+    pending_feegow_alerts = get_pending_feegow_alerts_for_user(session, user.id)
+    if pending_feegow_alerts:
+        return redirect("/auditoria_feegow/alertas")
+
+    return redirect("/")
 
 @app.post("/logout")
 def logout(request: Request, session: Session = Depends(get_session)):
@@ -2575,6 +2659,82 @@ def logout(request: Request, session: Session = Depends(get_session)):
     audit_event(request, user, "logout")
     request.session.clear()
     return redirect("/login")
+
+@app.get("/auditoria_feegow/alertas", response_class=HTMLResponse)
+def auditoria_feegow_alertas_page(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    pending_alerts = get_pending_feegow_alerts_for_user(session, user.id)
+
+    if not pending_alerts:
+        return redirect("/")
+
+    latest_run = get_latest_feegow_run(session)
+
+    audit_event(
+        request,
+        user,
+        "feegow_alert_gate_view",
+        target_type="feegow_validation",
+        target_id=latest_run.id if latest_run else None,
+        message="Usuário visualizou a tela obrigatória de alertas da Auditoria Feegow.",
+        extra={"pending_count": len(pending_alerts)},
+    )
+
+    return templates.TemplateResponse(
+        "auditoria_feegow_alertas.html",
+        {
+            "request": request,
+            "current_user": user,
+            "title": "Alertas da Auditoria Feegow",
+            "pending_alerts": pending_alerts,
+            "latest_run": latest_run,
+        },
+    )
+
+@app.post("/auditoria_feegow/alertas/ciencia")
+def auditoria_feegow_alertas_ciencia(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    pending_alerts = get_pending_feegow_alerts_for_user(session, user.id)
+
+    if not pending_alerts:
+        return redirect("/")
+
+    for alert in pending_alerts:
+        session.add(
+            FeegowValidationAcknowledgement(
+                validation_result_id=alert.id,
+                ack_user_id=user.id,
+                ack_message="Usuário deu ciência dos alertas pendentes no login.",
+            )
+        )
+
+    session.commit()
+
+    latest_run = get_latest_feegow_run(session)
+
+    audit_event(
+        request,
+        user,
+        "feegow_alert_gate_ack",
+        target_type="feegow_validation",
+        target_id=latest_run.id if latest_run else None,
+        message="Usuário confirmou ciência dos alertas pendentes da Auditoria Feegow.",
+        extra={"ack_count": len(pending_alerts)},
+    )
+
+    return redirect("/")
 
 USER_ROLE_OPTIONS = [
     ("admin", "Admin"),
@@ -3538,6 +3698,8 @@ def mapa_page(
     mapa_hsr_summary = get_mapa_hsr_month_summary(session, selected_month)
 
     weekday_map = ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado","domingo"]
+    feegow_alert_count = get_latest_feegow_alert_count(session)
+    latest_feegow_status_by_entry = get_latest_feegow_status_by_entry(session)
         
     return templates.TemplateResponse(
         "mapa.html",
@@ -3547,6 +3709,8 @@ def mapa_page(
             "fmt_brasilia": fmt_brasilia,
             "err": err,
             "title": "Mapa Cirúrgico",
+            "feegow_alert_count": feegow_alert_count,
+            "latest_feegow_status_by_entry": latest_feegow_status_by_entry,
             "selected_month": selected_month,   # YYYY-MM
             "days": days,
             "entries_by_day": entries_by_day,   # dict[str, list]
@@ -4462,7 +4626,7 @@ def validacao_feegow_page(
     if not user:
         return redirect("/login")
 
-    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Auditoria Feegow.")
 
     surgeons = session.exec(
         select(User)
@@ -4498,6 +4662,7 @@ def validacao_feegow_page(
 
     today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     default_end = today_sp + timedelta(days=30)
+    feegow_alert_count = get_latest_feegow_alert_count(session)
 
     audit_event(
         request,
@@ -4512,7 +4677,8 @@ def validacao_feegow_page(
         {
             "request": request,
             "current_user": user,
-            "title": "Validação Feegow",
+            "title": "Auditoria Feegow",
+            "feegow_alert_count": feegow_alert_count,
             "surgeons": surgeons,
             "mappings_by_user_id": mappings_by_user_id,
             "selected_run": selected_run,
@@ -4534,7 +4700,7 @@ async def validacao_feegow_save_mappings(
     if not user:
         return redirect("/login")
 
-    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Auditoria Feegow.")
 
     form = await request.form()
 
@@ -4603,7 +4769,7 @@ def validacao_feegow_executar(
     if not user:
         return redirect("/login")
 
-    require(user.role in ("admin", "surgery"), "Acesso restrito à Validação Feegow.")
+    require(user.role in ("admin", "surgery"), "Acesso restrito à Auditoria Feegow.")
 
     if not FEEGOW_API_TOKEN:
         return redirect(
@@ -4783,7 +4949,7 @@ def validacao_feegow_executar(
         "feegow_validation_executed",
         target_type="feegow_validation",
         target_id=run.id,
-        message="Validação Feegow executada.",
+        message="Auditoria Feegow executada.",
         extra={
             "period_start": period_start.isoformat(),
             "period_end": period_end.isoformat(),
@@ -4795,7 +4961,7 @@ def validacao_feegow_executar(
         },
     )
 
-    return redirect("/validacao_feegow?run_id=" + str(run.id) + "&ok=" + quote("Validação executada com sucesso."))
+    return redirect("/validacao_feegow?run_id=" + str(run.id) + "&ok=" + quote("Auditoria executada com sucesso."))
         
 @app.get("/logs", response_class=HTMLResponse)
 def logs_page(
