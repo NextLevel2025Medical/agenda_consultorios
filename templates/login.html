@@ -6,20 +6,21 @@
 
 {% block content %}
 <style>
-  /* Paleta “ouro champagne” (combina com seu logo) */
   :root{
-    --gold-strong:  #efc363; /* brilho / foco principal (CTAs, logo, hover) */
-    --gold-main:    #dcaf4e; /* texto de marca, títulos */
-    --gold-soft:    #cc9f3e; /* bordas, outlines, detalhes */
-    --gold-deep:    #ba8d29; /* estado pressed / sombras quentes */
-    --ink:    #0B1220; /* fundo principal (perfeito, mantém) */
-    --panel:  rgba(255,255,255,0.06); /* ↑ um pouco mais presente */
-    --stroke: rgba(239,195,99,0.28);  /* dourado translúcido (não branco!) */
+    --gold-strong:  #efc363;
+    --gold-main:    #dcaf4e;
+    --gold-soft:    #cc9f3e;
+    --gold-deep:    #ba8d29;
+
+    --ink:    #0B1220;
     --text-main:  rgba(255,255,255,0.92);
-    --muted:      rgba(239,195,99,0.75); /* muted agora é “gold-muted” */
+    --muted:      rgba(239,195,99,0.75);
   }
 
-  /* Ajustes de tipografia só nesta página */
+  body {
+    background: #05070d;
+  }
+
   .login-brand{
     font-family: "Cormorant Garamond", serif;
     letter-spacing: 0.22em;
@@ -31,9 +32,8 @@
 <div class="min-h-[65vh] flex items-center justify-center">
   <div class="w-full max-w-md">
 
-    <!-- BRAND (logo centralizado) -->
+    <!-- LOGO / BRAND -->
     <div class="flex flex-col items-center text-center mb-6">
-      <!-- ✅ Troque o src para o arquivo real do seu logo em /static -->
       <img
         src="/static/logo1.png"
         alt="Concept"
@@ -41,7 +41,7 @@
         style="filter: drop-shadow(0 14px 30px rgba(0,0,0,.45));"
       />
 
-      <div class="mt-4 text-3xl login-brand text-[color:var(--gold-2)]">
+      <div class="mt-4 text-3xl login-brand text-[color:var(--gold-main)]">
         CONCEPT SYS
       </div>
 
@@ -51,8 +51,13 @@
     </div>
 
     <!-- CARD -->
-    <div class="rounded-2xl bg-white/5 border border-white/10 p-7"
-         style="box-shadow: 0 24px 80px rgba(0,0,0,.45);">
+    <div class="rounded-2xl p-7"
+         style="
+           background: #0b0f19;
+           border: 1px solid rgba(220,175,78,0.25);
+           box-shadow: 0 20px 60px rgba(0,0,0,.6);
+         ">
+
       {% if error %}
         <div class="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm">
           {{ error }}
@@ -60,39 +65,42 @@
       {% endif %}
 
       <form class="space-y-4" method="post" action="/login">
+
+        <!-- USUÁRIO -->
         <div>
           <label class="text-sm text-white/70">Usuário</label>
           <input
             name="username"
             required
-            class="mt-2 w-full rounded-xl bg-white/90 text-slate-950 border border-white/10 px-4 py-3 outline-none focus:border-white/30"
+            class="mt-2 w-full rounded-xl bg-white text-slate-900 border border-gray-200 px-4 py-3 outline-none focus:border-[color:var(--gold-main)]"
             autocomplete="username"
           />
         </div>
 
+        <!-- SENHA -->
         <div>
           <label class="text-sm text-white/70">Senha</label>
           <input
             type="password"
             name="password"
             required
-            class="mt-2 w-full rounded-xl bg-white/90 text-slate-950 border border-white/10 px-4 py-3 outline-none focus:border-white/30"
+            class="mt-2 w-full rounded-xl bg-white text-slate-900 border border-gray-200 px-4 py-3 outline-none focus:border-[color:var(--gold-main)]"
             autocomplete="current-password"
           />
         </div>
 
-        <!-- BOTÃO premium (escuro + borda champagne) -->
+        <!-- BOTÃO -->
         <button
           type="submit"
           class="w-full rounded-xl px-4 py-3 font-semibold transition"
           style="
-            background: rgba(10, 12, 18, 0.92);
-            border: 1px solid var(--gold-3);
-            color: var(--gold-2);
+            background: #0b0f19;
+            border: 1px solid var(--gold-soft);
+            color: var(--gold-main);
             letter-spacing: 0.08em;
             text-transform: uppercase;
           "
-          onmouseover="this.style.filter='brightness(1.06)'"
+          onmouseover="this.style.filter='brightness(1.08)'"
           onmouseout="this.style.filter='none'"
         >
           Entrar
@@ -101,6 +109,7 @@
         <div class="pt-2 text-xs text-white/45 text-center">
           Acesso restrito • Concept Clinic
         </div>
+
       </form>
     </div>
 
