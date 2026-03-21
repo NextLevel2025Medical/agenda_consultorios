@@ -836,14 +836,17 @@
               </h1>
             {% endif %}
           </div>
+  {% else %}
+    <div class="min-h-screen">
+  {% endif %}
 
           {% block content %}{% endblock %}
+
+  {% if current_user %}
         </div>
       </div>
     </div>
   {% else %}
-    <div class="min-h-screen">
-      {% block content %}{% endblock %}
     </div>
   {% endif %}
 
