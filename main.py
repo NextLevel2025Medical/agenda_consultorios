@@ -1504,7 +1504,13 @@ def build_all_chart_tasks(
         seller_user_id=seller_user_id,
     )
 
-    all_tasks = prontuario_tasks + feegow_tasks + financial_tasks
+    policy_tasks = build_policy_tasks(
+        session,
+        ref_day=start_day,
+        seller_user_id=seller_user_id,
+    )
+
+    all_tasks = prontuario_tasks + feegow_tasks + financial_tasks + policy_tasks
     all_tasks.sort(
         key=lambda x: (
             x["alert_day"],
@@ -1641,6 +1647,10 @@ def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
         title = f"Lembrete de acerto financeiro • {run_label}"
         body = f"{patient_name} opera em {surgery_day_br}. Realizar acerto financeiro (cobrança de valores em aberto)."
 
+    elif task_type == "policy_issue":
+        title = f"Lembrete de apólice • {run_label}"
+        body = f"{patient_name} opera em {surgery_day_br}. Solicitar emissão da apólice de seguro."
+
     else:
         title = f"Lembrete de prontuário • {run_label}"
         body = f"{patient_name} opera em {surgery_day_br}. Enviar prontuário."
@@ -1725,6 +1735,25 @@ def send_chart_task_push_event(
             f"WEBPUSH_TASKS_SKIP_COMPLETED: task_key={task['task_key']} run_label={run_label}"
         )
         return
+
+    task_type = task.get("task_type") or ""
+    alert_day = task.get("alert_day")
+    weekday = alert_day.weekday() if alert_day else None
+
+    # Apólice:
+    # - segunda: 09h e 17h
+    # - terça: apenas 09h
+    if task_type == "policy_issue":
+        if weekday == 1 and run_label == "17h":
+            audit_logger.info(
+                f"WEBPUSH_TASKS_SKIP_POLICY_TUE_17H: task_key={task['task_key']}"
+            )
+            return
+        if weekday not in (0, 1):
+            audit_logger.info(
+                f"WEBPUSH_TASKS_SKIP_POLICY_INVALID_DAY: task_key={task['task_key']}"
+            )
+            return
 
     seller_id = task.get("seller_id")
     if seller_id is None:
@@ -1846,6 +1875,107 @@ def register_push_dispatch_once(
         session.rollback()
         return False
 
+def get_policy_alert_window_dates(ref_day: date) -> tuple[date, date] | None:
+    """
+    Regra:
+    - Segunda: alerta para cirurgias de quinta desta semana até quarta da semana seguinte
+    - Terça: mesmo conjunto da segunda imediatamente anterior
+    - Outros dias: não gera lembrete
+    """
+    wd = ref_day.weekday()  # 0=seg, 1=ter, ..., 6=dom
+
+    if wd == 0:
+        monday = ref_day
+    elif wd == 1:
+        monday = ref_day - timedelta(days=1)
+    else:
+        return None
+
+    start_day = monday + timedelta(days=3)   # quinta
+    end_day = monday + timedelta(days=9)     # quarta seguinte
+    return start_day, end_day
+
+
+def build_policy_tasks(
+    session: Session,
+    *,
+    ref_day: date,
+    seller_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    window = get_policy_alert_window_dates(ref_day)
+    if not window:
+        return []
+
+    start_surgery_day, end_surgery_day = window
+
+    surgeons = session.exec(
+        select(User).where(User.role == "doctor", User.is_active == True)
+    ).all()
+    surgeons_by_id = {u.id: u for u in surgeons if u.id is not None}
+
+    sellers = session.exec(
+        select(User).where(User.role == "surgery", User.is_active == True)
+    ).all()
+    sellers_by_id = {u.id: u for u in sellers if u.id is not None}
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= start_surgery_day,
+            SurgicalMapEntry.day <= end_surgery_day,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+    ).all()
+
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in entries:
+        surgeon = surgeons_by_id.get(row.surgeon_id)
+        if not surgeon:
+            continue
+
+        if seller_user_id is not None and row.created_by_id != seller_user_id:
+            continue
+
+        task_key = build_chart_task_key(
+            task_type="policy_issue",
+            seller_id=row.created_by_id,
+            surgery_day=row.day,
+            patient_name=row.patient_name,
+        )
+
+        seller = sellers_by_id.get(row.created_by_id)
+
+        if task_key not in grouped:
+            grouped[task_key] = {
+                "task_key": task_key,
+                "task_type": "policy_issue",
+                "task_type_label": "Apólice de Seguro",
+                "patient_name": (row.patient_name or "").strip().upper(),
+                "surgery_day": row.day,
+                "alert_day": ref_day,
+                "seller_id": row.created_by_id,
+                "seller_name": seller.full_name if seller else "Sem vendedor",
+                "surgeons": set(),
+                "message": f"Solicitar emissão da apólice de seguro da paciente {(row.patient_name or '').strip().upper()}.",
+            }
+
+        grouped[task_key]["surgeons"].add(surgeon.full_name)
+
+    completed_map = load_completed_chart_tasks(session)
+
+    result: list[dict[str, Any]] = []
+    for item in grouped.values():
+        completion = completed_map.get(item["task_key"])
+        item["surgeons"] = sorted(item["surgeons"])
+        item["completed"] = bool(completion)
+        item["completed_at"] = completion.get("completed_at") if completion else None
+        item["completed_by"] = completion.get("completed_by") if completion else None
+        result.append(item)
+
+    result.sort(key=lambda x: (x["surgery_day"], x["patient_name"]))
+    return result
 
 def send_push_payload_to_all_active_subscriptions(session: Session, payload: dict) -> None:
     print("[PUSH] entrando em send_push_payload_to_all_active_subscriptions", flush=True)
