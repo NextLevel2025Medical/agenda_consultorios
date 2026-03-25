@@ -3094,7 +3094,7 @@ def home(request: Request, session: Session = Depends(get_session)):
 def app_entry(request: Request, session: Session = Depends(get_session)):
     user = get_current_user(request, session)
     if not user:
-        return redirect("/login")
+        return redirect("/login?next=/app")
 
     if user.role == "viewer":
         return redirect("/hotel_mobile")
@@ -3106,9 +3106,14 @@ def app_entry(request: Request, session: Session = Depends(get_session)):
 
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
+def login_page(request: Request, next: str = ""):
     return templates.TemplateResponse(
-        "login.html", {"request": request, "current_user": None}
+        "login.html",
+        {
+            "request": request,
+            "current_user": None,
+            "next": next or "",
+        },
     )
 
 
@@ -3117,6 +3122,7 @@ def login_action(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    next: str = Form(""),
     session: Session = Depends(get_session),
 ):
     user = session.exec(
@@ -3133,9 +3139,15 @@ def login_action(
         )
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": "Usuário ou senha inválidos.", "current_user": None},
+            {
+                "request": request,
+                "error": "Usuário ou senha inválidos.",
+                "current_user": None,
+                "next": next or "",
+            },
             status_code=401,
         )
+
     request.session["user_id"] = user.id
     audit_event(request, user, "login_success")
 
@@ -3145,6 +3157,11 @@ def login_action(
         return redirect("/auditoria_feegow/alertas")
 
     request.session["feegow_alert_gate_required"] = False
+
+    next_path = (next or "").strip()
+    if next_path.startswith("/") and not next_path.startswith("//"):
+        return redirect(next_path)
+
     return redirect("/")
 
 @app.post("/logout")
@@ -6380,7 +6397,7 @@ def hotel_mobile_page(
 ):
     user = get_current_user(request, session)
     if not user:
-        return redirect("/login")
+        return redirect("/login?next=/hotel_mobile")
 
     require(user.role in ("admin", "surgery", "viewer"))
 
@@ -6411,7 +6428,7 @@ def tasks_page(
 ):
     user = get_current_user(request, session)
     if not user:
-        return redirect("/login")
+        return redirect("/login?next=/tasks")
 
     require(user.role in ("admin", "surgery"), "Acesso restrito às tarefas do mapa cirúrgico.")
 
