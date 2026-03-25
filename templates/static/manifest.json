@@ -1,7 +1,7 @@
 {
-  "name": "Concept Sys - Hospedagens",
-  "short_name": "Hospedagens Concept",
-  "start_url": "/hotel_mobile",
+  "name": "Concept Sys",
+  "short_name": "Concept Sys",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#070A12",
   "theme_color": "#070A12",
