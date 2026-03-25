@@ -3090,6 +3090,21 @@ def home(request: Request, session: Session = Depends(get_session)):
     return redirect("/login")
 
 
+@app.get("/app", response_class=HTMLResponse)
+def app_entry(request: Request, session: Session = Depends(get_session)):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    if user.role == "viewer":
+        return redirect("/hotel_mobile")
+
+    if user.role == "surgery":
+        return redirect("/tasks")
+
+    return redirect("/mapa")
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(
