@@ -6526,7 +6526,7 @@ def tasks_page(
     tasks = build_all_chart_tasks(
         session,
         start_day=ref_day,
-        end_day=ref_day + timedelta(days=15),
+        end_day=ref_day + timedelta(days=60),
         seller_user_id=seller_filter,
     )
 
