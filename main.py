@@ -1237,6 +1237,15 @@ WEBPUSH_VAPID_PUBLIC_KEY = os.getenv("WEBPUSH_VAPID_PUBLIC_KEY", "").strip()
 WEBPUSH_VAPID_PRIVATE_KEY = os.getenv("WEBPUSH_VAPID_PRIVATE_KEY", "").strip()
 WEBPUSH_VAPID_SUBJECT = os.getenv("WEBPUSH_VAPID_SUBJECT", "mailto:suporte@conceptclinic.com.br").strip()
 
+TASK_ALERT_SURGEONS = {
+    "Dr. Gustavo Aquino",
+    "Dra. Alice Osório",
+    "Dr. Ricardo Vilela",
+    "Dra. Mellina Tanure",
+    "Dra. Thamilys Benfica",
+}
+
+TASK_PUSH_RUN_LABELS = ("09h", "17h")
 
 def webpush_is_configured() -> bool:
     return bool(
@@ -1288,6 +1297,321 @@ def build_lodging_push_payload(event_type: str, row) -> dict:
             "event_type": event_type,
         },
     }
+
+
+def normalize_chart_task_patient_key(value: str | None) -> str:
+    return normalize_event_key_text(value)
+
+
+def get_chart_task_alert_day(surgery_day: date) -> date:
+    wd = surgery_day.weekday()  # 0=seg, 1=ter, 2=qua, 3=qui, 4=sex, 5=sáb, 6=dom
+
+    if wd == 0:  # cirurgia segunda -> alerta sexta
+        return surgery_day - timedelta(days=3)
+
+    if wd == 6:  # cirurgia domingo -> alerta sexta
+        return surgery_day - timedelta(days=2)
+
+    # terça a sábado -> dia anterior
+    return surgery_day - timedelta(days=1)
+
+
+def build_chart_task_key(*, seller_id: int | None, surgery_day: date, patient_name: str | None) -> str:
+    patient_key = normalize_chart_task_patient_key(patient_name)
+    seller_part = seller_id if seller_id is not None else "sem_vendedor"
+    return f"chart_task:{seller_part}:{surgery_day.isoformat()}:{patient_key}"
+
+
+def load_completed_chart_tasks(session: Session) -> dict[str, dict]:
+    rows = session.exec(
+        select(AuditLog)
+        .where(
+            AuditLog.target_type == "chart_task",
+            AuditLog.action == "chart_task_completed",
+        )
+        .order_by(AuditLog.id.desc())
+    ).all()
+
+    completed: dict[str, dict] = {}
+
+    for row in rows:
+        extra = {}
+        raw_extra = getattr(row, "extra_json", None)
+
+        if raw_extra:
+            try:
+                extra = json.loads(raw_extra)
+            except Exception:
+                extra = {}
+
+        task_key = extra.get("task_key")
+        if not task_key or task_key in completed:
+            continue
+
+        completed[task_key] = {
+            "completed_at": getattr(row, "created_at", None),
+            "completed_by": getattr(row, "actor_username", None) or "—",
+        }
+
+    return completed
+
+
+def build_chart_tasks(
+    session: Session,
+    *,
+    start_day: date,
+    end_day: date,
+    seller_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    surgeons = session.exec(
+        select(User).where(User.role == "doctor", User.is_active == True)
+    ).all()
+    surgeons_by_id = {u.id: u for u in surgeons if u.id is not None}
+
+    sellers = session.exec(
+        select(User).where(User.role == "surgery", User.is_active == True)
+    ).all()
+    sellers_by_id = {u.id: u for u in sellers if u.id is not None}
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= start_day,
+            SurgicalMapEntry.day <= end_day,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+    ).all()
+
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in entries:
+        surgeon = surgeons_by_id.get(row.surgeon_id)
+        if not surgeon or surgeon.full_name not in TASK_ALERT_SURGEONS:
+            continue
+
+        if seller_user_id is not None and row.created_by_id != seller_user_id:
+            continue
+
+        task_key = build_chart_task_key(
+            seller_id=row.created_by_id,
+            surgery_day=row.day,
+            patient_name=row.patient_name,
+        )
+
+        seller = sellers_by_id.get(row.created_by_id)
+        alert_day = get_chart_task_alert_day(row.day)
+
+        if task_key not in grouped:
+            grouped[task_key] = {
+                "task_key": task_key,
+                "patient_name": (row.patient_name or "").strip().upper(),
+                "surgery_day": row.day,
+                "alert_day": alert_day,
+                "seller_id": row.created_by_id,
+                "seller_name": seller.full_name if seller else "Sem vendedor",
+                "surgeons": set(),
+                "message": f"Enviar prontuário da paciente {(row.patient_name or '').strip().upper()} para o time de cirurgia.",
+            }
+
+        grouped[task_key]["surgeons"].add(surgeon.full_name)
+
+    completed_map = load_completed_chart_tasks(session)
+
+    result: list[dict[str, Any]] = []
+    for item in grouped.values():
+        completion = completed_map.get(item["task_key"])
+        item["surgeons"] = sorted(item["surgeons"])
+        item["completed"] = bool(completion)
+        item["completed_at"] = completion.get("completed_at") if completion else None
+        item["completed_by"] = completion.get("completed_by") if completion else None
+        result.append(item)
+
+    result.sort(key=lambda x: (x["alert_day"], x["surgery_day"], x["patient_name"]))
+    return result
+
+
+def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
+    patient_name = (task.get("patient_name") or "").strip()
+    surgery_day = task.get("surgery_day")
+    surgery_day_br = fmt_date_br(surgery_day) if surgery_day else "-"
+
+    return {
+        "title": f"Lembrete de prontuário • {run_label}",
+        "body": f"{patient_name} opera em {surgery_day_br}. Enviar prontuário para o time de cirurgia.",
+        "icon": "/static/icons/icon-512.png",
+        "badge": "/static/icons/icon-512.png",
+        "tag": f"{task['task_key']}:{run_label}",
+        "url": "/tasks",
+        "data": {
+            "url": "/tasks",
+            "task_key": task["task_key"],
+            "event_type": "chart_task_reminder",
+            "run_label": run_label,
+        },
+    }
+
+
+def send_push_payload_to_user_subscriptions(session: Session, *, user_id: int, payload: dict) -> None:
+    if not webpush_is_configured():
+        audit_logger.info("WEBPUSH_TASKS: ignorado (VAPID não configurado).")
+        return
+
+    subs = session.exec(
+        select(PushSubscription).where(
+            PushSubscription.is_active == True,
+            PushSubscription.user_id == user_id,
+        )
+    ).all()
+
+    if not subs:
+        audit_logger.info(f"WEBPUSH_TASKS: nenhuma inscrição ativa para user_id={user_id}.")
+        return
+
+    changed = False
+
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {
+                        "p256dh": sub.p256dh,
+                        "auth": sub.auth,
+                    },
+                },
+                data=json.dumps(payload, ensure_ascii=False),
+                vapid_private_key=WEBPUSH_VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": WEBPUSH_VAPID_SUBJECT},
+                ttl=60,
+            )
+        except WebPushException as e:
+            status_code = getattr(getattr(e, "response", None), "status_code", None)
+            audit_logger.exception(
+                f"WEBPUSH_TASKS_SEND_ERROR: user_id={user_id} endpoint={sub.endpoint[:80]} status={status_code} err={e}"
+            )
+
+            if status_code in (404, 410):
+                sub.is_active = False
+                sub.updated_at = datetime.utcnow()
+                session.add(sub)
+                changed = True
+
+        except Exception as e:
+            audit_logger.exception(f"WEBPUSH_TASKS_SEND_GENERIC_ERROR: {e}")
+
+    if changed:
+        session.commit()
+
+
+def send_chart_task_push_event(
+    session: Session,
+    *,
+    task: dict[str, Any],
+    run_label: str,
+) -> None:
+    if task.get("completed"):
+        audit_logger.info(
+            f"WEBPUSH_TASKS_SKIP_COMPLETED: task_key={task['task_key']} run_label={run_label}"
+        )
+        return
+
+    seller_id = task.get("seller_id")
+    if seller_id is None:
+        audit_logger.info(
+            f"WEBPUSH_TASKS_SKIP_NO_SELLER: task_key={task['task_key']} run_label={run_label}"
+        )
+        return
+
+    event_key = f"{task['task_key']}:{task['alert_day'].isoformat()}:{run_label}"
+
+    ok = register_push_dispatch_once(
+        session,
+        event_key=event_key,
+        event_type="chart_task_reminder",
+        reservation_id=None,
+        scheduled_for=task["alert_day"],
+    )
+
+    if not ok:
+        audit_logger.info(f"WEBPUSH_TASKS_SKIP_DUPLICATE: {event_key}")
+        return
+
+    payload = build_chart_task_push_payload(task, run_label)
+    send_push_payload_to_user_subscriptions(
+        session,
+        user_id=seller_id,
+        payload=payload,
+    )
+
+    audit_logger.info(
+        json.dumps(
+            {
+                "type": "chart_task_push_sent",
+                "task_key": task["task_key"],
+                "patient_name": task["patient_name"],
+                "seller_id": seller_id,
+                "seller_name": task["seller_name"],
+                "surgery_day": task["surgery_day"].isoformat(),
+                "alert_day": task["alert_day"].isoformat(),
+                "run_label": run_label,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+def dispatch_chart_task_pushes(session: Session, ref_day: date, run_label: str) -> None:
+    tasks = build_chart_tasks(
+        session,
+        start_day=ref_day,
+        end_day=ref_day + timedelta(days=15),
+        seller_user_id=None,
+    )
+
+    todays_tasks = [t for t in tasks if t["alert_day"] == ref_day]
+
+    for task in todays_tasks:
+        send_chart_task_push_event(
+            session,
+            task=task,
+            run_label=run_label,
+        )
+
+
+def _next_run_chart_tasks_push_sp(now_sp: datetime) -> tuple[datetime, str]:
+    run_09 = now_sp.replace(hour=9, minute=0, second=0, microsecond=0)
+    run_17 = now_sp.replace(hour=17, minute=0, second=0, microsecond=0)
+
+    if now_sp < run_09:
+        return run_09, "09h"
+
+    if now_sp < run_17:
+        return run_17, "17h"
+
+    tomorrow_09 = (now_sp + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    return tomorrow_09, "09h"
+
+
+def start_chart_tasks_push_scheduler() -> None:
+    def runner():
+        while True:
+            nxt, run_label = _next_run_chart_tasks_push_sp(datetime.now(TZ))
+            seconds = max(5, int((nxt - datetime.now(TZ)).total_seconds()))
+            audit_logger.info(
+                f"WEBPUSH_TASKS: próximo disparo {run_label} em {nxt.isoformat()} (sleep {seconds}s)."
+            )
+            pytime.sleep(seconds)
+
+            run_day = datetime.now(TZ).date()
+            with Session(engine) as session:
+                try:
+                    dispatch_chart_task_pushes(session, run_day, run_label)
+                except Exception as e:
+                    audit_logger.exception(f"WEBPUSH_TASKS_ERROR: {e}")
+
+    t = threading.Thread(target=runner, daemon=True)
+    t.start()
 
 
 def register_push_dispatch_once(
@@ -2606,6 +2930,9 @@ def on_startup():
     
     # ✅ Push diário de hospedagem
     start_lodging_push_scheduler()
+
+    # ✅ Push diário das tasks do mapa cirúrgico
+    start_chart_tasks_push_scheduler()
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, session: Session = Depends(get_session)):
@@ -5934,6 +6261,103 @@ def hotel_mobile_page(
         },
     )
 
+
+@app.get("/tasks", response_class=HTMLResponse)
+def tasks_page(
+    request: Request,
+    day: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito às tarefas do mapa cirúrgico.")
+
+    try:
+        ref_day = date.fromisoformat(day) if day else datetime.now(TZ).date()
+    except Exception:
+        ref_day = datetime.now(TZ).date()
+
+    seller_filter = None if user.role == "admin" else user.id
+
+    tasks = build_chart_tasks(
+        session,
+        start_day=ref_day,
+        end_day=ref_day + timedelta(days=15),
+        seller_user_id=seller_filter,
+    )
+
+    tasks_today = [t for t in tasks if t["alert_day"] == ref_day]
+    upcoming_tasks = [t for t in tasks if t["alert_day"] > ref_day]
+
+    return templates.TemplateResponse(
+        "tasks.html",
+        {
+            "request": request,
+            "current_user": user,
+            "ref_day": ref_day,
+            "tasks_today": tasks_today,
+            "upcoming_tasks": upcoming_tasks,
+            "push_public_key": WEBPUSH_VAPID_PUBLIC_KEY,
+            "push_configured": webpush_is_configured(),
+            "fmt_brasilia": fmt_brasilia,
+        },
+    )
+
+
+@app.post("/tasks/complete")
+def complete_task(
+    request: Request,
+    task_key: str = Form(...),
+    ref_day: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(user.role in ("admin", "surgery"), "Acesso restrito às tarefas do mapa cirúrgico.")
+
+    try:
+        day_ref = date.fromisoformat(ref_day) if ref_day else datetime.now(TZ).date()
+    except Exception:
+        day_ref = datetime.now(TZ).date()
+
+    seller_filter = None if user.role == "admin" else user.id
+    tasks = build_chart_tasks(
+        session,
+        start_day=day_ref - timedelta(days=7),
+        end_day=day_ref + timedelta(days=30),
+        seller_user_id=seller_filter,
+    )
+
+    task = next((t for t in tasks if t["task_key"] == task_key), None)
+
+    if not task:
+        return redirect(f"/tasks?day={day_ref.isoformat()}")
+
+    if task.get("completed"):
+        return redirect(f"/tasks?day={day_ref.isoformat()}")
+
+    audit_event(
+        request,
+        user,
+        "chart_task_completed",
+        target_type="chart_task",
+        message=f"Tarefa concluída: {task['patient_name']}",
+        extra={
+            "task_key": task["task_key"],
+            "patient_name": task["patient_name"],
+            "seller_id": task["seller_id"],
+            "seller_name": task["seller_name"],
+            "surgery_day": task["surgery_day"].isoformat(),
+            "alert_day": task["alert_day"].isoformat(),
+            "surgeons": task["surgeons"],
+        },
+    )
+
+    return redirect(f"/tasks?day={day_ref.isoformat()}")
 
 @app.post("/api/push/subscribe")
 async def push_subscribe(
