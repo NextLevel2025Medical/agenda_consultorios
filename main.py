@@ -1404,6 +1404,78 @@ def build_feegow_execution_tasks(
     result.sort(key=lambda x: (x["alert_day"], x["surgery_day"], x["patient_name"]))
     return result
 
+def build_financial_tasks(
+    session: Session,
+    *,
+    start_day: date,
+    end_day: date,
+    seller_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+
+    surgeons = session.exec(
+        select(User).where(User.role == "doctor", User.is_active == True)
+    ).all()
+    surgeons_by_id = {u.id: u for u in surgeons if u.id is not None}
+
+    sellers = session.exec(
+        select(User).where(User.role == "surgery", User.is_active == True)
+    ).all()
+    sellers_by_id = {u.id: u for u in sellers if u.id is not None}
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= start_day,
+            SurgicalMapEntry.day <= end_day,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.created_at)
+    ).all()
+
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in entries:
+        if seller_user_id is not None and row.created_by_id != seller_user_id:
+            continue
+
+        alert_day = row.day - timedelta(days=30)
+
+        task_key = build_chart_task_key(
+            task_type="financial_check",
+            seller_id=row.created_by_id,
+            surgery_day=row.day,
+            patient_name=row.patient_name,
+        )
+
+        seller = sellers_by_id.get(row.created_by_id)
+
+        if task_key not in grouped:
+            grouped[task_key] = {
+                "task_key": task_key,
+                "task_type": "financial_check",
+                "task_type_label": "Acerto Financeiro",
+                "patient_name": (row.patient_name or "").strip().upper(),
+                "surgery_day": row.day,
+                "alert_day": alert_day,
+                "seller_id": row.created_by_id,
+                "seller_name": seller.full_name if seller else "Sem vendedor",
+                "surgeons": set(),
+                "message": f"Realizar acerto financeiro da paciente {(row.patient_name or '').strip().upper()} (valores em aberto).",
+            }
+
+    completed_map = load_completed_chart_tasks(session)
+
+    result = []
+    for item in grouped.values():
+        completion = completed_map.get(item["task_key"])
+        item["completed"] = bool(completion)
+        item["completed_at"] = completion.get("completed_at") if completion else None
+        item["completed_by"] = completion.get("completed_by") if completion else None
+        result.append(item)
+
+    result.sort(key=lambda x: (x["alert_day"], x["surgery_day"]))
+    return result
+
 def build_all_chart_tasks(
     session: Session,
     *,
@@ -1424,8 +1496,15 @@ def build_all_chart_tasks(
         end_day=end_day,
         seller_user_id=seller_user_id,
     )
+    
+    financial_tasks = build_financial_tasks(
+        session,
+        start_day=start_day,
+        end_day=end_day,
+        seller_user_id=seller_user_id,
+    )
 
-    all_tasks = prontuario_tasks + feegow_tasks
+    all_tasks = prontuario_tasks + feegow_tasks + financial_tasks
     all_tasks.sort(
         key=lambda x: (
             x["alert_day"],
@@ -1557,9 +1636,14 @@ def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
     if task_type == "feegow_execute":
         title = f"Lembrete de execução no Feegow • {run_label}"
         body = f"{patient_name} opera em {surgery_day_br}. Executar a cirurgia no Feegow."
+
+    elif task_type == "financial_check":
+        title = f"Lembrete de acerto financeiro • {run_label}"
+        body = f"{patient_name} opera em {surgery_day_br}. Realizar acerto financeiro (cobrança de valores em aberto)."
+
     else:
         title = f"Lembrete de prontuário • {run_label}"
-        body = f"{patient_name} opera em {surgery_day_br}. Enviar prontuário para o time de cirurgia."
+        body = f"{patient_name} opera em {surgery_day_br}. Enviar prontuário."
 
     return {
         "title": title,
