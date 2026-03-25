@@ -312,6 +312,7 @@
                   <div>
                     <div class="patient">{{ item.patient_name }}</div>
                     <div class="meta">
+                      <div><strong>Tipo:</strong> {{ item.task_type_label }}</div>
                       <div><strong>Cirurgia:</strong> {{ item.surgery_day.strftime('%d/%m/%Y') }}</div>
                       <div><strong>Responsável:</strong> {{ item.seller_name }}</div>
                       <div><strong>Cirurgiões:</strong> {{ item.surgeons|join(', ') }}</div>
@@ -363,6 +364,7 @@
                   <div>
                     <div class="patient">{{ item.patient_name }}</div>
                     <div class="meta">
+                      <div><strong>Tipo:</strong> {{ item.task_type_label }}</div>
                       <div><strong>Lembrete:</strong> {{ item.alert_day.strftime('%d/%m/%Y') }}</div>
                       <div><strong>Cirurgia:</strong> {{ item.surgery_day.strftime('%d/%m/%Y') }}</div>
                       <div><strong>Responsável:</strong> {{ item.seller_name }}</div>
