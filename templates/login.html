@@ -180,6 +180,7 @@
 
       <form class="space-y-5" method="post" action="/login">
         <div>
+          <input type="hidden" name="next" value="{{ next or '' }}">
           <label class="login-label">Usuário</label>
           <input
             name="username"
