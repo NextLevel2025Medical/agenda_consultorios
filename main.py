@@ -1316,11 +1316,125 @@ def get_chart_task_alert_day(surgery_day: date) -> date:
     return surgery_day - timedelta(days=1)
 
 
-def build_chart_task_key(*, seller_id: int | None, surgery_day: date, patient_name: str | None) -> str:
+def build_chart_task_key(
+    *,
+    task_type: str,
+    seller_id: int | None,
+    surgery_day: date,
+    patient_name: str | None,
+) -> str:
     patient_key = normalize_chart_task_patient_key(patient_name)
     seller_part = seller_id if seller_id is not None else "sem_vendedor"
-    return f"chart_task:{seller_part}:{surgery_day.isoformat()}:{patient_key}"
+    return f"chart_task:{task_type}:{seller_part}:{surgery_day.isoformat()}:{patient_key}"
 
+def build_feegow_execution_tasks(
+    session: Session,
+    *,
+    start_day: date,
+    end_day: date,
+    seller_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    surgeons = session.exec(
+        select(User).where(User.role == "doctor", User.is_active == True)
+    ).all()
+    surgeons_by_id = {u.id: u for u in surgeons if u.id is not None}
+
+    sellers = session.exec(
+        select(User).where(User.role == "surgery", User.is_active == True)
+    ).all()
+    sellers_by_id = {u.id: u for u in sellers if u.id is not None}
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= start_day,
+            SurgicalMapEntry.day <= end_day,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+    ).all()
+
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in entries:
+        surgeon = surgeons_by_id.get(row.surgeon_id)
+        if not surgeon:
+            continue
+
+        if seller_user_id is not None and row.created_by_id != seller_user_id:
+            continue
+
+        task_key = build_chart_task_key(
+            task_type="feegow_execute",
+            seller_id=row.created_by_id,
+            surgery_day=row.day,
+            patient_name=row.patient_name,
+        )
+
+        seller = sellers_by_id.get(row.created_by_id)
+        alert_day = row.day  # aqui o alerta é no próprio dia da cirurgia
+
+        if task_key not in grouped:
+            grouped[task_key] = {
+                "task_key": task_key,
+                "task_type": "feegow_execute",
+                "task_type_label": "Execução no Feegow",
+                "patient_name": (row.patient_name or "").strip().upper(),
+                "surgery_day": row.day,
+                "alert_day": alert_day,
+                "seller_id": row.created_by_id,
+                "seller_name": seller.full_name if seller else "Sem vendedor",
+                "surgeons": set(),
+                "message": f"Executar a cirurgia da paciente {(row.patient_name or '').strip().upper()} no Feegow.",
+            }
+
+        grouped[task_key]["surgeons"].add(surgeon.full_name)
+
+    completed_map = load_completed_chart_tasks(session)
+
+    result: list[dict[str, Any]] = []
+    for item in grouped.values():
+        completion = completed_map.get(item["task_key"])
+        item["surgeons"] = sorted(item["surgeons"])
+        item["completed"] = bool(completion)
+        item["completed_at"] = completion.get("completed_at") if completion else None
+        item["completed_by"] = completion.get("completed_by") if completion else None
+        result.append(item)
+
+    result.sort(key=lambda x: (x["alert_day"], x["surgery_day"], x["patient_name"]))
+    return result
+
+def build_all_chart_tasks(
+    session: Session,
+    *,
+    start_day: date,
+    end_day: date,
+    seller_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    prontuario_tasks = build_chart_tasks(
+        session,
+        start_day=start_day,
+        end_day=end_day,
+        seller_user_id=seller_user_id,
+    )
+
+    feegow_tasks = build_feegow_execution_tasks(
+        session,
+        start_day=start_day,
+        end_day=end_day,
+        seller_user_id=seller_user_id,
+    )
+
+    all_tasks = prontuario_tasks + feegow_tasks
+    all_tasks.sort(
+        key=lambda x: (
+            x["alert_day"],
+            x["surgery_day"],
+            x.get("task_type", ""),
+            x["patient_name"],
+        )
+    )
+    return all_tasks
 
 def load_completed_chart_tasks(session: Session) -> dict[str, dict]:
     rows = session.exec(
@@ -1351,10 +1465,10 @@ def load_completed_chart_tasks(session: Session) -> dict[str, dict]:
         completed[task_key] = {
             "completed_at": getattr(row, "created_at", None),
             "completed_by": getattr(row, "actor_username", None) or "—",
+            "task_type": extra.get("task_type") or "",
         }
 
     return completed
-
 
 def build_chart_tasks(
     session: Session,
@@ -1394,6 +1508,7 @@ def build_chart_tasks(
             continue
 
         task_key = build_chart_task_key(
+            task_type="chart_prontuario",
             seller_id=row.created_by_id,
             surgery_day=row.day,
             patient_name=row.patient_name,
@@ -1405,6 +1520,8 @@ def build_chart_tasks(
         if task_key not in grouped:
             grouped[task_key] = {
                 "task_key": task_key,
+                "task_type": "chart_prontuario",
+                "task_type_label": "Prontuário",
                 "patient_name": (row.patient_name or "").strip().upper(),
                 "surgery_day": row.day,
                 "alert_day": alert_day,
@@ -1435,10 +1552,18 @@ def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
     patient_name = (task.get("patient_name") or "").strip()
     surgery_day = task.get("surgery_day")
     surgery_day_br = fmt_date_br(surgery_day) if surgery_day else "-"
+    task_type = task.get("task_type") or "chart_prontuario"
+
+    if task_type == "feegow_execute":
+        title = f"Lembrete de execução no Feegow • {run_label}"
+        body = f"{patient_name} opera em {surgery_day_br}. Executar a cirurgia no Feegow."
+    else:
+        title = f"Lembrete de prontuário • {run_label}"
+        body = f"{patient_name} opera em {surgery_day_br}. Enviar prontuário para o time de cirurgia."
 
     return {
-        "title": f"Lembrete de prontuário • {run_label}",
-        "body": f"{patient_name} opera em {surgery_day_br}. Enviar prontuário para o time de cirurgia.",
+        "title": title,
+        "body": body,
         "icon": "/static/icons/icon-512.png",
         "badge": "/static/icons/icon-512.png",
         "tag": f"{task['task_key']}:{run_label}",
@@ -1448,6 +1573,7 @@ def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
             "task_key": task["task_key"],
             "event_type": "chart_task_reminder",
             "run_label": run_label,
+            "task_type": task_type,
         },
     }
 
@@ -1562,7 +1688,7 @@ def send_chart_task_push_event(
 
 
 def dispatch_chart_task_pushes(session: Session, ref_day: date, run_label: str) -> None:
-    tasks = build_chart_tasks(
+    tasks = build_all_chart_tasks(
         session,
         start_day=ref_day,
         end_day=ref_day + timedelta(days=15),
@@ -6281,7 +6407,7 @@ def tasks_page(
 
     seller_filter = None if user.role == "admin" else user.id
 
-    tasks = build_chart_tasks(
+    tasks = build_all_chart_tasks(
         session,
         start_day=ref_day,
         end_day=ref_day + timedelta(days=15),
@@ -6325,7 +6451,7 @@ def complete_task(
         day_ref = datetime.now(TZ).date()
 
     seller_filter = None if user.role == "admin" else user.id
-    tasks = build_chart_tasks(
+    tasks = build_all_chart_tasks(
         session,
         start_day=day_ref - timedelta(days=7),
         end_day=day_ref + timedelta(days=30),
@@ -6345,9 +6471,11 @@ def complete_task(
         user,
         "chart_task_completed",
         target_type="chart_task",
-        message=f"Tarefa concluída: {task['patient_name']}",
+        message=f"Tarefa concluída: {task['patient_name']} • {task.get('task_type_label', 'Task')}",
         extra={
             "task_key": task["task_key"],
+            "task_type": task.get("task_type"),
+            "task_type_label": task.get("task_type_label"),
             "patient_name": task["patient_name"],
             "seller_id": task["seller_id"],
             "seller_name": task["seller_name"],
