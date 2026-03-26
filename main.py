@@ -1257,6 +1257,10 @@ def is_concierge_user(user: User | None) -> bool:
         return False
     return (user.username or "").strip().lower() in CONCIERGE_USERNAMES
 
+def get_tasks_menu_path(user: User | None) -> str:
+    if is_concierge_user(user):
+        return "/concierge_tasks"
+    return "/tasks"
 
 def is_materdei_location(value: str | None) -> bool:
     raw = normalize_event_key_text(value)
@@ -3382,8 +3386,8 @@ def consulta_disponibilidade_page(
 @app.get("/comissoes")
 def comissoes_page(
     request: Request,
-    month_year: str,
-    seller_id: str  | None = None,
+    month_year: str | None = None,
+    seller_id: str | None = None,
     session: Session = Depends(get_session),
 ):
     """
@@ -3398,6 +3402,9 @@ def comissoes_page(
     if not user:
         return redirect("/login")
     require(user.role in ("admin", "comissao"))
+
+    if not month_year:
+        month_year = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
 
     period_start, period_end = get_commercial_period(month_year)
     
