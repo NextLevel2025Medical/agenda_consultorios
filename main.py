@@ -14,6 +14,8 @@ from sqlmodel import Session, select, delete
 from sqlalchemy import or_, text, func
 from sqlalchemy.exc import IntegrityError
 from urllib.parse import quote
+from fastapi.responses import StreamingResponse
+
 
 from collections import defaultdict
 from io import BytesIO
@@ -53,6 +55,8 @@ import re
 import unicodedata
 import requests
 from logging.handlers import RotatingFileHandler
+import csv
+import io
 
 import threading
 import time as pytime
@@ -8266,3 +8270,127 @@ def procedimentos_toggle(
     )
 
     return redirect("/procedimentos")
+
+@app.get("/comissoes/csv")
+def comissoes_csv(
+    request: Request,
+    month_year: str | None = None,
+    seller_id: str | None = None,
+    session: Session = Depends(get_session),
+):
+    """
+    Exporta CSV do relatório de comissões por cirurgia agendada.
+    Mesma regra da tela /comissoes:
+    - procedure_type == "Cirurgia"
+    - não pode ser reserva (is_pre_reservation == False)
+    - período comercial (25->24, com exceção jan/2026 a partir de 06/01/2026)
+    - considera apenas o PRIMEIRO agendamento do paciente
+    - filtro opcional por vendedor (created_by_id)
+    """
+
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+    require(user.role in ("admin", "comissao"))
+
+    if not month_year:
+        month_year = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m")
+
+    period_start, period_end = get_commercial_period(month_year)
+
+    seller_id_int: int | None = None
+    if seller_id and seller_id.strip():
+        try:
+            seller_id_int = int(seller_id)
+        except ValueError:
+            seller_id_int = None
+
+    # 1) Subquery: pega o primeiro agendamento (created_at mais antigo) por paciente
+    first_created_subq = (
+        select(
+            SurgicalMapEntry.patient_name,
+            func.min(SurgicalMapEntry.created_at).label("first_created_at"),
+        )
+        .where(
+            SurgicalMapEntry.procedure_type == "Cirurgia",
+            SurgicalMapEntry.is_pre_reservation == False,
+            SurgicalMapEntry.patient_name.is_not(None),
+            SurgicalMapEntry.patient_name != "",
+        )
+        .group_by(SurgicalMapEntry.patient_name)
+        .subquery()
+    )
+
+    # 2) Query principal: só traz as cirurgias que são o PRIMEIRO agendamento do paciente
+    q = (
+        select(SurgicalMapEntry)
+        .join(
+            first_created_subq,
+            (SurgicalMapEntry.patient_name == first_created_subq.c.patient_name)
+            & (SurgicalMapEntry.created_at == first_created_subq.c.first_created_at),
+        )
+        .where(
+            SurgicalMapEntry.created_at >= period_start,
+            SurgicalMapEntry.created_at <= period_end,
+        )
+        .order_by(SurgicalMapEntry.created_by_id, SurgicalMapEntry.created_at.desc())
+    )
+
+    if seller_id_int is not None:
+        q = q.where(SurgicalMapEntry.created_by_id == seller_id_int)
+
+    entries = session.exec(q).all()
+
+    # mapa de usuários
+    users = session.exec(select(User)).all()
+    users_by_id = {u.id: u for u in users}
+
+    # gera CSV em memória
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+
+    writer.writerow([
+        "Vendedor",
+        "Paciente",
+        "Cirurgiao",
+        "Data cadastro",
+        "Periodo comercial",
+        "Seller ID",
+        "Surgeon ID",
+        "Entry ID",
+    ])
+
+    for e in entries:
+        seller_name = "Sem vendedor"
+        if e.created_by_id and e.created_by_id in users_by_id:
+            seller_name = users_by_id[e.created_by_id].full_name
+
+        surgeon_name = f"ID {e.surgeon_id}"
+        if e.surgeon_id and e.surgeon_id in users_by_id:
+            surgeon_name = users_by_id[e.surgeon_id].full_name
+
+        writer.writerow([
+            seller_name,
+            e.patient_name or "",
+            surgeon_name,
+            e.created_at.strftime("%d/%m/%Y %H:%M") if e.created_at else "",
+            f"{period_start.strftime('%d/%m/%Y')} a {period_end.strftime('%d/%m/%Y')}",
+            e.created_by_id or "",
+            e.surgeon_id or "",
+            e.id or "",
+        ])
+
+    output.seek(0)
+
+    filename = f"comissoes_{month_year}"
+    if seller_id_int is not None:
+        filename += f"_seller_{seller_id_int}"
+    filename += ".csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
