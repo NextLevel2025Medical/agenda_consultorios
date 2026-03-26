@@ -1247,6 +1247,21 @@ TASK_ALERT_SURGEONS = {
 
 TASK_PUSH_RUN_LABELS = ("09h", "17h")
 
+CONCIERGE_USERNAMES = {"ariella.vieira"}
+CONCIERGE_ACTIVE_WINDOW_DAYS = 183   # ~6 meses
+CONCIERGE_LOOKAHEAD_DAYS = 365       # 1 ano
+
+
+def is_concierge_user(user: User | None) -> bool:
+    if not user:
+        return False
+    return (user.username or "").strip().lower() in CONCIERGE_USERNAMES
+
+
+def is_materdei_location(value: str | None) -> bool:
+    raw = normalize_event_key_text(value)
+    return "mater" in raw and "dei" in raw
+
 def webpush_is_configured() -> bool:
     return bool(
         WEBPUSH_VAPID_PUBLIC_KEY
@@ -1522,6 +1537,110 @@ def build_all_chart_tasks(
     )
     return all_tasks
 
+def load_completed_concierge_tasks(session: Session) -> dict[str, dict]:
+    rows = session.exec(
+        select(AuditLog)
+        .where(
+            AuditLog.target_type == "concierge_task",
+            AuditLog.action == "concierge_task_completed",
+        )
+        .order_by(AuditLog.id.desc())
+    ).all()
+
+    completed: dict[str, dict] = {}
+
+    for row in rows:
+        extra = {}
+        raw_extra = getattr(row, "extra_json", None)
+
+        if raw_extra:
+            try:
+                extra = json.loads(raw_extra)
+            except Exception:
+                extra = {}
+
+        task_key = extra.get("task_key")
+        if not task_key or task_key in completed:
+            continue
+
+        completed[task_key] = {
+            "completed_at": getattr(row, "created_at", None),
+            "completed_by": getattr(row, "actor_username", None) or "—",
+        }
+
+    return completed
+
+
+def build_concierge_tasks(
+    session: Session,
+    *,
+    ref_day: date,
+    owner_user_id: int | None = None,
+) -> list[dict[str, Any]]:
+    sellers = session.exec(
+        select(User).where(User.role == "surgery", User.is_active == True)
+    ).all()
+    sellers_by_id = {u.id: u for u in sellers if u.id is not None}
+
+    end_day = ref_day + timedelta(days=CONCIERGE_LOOKAHEAD_DAYS)
+
+    entries = session.exec(
+        select(SurgicalMapEntry)
+        .where(
+            SurgicalMapEntry.day >= ref_day,
+            SurgicalMapEntry.day <= end_day,
+            visible_surgical_map_status_clause(),
+        )
+        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+    ).all()
+
+    grouped: dict[str, dict[str, Any]] = {}
+
+    for row in entries:
+        if (row.procedure_type or "").strip() != "Cirurgia":
+            continue
+
+        if not is_materdei_location(getattr(row, "location", None)):
+            continue
+
+        # se no futuro quiser amarrar a tarefa a outro usuário, é aqui
+        task_owner_id = owner_user_id
+
+        task_key = build_chart_task_key(
+            task_type="concierge_materdei_reservation",
+            seller_id=task_owner_id,
+            surgery_day=row.day,
+            patient_name=row.patient_name,
+        )
+
+        seller = sellers_by_id.get(row.created_by_id)
+
+        if task_key not in grouped:
+            grouped[task_key] = {
+                "task_key": task_key,
+                "task_type": "concierge_materdei_reservation",
+                "task_type_label": "Reserva Mater Dei",
+                "patient_name": (row.patient_name or "").strip().upper(),
+                "surgery_day": row.day,
+                "seller_id": row.created_by_id,
+                "seller_name": seller.full_name if seller else "Sem vendedor",
+                "location": row.location,
+                "message": f"Agendar a reserva da paciente {(row.patient_name or '').strip().upper()} no hospital Mater Dei.",
+            }
+
+    completed_map = load_completed_concierge_tasks(session)
+
+    result: list[dict[str, Any]] = []
+    for item in grouped.values():
+        completion = completed_map.get(item["task_key"])
+        item["completed"] = bool(completion)
+        item["completed_at"] = completion.get("completed_at") if completion else None
+        item["completed_by"] = completion.get("completed_by") if completion else None
+        result.append(item)
+
+    result.sort(key=lambda x: (x["surgery_day"], x["patient_name"]))
+    return result
+
 def load_completed_chart_tasks(session: Session) -> dict[str, dict]:
     rows = session.exec(
         select(AuditLog)
@@ -1672,6 +1791,27 @@ def build_chart_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
         },
     }
 
+def build_concierge_task_push_payload(task: dict[str, Any], run_label: str) -> dict:
+    patient_name = (task.get("patient_name") or "").strip()
+    surgery_day = task.get("surgery_day")
+    surgery_day_br = fmt_date_br(surgery_day) if surgery_day else "-"
+
+    return {
+        "title": f"Reserva Mater Dei • {run_label}",
+        "body": f"Agendar a reserva da paciente {patient_name} no Mater Dei. Cirurgia em {surgery_day_br}.",
+        "icon": "/static/icons/icon-512.png",
+        "badge": "/static/icons/icon-512.png",
+        "tag": f"{task['task_key']}:{run_label}",
+        "url": "/concierge_tasks",
+        "data": {
+            "url": "/concierge_tasks",
+            "task_key": task["task_key"],
+            "event_type": "concierge_task_reminder",
+            "run_label": run_label,
+            "task_type": task.get("task_type"),
+        },
+    }
+
 
 def send_push_payload_to_user_subscriptions(session: Session, *, user_id: int, payload: dict) -> None:
     if not webpush_is_configured():
@@ -1818,6 +1958,87 @@ def dispatch_chart_task_pushes(session: Session, ref_day: date, run_label: str) 
             run_label=run_label,
         )
 
+def send_concierge_task_push_event(
+    session: Session,
+    *,
+    task: dict[str, Any],
+    user_id: int,
+    ref_day: date,
+    run_label: str,
+) -> None:
+    if task.get("completed"):
+        audit_logger.info(
+            f"WEBPUSH_CONCIERGE_SKIP_COMPLETED: task_key={task['task_key']} run_label={run_label}"
+        )
+        return
+
+    event_key = f"concierge:{task['task_key']}:{ref_day.isoformat()}:{run_label}"
+
+    ok = register_push_dispatch_once(
+        session,
+        event_key=event_key,
+        event_type="concierge_task_reminder",
+        reservation_id=None,
+        scheduled_for=ref_day,
+    )
+
+    if not ok:
+        audit_logger.info(f"WEBPUSH_CONCIERGE_SKIP_DUPLICATE: {event_key}")
+        return
+
+    payload = build_concierge_task_push_payload(task, run_label)
+    send_push_payload_to_user_subscriptions(
+        session,
+        user_id=user_id,
+        payload=payload,
+    )
+
+    audit_logger.info(
+        json.dumps(
+            {
+                "type": "concierge_task_push_sent",
+                "task_key": task["task_key"],
+                "patient_name": task["patient_name"],
+                "surgery_day": task["surgery_day"].isoformat(),
+                "run_label": run_label,
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
+def dispatch_concierge_task_pushes(session: Session, ref_day: date, run_label: str) -> None:
+    user = session.exec(
+        select(User).where(
+            User.username == "ariella.vieira",
+            User.is_active == True,
+        )
+    ).first()
+
+    if not user:
+        audit_logger.info("WEBPUSH_CONCIERGE: usuária Ariella não encontrada.")
+        return
+
+    tasks = build_concierge_tasks(
+        session,
+        ref_day=ref_day,
+        owner_user_id=user.id,
+    )
+
+    active_limit = ref_day + timedelta(days=CONCIERGE_ACTIVE_WINDOW_DAYS)
+    tasks_today = [
+        t for t in tasks
+        if ref_day <= t["surgery_day"] <= active_limit
+    ]
+
+    for task in tasks_today:
+        send_concierge_task_push_event(
+            session,
+            task=task,
+            user_id=user.id,
+            ref_day=ref_day,
+            run_label=run_label,
+        )
 
 def _next_run_chart_tasks_push_sp(now_sp: datetime) -> tuple[datetime, str]:
     run_09 = now_sp.replace(hour=9, minute=0, second=0, microsecond=0)
@@ -1847,6 +2068,7 @@ def start_chart_tasks_push_scheduler() -> None:
             with Session(engine) as session:
                 try:
                     dispatch_chart_task_pushes(session, run_day, run_label)
+                    dispatch_concierge_task_pushes(session, run_day, run_label)
                 except Exception as e:
                     audit_logger.exception(f"WEBPUSH_TASKS_ERROR: {e}")
 
@@ -3312,6 +3534,9 @@ def app_entry(request: Request, session: Session = Depends(get_session)):
     user = get_current_user(request, session)
     if not user:
         return redirect("/login?next=/app")
+    
+    if is_concierge_user(user):
+        return redirect("/concierge_tasks")
 
     if user.role == "viewer":
         return redirect("/hotel_mobile")
@@ -6680,6 +6905,113 @@ def tasks_page(
         },
     )
 
+@app.get("/concierge_tasks", response_class=HTMLResponse)
+def concierge_tasks_page(
+    request: Request,
+    day: Optional[str] = None,
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login?next=/concierge_tasks")
+
+    require(
+        user.role == "admin" or is_concierge_user(user),
+        "Acesso restrito às tarefas do Concierge."
+    )
+
+    try:
+        ref_day = date.fromisoformat(day) if day else datetime.now(TZ).date()
+    except Exception:
+        ref_day = datetime.now(TZ).date()
+
+    tasks = build_concierge_tasks(
+        session,
+        ref_day=ref_day,
+        owner_user_id=user.id if is_concierge_user(user) else None,
+    )
+
+    active_limit = ref_day + timedelta(days=CONCIERGE_ACTIVE_WINDOW_DAYS)
+    full_limit = ref_day + timedelta(days=CONCIERGE_LOOKAHEAD_DAYS)
+
+    tasks_today = [
+        t for t in tasks
+        if ref_day <= t["surgery_day"] <= active_limit
+    ]
+
+    upcoming_tasks = [
+        t for t in tasks
+        if active_limit < t["surgery_day"] <= full_limit
+    ]
+
+    return templates.TemplateResponse(
+        "concierge_tasks.html",
+        {
+            "request": request,
+            "current_user": user,
+            "ref_day": ref_day,
+            "tasks_today": tasks_today,
+            "upcoming_tasks": upcoming_tasks,
+            "push_public_key": WEBPUSH_VAPID_PUBLIC_KEY,
+            "push_configured": webpush_is_configured(),
+            "fmt_brasilia": fmt_brasilia,
+        },
+    )
+
+@app.post("/concierge_tasks/complete")
+def complete_concierge_task(
+    request: Request,
+    task_key: str = Form(...),
+    ref_day: str = Form(""),
+    session: Session = Depends(get_session),
+):
+    user = get_current_user(request, session)
+    if not user:
+        return redirect("/login")
+
+    require(
+        user.role == "admin" or is_concierge_user(user),
+        "Acesso restrito às tarefas do Concierge."
+    )
+
+    try:
+        day_ref = date.fromisoformat(ref_day) if ref_day else datetime.now(TZ).date()
+    except Exception:
+        day_ref = datetime.now(TZ).date()
+
+    tasks = build_concierge_tasks(
+        session,
+        ref_day=day_ref,
+        owner_user_id=user.id if is_concierge_user(user) else None,
+    )
+
+    task = next((t for t in tasks if t["task_key"] == task_key), None)
+
+    if not task:
+        return redirect(f"/concierge_tasks?day={day_ref.isoformat()}")
+
+    if task.get("completed"):
+        return redirect(f"/concierge_tasks?day={day_ref.isoformat()}")
+
+    audit_event(
+        request,
+        user,
+        "concierge_task_completed",
+        target_type="concierge_task",
+        message=f"Tarefa concluída: {task['patient_name']} • {task.get('task_type_label', 'Task')}",
+        extra={
+            "task_key": task["task_key"],
+            "task_type": task.get("task_type"),
+            "task_type_label": task.get("task_type_label"),
+            "patient_name": task["patient_name"],
+            "surgery_day": task["surgery_day"].isoformat(),
+            "seller_id": task["seller_id"],
+            "seller_name": task["seller_name"],
+            "location": task.get("location"),
+        },
+    )
+
+    return redirect(f"/concierge_tasks?day={day_ref.isoformat()}")
 
 @app.post("/tasks/complete")
 def complete_task(
