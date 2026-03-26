@@ -1506,7 +1506,8 @@ def build_all_chart_tasks(
 
     policy_tasks = build_policy_tasks(
         session,
-        ref_day=start_day,
+        start_day=start_day,
+        end_day=end_day,
         seller_user_id=seller_user_id,
     )
 
@@ -1899,15 +1900,10 @@ def get_policy_alert_window_dates(ref_day: date) -> tuple[date, date] | None:
 def build_policy_tasks(
     session: Session,
     *,
-    ref_day: date,
+    start_day: date,
+    end_day: date,
     seller_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    window = get_policy_alert_window_dates(ref_day)
-    if not window:
-        return []
-
-    start_surgery_day, end_surgery_day = window
-
     surgeons = session.exec(
         select(User).where(User.role == "doctor", User.is_active == True)
     ).all()
@@ -1918,52 +1914,59 @@ def build_policy_tasks(
     ).all()
     sellers_by_id = {u.id: u for u in sellers if u.id is not None}
 
-    entries = session.exec(
-        select(SurgicalMapEntry)
-        .where(
-            SurgicalMapEntry.day >= start_surgery_day,
-            SurgicalMapEntry.day <= end_surgery_day,
-            visible_surgical_map_status_clause(),
-        )
-        .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
-    ).all()
-
+    completed_map = load_completed_chart_tasks(session)
     grouped: dict[str, dict[str, Any]] = {}
 
-    for row in entries:
-        surgeon = surgeons_by_id.get(row.surgeon_id)
-        if not surgeon:
-            continue
+    d = start_day
+    while d <= end_day:
+        window = get_policy_alert_window_dates(d)
+        if window:
+            start_surgery_day, end_surgery_day = window
 
-        if seller_user_id is not None and row.created_by_id != seller_user_id:
-            continue
+            entries = session.exec(
+                select(SurgicalMapEntry)
+                .where(
+                    SurgicalMapEntry.day >= start_surgery_day,
+                    SurgicalMapEntry.day <= end_surgery_day,
+                    visible_surgical_map_status_clause(),
+                )
+                .order_by(SurgicalMapEntry.day, SurgicalMapEntry.time_hhmm, SurgicalMapEntry.created_at)
+            ).all()
 
-        task_key = build_chart_task_key(
-            task_type="policy_issue",
-            seller_id=row.created_by_id,
-            surgery_day=row.day,
-            patient_name=row.patient_name,
-        )
+            for row in entries:
+                surgeon = surgeons_by_id.get(row.surgeon_id)
+                if not surgeon:
+                    continue
 
-        seller = sellers_by_id.get(row.created_by_id)
+                if seller_user_id is not None and row.created_by_id != seller_user_id:
+                    continue
 
-        if task_key not in grouped:
-            grouped[task_key] = {
-                "task_key": task_key,
-                "task_type": "policy_issue",
-                "task_type_label": "Apólice de Seguro",
-                "patient_name": (row.patient_name or "").strip().upper(),
-                "surgery_day": row.day,
-                "alert_day": ref_day,
-                "seller_id": row.created_by_id,
-                "seller_name": seller.full_name if seller else "Sem vendedor",
-                "surgeons": set(),
-                "message": f"Solicitar emissão da apólice de seguro da paciente {(row.patient_name or '').strip().upper()}.",
-            }
+                # inclui o alert_day na chave para permitir a mesma cirurgia
+                # aparecer em segunda e terça como lembretes distintos
+                task_key = (
+                    f"{build_chart_task_key(task_type='policy_issue', seller_id=row.created_by_id, surgery_day=row.day, patient_name=row.patient_name)}"
+                    f":{d.isoformat()}"
+                )
 
-        grouped[task_key]["surgeons"].add(surgeon.full_name)
+                seller = sellers_by_id.get(row.created_by_id)
 
-    completed_map = load_completed_chart_tasks(session)
+                if task_key not in grouped:
+                    grouped[task_key] = {
+                        "task_key": task_key,
+                        "task_type": "policy_issue",
+                        "task_type_label": "Apólice de Seguro",
+                        "patient_name": (row.patient_name or "").strip().upper(),
+                        "surgery_day": row.day,
+                        "alert_day": d,
+                        "seller_id": row.created_by_id,
+                        "seller_name": seller.full_name if seller else "Sem vendedor",
+                        "surgeons": set(),
+                        "message": f"Solicitar emissão da apólice de seguro da paciente {(row.patient_name or '').strip().upper()}.",
+                    }
+
+                grouped[task_key]["surgeons"].add(surgeon.full_name)
+
+        d += timedelta(days=1)
 
     result: list[dict[str, Any]] = []
     for item in grouped.values():
@@ -1974,7 +1977,7 @@ def build_policy_tasks(
         item["completed_by"] = completion.get("completed_by") if completion else None
         result.append(item)
 
-    result.sort(key=lambda x: (x["surgery_day"], x["patient_name"]))
+    result.sort(key=lambda x: (x["alert_day"], x["surgery_day"], x["patient_name"]))
     return result
 
 def send_push_payload_to_all_active_subscriptions(session: Session, payload: dict) -> None:
