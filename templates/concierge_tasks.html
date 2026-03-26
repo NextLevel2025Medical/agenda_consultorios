@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Concierge Tasks • Concept Sys</title>
+
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#070A12">
+  <link rel="apple-touch-icon" href="/static/icons/icon-512.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="/static/globals.css">
+
+  <style>
+    :root{
+      --bg:#070A12;
+      --panel:#0F172A;
+      --line:rgba(255,255,255,0.08);
+      --text:rgba(255,255,255,0.96);
+      --muted:rgba(255,255,255,0.70);
+      --yellow:#F4C318;
+      --card-radius:22px;
+    }
+    *{ box-sizing:border-box; }
+    html, body{
+      margin:0; padding:0; background:var(--bg); color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .app{ max-width:1120px; margin:0 auto; min-height:100vh; }
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:18px; background:rgba(7,10,18,0.94); border-bottom:1px solid rgba(255,255,255,0.04);
+      position:sticky; top:0; z-index:20;
+    }
+    .btn-top, .btn-complete{
+      border:none; border-radius:14px; padding:10px 14px; font-weight:800; cursor:pointer;
+    }
+    .btn-top{ background:rgba(255,255,255,0.06); color:#fff; border:1px solid rgba(255,255,255,0.08); }
+    .btn-complete{ background:#1F6B47; color:#fff; }
+    .section{ padding:16px 18px 0; }
+    .hero-title{ font-size:38px; font-weight:900; text-transform:uppercase; margin:6px 0 10px; }
+    .hero-sub{ color:var(--muted); font-size:16px; margin-bottom:14px; text-transform:uppercase; }
+    .block{
+      margin-top:14px; border-radius:20px; border:1px solid rgba(255,255,255,0.08);
+      background:rgba(255,255,255,0.03); padding:16px;
+    }
+    .block-title{ font-size:18px; font-weight:900; margin-bottom:14px; }
+    .card-list{ display:grid; gap:12px; }
+    .task-card{
+      border-radius:18px; padding:16px; border:1px solid rgba(255,255,255,0.08);
+      background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+    }
+    .task-head{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    .patient{
+      font-size:24px;
+      font-weight:800;
+      letter-spacing:.5px;
+      color:#D4AF37;
+      text-transform:uppercase;
+      margin-bottom:6px;
+      text-shadow:0 0 6px rgba(212,175,55,0.25);
+    }
+    .meta{ display:grid; gap:6px; font-size:15px; opacity:.96; }
+    .badge{
+      display:inline-flex; align-items:center; justify-content:center;
+      min-width:96px; border-radius:999px; padding:8px 12px; font-weight:900;
+      border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.08);
+      color:#fff; text-transform:uppercase;
+    }
+    .done-line{ margin-top:10px; font-size:13px; color:var(--muted); font-weight:700; }
+    .empty{
+      border:1px dashed rgba(255,255,255,0.12); border-radius:18px; padding:18px;
+      color:var(--muted); text-align:center; font-weight:700;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div>
+        <div style="font-size:16px;font-weight:900;text-transform:uppercase;">Concierge Tasks</div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.7);">Reservas Mater Dei</div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/mapa" class="btn-top">Mapa</a>
+        <button type="button" class="btn-top" id="pushToggleBtn">Ativar alertas</button>
+        <form method="post" action="/logout" style="margin:0;">
+          <button type="submit" class="btn-top">Sair</button>
+        </form>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="hero-title">Concierge</div>
+      <div class="hero-sub">Dia {{ ref_day.strftime('%d/%m/%Y') }}</div>
+    </section>
+
+    <section class="section">
+      <div class="block">
+        <div class="block-title">📌 Tarefas para hoje (até 6 meses)</div>
+
+        {% if tasks_today %}
+          <div class="card-list">
+            {% for item in tasks_today %}
+              <div class="task-card">
+                <div class="task-head">
+                  <div>
+                    <div class="patient">{{ item.patient_name }}</div>
+                    <div class="meta">
+                      <div><strong>Tipo:</strong> {{ item.task_type_label }}</div>
+                      <div><strong>Cirurgia:</strong> {{ item.surgery_day.strftime('%d/%m/%Y') }}</div>
+                      <div><strong>Hospital:</strong> {{ item.location }}</div>
+                      <div><strong>Vendedor:</strong> {{ item.seller_name }}</div>
+                      <div>{{ item.message }}</div>
+                    </div>
+                  </div>
+
+                  {% if item.completed %}
+                    <div class="badge">Concluída</div>
+                  {% else %}
+                    <div class="badge">Pendente</div>
+                  {% endif %}
+                </div>
+
+                {% if item.completed %}
+                  <div class="done-line">
+                    Concluída por {{ item.completed_by or '—' }}
+                    {% if item.completed_at %}
+                      em {{ fmt_brasilia(item.completed_at) }}
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <div style="margin-top:14px;">
+                    <form method="post" action="/concierge_tasks/complete" style="margin:0;">
+                      <input type="hidden" name="task_key" value="{{ item.task_key }}">
+                      <input type="hidden" name="ref_day" value="{{ ref_day.isoformat() }}">
+                      <button type="submit" class="btn-complete">Concluir tarefa</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty">Nenhuma tarefa dentro da janela de 6 meses.</div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="block">
+        <div class="block-title">🗓️ Próximas tarefas (6 a 12 meses)</div>
+
+        {% if upcoming_tasks %}
+          <div class="card-list">
+            {% for item in upcoming_tasks %}
+              <div class="task-card">
+                <div class="task-head">
+                  <div>
+                    <div class="patient">{{ item.patient_name }}</div>
+                    <div class="meta">
+                      <div><strong>Tipo:</strong> {{ item.task_type_label }}</div>
+                      <div><strong>Cirurgia:</strong> {{ item.surgery_day.strftime('%d/%m/%Y') }}</div>
+                      <div><strong>Hospital:</strong> {{ item.location }}</div>
+                      <div><strong>Vendedor:</strong> {{ item.seller_name }}</div>
+                      <div>{{ item.message }}</div>
+                    </div>
+                  </div>
+                  <div class="badge">Futura</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty">Nenhuma tarefa futura entre 6 e 12 meses.</div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const PUSH_PUBLIC_KEY = "{{ push_public_key or '' }}";
+    const PUSH_CONFIGURED = {{ 'true' if push_configured else 'false' }};
+    const pushToggleBtn = document.getElementById("pushToggleBtn");
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = "=".repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    }
+
+    async function getActiveSubscription() {
+      const registration = await navigator.serviceWorker.ready;
+      return await registration.pushManager.getSubscription();
+    }
+
+    async function updatePushButton() {
+      if (!pushToggleBtn) return;
+      if (!PUSH_CONFIGURED) {
+        pushToggleBtn.textContent = "Alertas indisponíveis";
+        pushToggleBtn.disabled = true;
+        return;
+      }
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        pushToggleBtn.textContent = "Push não suportado";
+        pushToggleBtn.disabled = true;
+        return;
+      }
+      const sub = await getActiveSubscription();
+      pushToggleBtn.textContent = sub ? "Desativar alertas" : "Ativar alertas";
+    }
+
+    async function subscribePush() {
+      const registration = await navigator.serviceWorker.ready;
+      let permission = Notification.permission;
+      if (permission !== "granted") permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        alert("Permissão de notificações não concedida.");
+        await updatePushButton();
+        return;
+      }
+
+      let sub = await registration.pushManager.getSubscription();
+      if (!sub) {
+        sub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(PUSH_PUBLIC_KEY),
+        });
+      }
+
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+
+      await updatePushButton();
+      alert("Alertas ativados com sucesso.");
+    }
+
+    async function unsubscribePush() {
+      const sub = await getActiveSubscription();
+      if (!sub) {
+        await updatePushButton();
+        return;
+      }
+
+      const endpoint = sub.endpoint;
+      await sub.unsubscribe();
+
+      await fetch("/api/push/unsubscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint }),
+      });
+
+      await updatePushButton();
+      alert("Alertas desativados.");
+    }
+
+    async function handlePushToggle() {
+      const sub = await getActiveSubscription();
+      if (sub) await unsubscribePush();
+      else await subscribePush();
+    }
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", async function () {
+        try {
+          await navigator.serviceWorker.register("/service-worker.js");
+          await updatePushButton();
+        } catch (error) {
+          console.log("Erro ao registrar o Service Worker:", error);
+        }
+      });
+    }
+
+    if (pushToggleBtn) pushToggleBtn.addEventListener("click", handlePushToggle);
+  </script>
+</body>
+</html>
