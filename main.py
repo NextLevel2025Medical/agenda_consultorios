@@ -802,6 +802,7 @@ def seed_if_empty(session: Session):
     ensure_user("sayonara.goncalves", "Sayonara", "viewer", "Sayonara*2026")
     ensure_user("andre.silva", "André", "viewer", "Andre*2026")
     ensure_user("amanda.rodrigues", "Amanda", "viewer", "Amanda*2026")
+    ensure_user("klesia.costa", "Klesia", "viewer", "Klesia*2026")
     ensure_user("vitor.lacerda", "Vitor", "surgery", "vitor1704")
     ensure_user("joana.camara", "Joana", "surgery", "@Joana*2026")
     ensure_user("Natalia.Gomes", "Natalia", "viewer", "Natalia*2026")
