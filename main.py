@@ -7165,6 +7165,7 @@ async def push_unsubscribe(
 def hospedagem_page(
     request: Request,
     month: Optional[str] = None,
+    year: Optional[int] = None,
     err: Optional[str] = None,
     open: Optional[str] = None,
     unit: Optional[str] = None,
@@ -7202,8 +7203,23 @@ def hospedagem_page(
     require(user.role in ("admin", "surgery"))
 
     selected_month, first_day, next_month_first, days = safe_selected_month(month)
-    # anos para o dropdown (ano atual até +5)
-    years = list(range(first_day.year, first_day.year + 6))
+
+    # Aplica o ano escolhido, preservando o mês.
+    # Exemplo: year=2027 e month=2026-11 vira 2027-11.
+    if year is not None and 1900 <= year <= 9998:
+        selected_month = f"{year:04d}-{first_day.month:02d}"
+        selected_month, first_day, next_month_first, days = (
+            safe_selected_month(selected_month)
+        )
+
+    # Mantém o ano atual disponível ao navegar para anos futuros.
+    current_year = datetime.now(TZ).year
+    years = list(
+        range(
+            min(current_year, first_day.year),
+            max(current_year + 5, first_day.year) + 1,
+        )
+    )
     day_index = {d: i for i, d in enumerate(days)}
 
     units = ["suite_2", "suite_1", "apto"]
