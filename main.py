@@ -115,7 +115,6 @@ SURGEON_ALLOWED_NUCLEI = {
     "Dr. Ricardo Vilela": ["Corporal", "Mama"],
     "Dra. Alice Osório": ["Corporal", "Mama"],
     "Dra. Mellina Tanure": ["Face"],
-    "Dra. Vanessa Santos": ["Dermato"],
     "Dra. Sophia Mourão": ["Dermato"],
     "Dra. Thamilys Benfica": ["Íntima"],
     "Dra. Stella Temponi": ["Nutrologia"],
@@ -787,7 +786,6 @@ def seed_if_empty(session: Session):
         ("drricardo", "Dr. Ricardo Vilela"),
         ("draalice", "Dra. Alice Osório"),
         ("dramelina", "Dra. Mellina Tanure"),
-        ("dravanessa", "Dra. Vanessa Santos"),
         ("drasophia", "Dra. Sophia Mourão"),        
         ("drathamilys", "Dra. Thamilys Benfica"),
         ("drastela", "Dra. Stella Temponi"),
@@ -800,7 +798,7 @@ def seed_if_empty(session: Session):
     ensure_user("johnny.ge", "Johnny", "surgery", "@Ynnhoj91")
     ensure_user("ana.maria", "Ana Maria", "surgery", "AnaM#2025@91")
     ensure_user("sayonara.goncalves", "Sayonara", "viewer", "Sayonara*2026")
-    ensure_user("andre.silva", "André", "viewer", "Andre*2026")
+    ensure_user("everton.lima", "Everton", "viewer", "Everton*2026")
     ensure_user("amanda.rodrigues", "Amanda", "viewer", "Amanda*2026")
     ensure_user("klesia.costa", "Klesia", "viewer", "Klesia*2026")
     ensure_user("vitor.lacerda", "Vitor", "surgery", "vitor1704")
